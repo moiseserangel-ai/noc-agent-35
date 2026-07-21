@@ -9,6 +9,7 @@ import Tasks from './pages/Tasks.jsx';
 import Chat from './pages/Chat.jsx';
 import Settings from './pages/Settings.jsx';
 import Docs from './pages/Docs.jsx';
+import Vpn from './pages/Vpn.jsx';
 
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
@@ -46,6 +47,34 @@ export default function App() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!authed) return;
+    let refreshing = false;
+    const refresh = async () => {
+      if (refreshing || !localStorage.getItem('noc_token')) return;
+      refreshing = true;
+      try {
+        const result = await api.refreshSession();
+        if (result.token) {
+          localStorage.setItem('noc_token', result.token);
+          window.dispatchEvent(new Event('noc:token-refreshed'));
+        }
+      } catch {
+        localStorage.removeItem('noc_token');
+        setAuthed(false);
+      } finally { refreshing = false; }
+    };
+    const interval = setInterval(refresh, 30 * 60 * 1000);
+    const resume = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [authed]);
+
   if (authed === null) {
     return <div className="loading-screen"><div className="spinner" /> Carregando...</div>;
   }
@@ -66,6 +95,7 @@ export default function App() {
               <Route path="tasks" element={<Tasks />} />
               <Route path="chat" element={<Chat />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="vpn" element={<Vpn />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

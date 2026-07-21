@@ -18,5 +18,9 @@ export function authMiddleware(req, res, next) {
 }
 
 export function generateToken() {
-  return jwt.sign({ role: 'admin' }, config.jwtSecret, { expiresIn: '24h' });
+  return jwt.sign({ role: 'admin' }, config.jwtSecret, { expiresIn: '8h', issuer: 'noc-agent' });
+}
+
+export function verifyToken(token) {
+  return jwt.verify(token, config.jwtSecret, { issuer: 'noc-agent' });
 }

@@ -9,13 +9,21 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+    const load = (showLoading = false) => {
+    if (showLoading) setLoading(true);
     Promise.all([api.getTaskStats(), api.getTasks({ limit: 10 })])
       .then(([statsRes, tasksRes]) => {
-        setStats(statsRes.data);
-        setTasks(tasksRes.data);
+        if (active) { setStats(statsRes.data); setTasks(tasksRes.data); }
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => { if (active) setLoading(false); });
+    };
+    load(true);
+    const interval = setInterval(() => load(false), 15000);
+    const resume = () => { if (document.visibilityState === 'visible') load(false); };
+    document.addEventListener('visibilitychange', resume);
+    return () => { active = false; clearInterval(interval); document.removeEventListener('visibilitychange', resume); };
   }, []);
 
   if (loading) {

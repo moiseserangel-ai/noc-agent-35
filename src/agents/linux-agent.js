@@ -2,6 +2,7 @@ import BaseAgent from './base-agent.js';
 import { sshLinuxExec, sshLinuxToolDefinition } from '../tools/ssh-linux.tool.js';
 import { pingHost, pingToolDefinition, tracerouteHost, tracerouteToolDefinition } from '../tools/network.tool.js';
 import logger from '../utils/logger.js';
+import { withApprovedRemediation } from '../security/execution-context.js';
 
 const SYSTEM_PROMPT = `Você é um especialista em Linux/Servidores para um NOC (Network Operations Center).
 
@@ -29,7 +30,7 @@ const SYSTEM_PROMPT = `Você é um especialista em Linux/Servidores para um NOC 
 ## Regras de Comportamento:
 - Aja de forma autônoma e natural. Converse diretamente com o usuário sem formatos engessados.
 - Atenda EXATAMENTE ao que foi solicitado. Se o usuário pedir apenas uma informação simples, acesse o servidor, pegue a informação e responda diretamente. Não faça diagnósticos não solicitados.
-- Se a solicitação for para reconfigurar ou instalar algo, você pode executar os comandos diretamente se tiver certeza absoluta do que está fazendo e não houver risco grave. Em caso de dúvida ou risco, informe a solução e pergunte se pode aplicá-la.
+- Durante diagnóstico execute somente comandos de leitura. Nunca altere configuração, instale pacotes ou reinicie serviços. Toda mudança exige aprovação humana registrada.
 - Em casos de pedidos genéricos de problema (ex: "analise por que o servidor está caindo"), aí sim aja como investigador: verifique load, memória, disco, logs de erro, etc.
 - Responda SEMPRE em português brasileiro.
 - Caso precise de confirmação para aplicar algo, termine a mensagem com "Responda com SIM para aplicar ou NÃO para cancelar." e mencione a ref: #TASK-{taskNumber} (se houver).
@@ -77,7 +78,7 @@ Execute os comandos necessários e reporte o resultado. Use o deviceId "${device
 Confirme se a solução foi aplicada com sucesso ou se houve algum erro.`;
 
     try {
-      const result = await this.run(prompt);
+      const result = await withApprovedRemediation(() => this.run(prompt));
       logger.info(`[linux] Solution executed for ${deviceName} (#TASK-${taskNumber})`);
       return result;
     } catch (err) {

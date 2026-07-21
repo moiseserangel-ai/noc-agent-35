@@ -103,6 +103,7 @@ export function parseIncomingMessage(webhookData) {
 
 export async function isAuthorizedNumber(number) {
   const evoConfig = await getEvolutionConfig();
-  if (!evoConfig.authorizedNumbers || evoConfig.authorizedNumbers.length === 0) return true;
-  return evoConfig.authorizedNumbers.some(n => number.includes(n) || n.includes(number));
+  if (!evoConfig.authorizedNumbers || evoConfig.authorizedNumbers.length === 0) return false;
+  const normalized = String(number).replace(/\D/g, '');
+  return evoConfig.authorizedNumbers.some(n => String(n).replace(/\D/g, '') === normalized);
 }

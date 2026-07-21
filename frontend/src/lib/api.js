@@ -26,6 +26,7 @@ export const api = {
   // Auth
   login: (password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
   verify: () => request('/auth/verify'),
+  refreshSession: () => request('/auth/refresh', { method: 'POST' }),
 
   // Devices
   getDevices: () => request('/devices'),
@@ -42,13 +43,21 @@ export const api = {
   },
   getTaskStats: () => request('/tasks/stats'),
   getTask: (id) => request(`/tasks/${id}`),
+  reprocessTask: (id, deviceId) => request(`/tasks/${id}/reprocess`, { method: 'POST', body: JSON.stringify({ deviceId }) }),
+  completeTask: (id, note) => request(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({ note }) }),
 
   // Settings
   getSettings: () => request('/settings'),
   updateSetting: (key, value) => request(`/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   updateSettingsBulk: (settings) => request('/settings/bulk', { method: 'POST', body: JSON.stringify({ settings }) }),
   testClaudeAPI: (apiKey, model) => request('/settings/test-claude', { method: 'POST', body: JSON.stringify({ apiKey, model }) }),
+  testAIProvider: (provider, model) => request('/settings/test-ai', { method: 'POST', body: JSON.stringify({ provider, model }) }),
+  getGeminiModels: (apiKey) => request('/settings/gemini-models', { method: 'POST', body: JSON.stringify({ apiKey }) }),
   testEvolutionAPI: (data) => request('/settings/test-evolution', { method: 'POST', body: JSON.stringify(data) }),
+  getVpn: () => request('/vpn'),
+  saveVpn: (data) => request('/vpn', { method: 'PUT', body: JSON.stringify(data) }),
+  connectVpn: () => request('/vpn/connect', { method: 'POST' }),
+  disconnectVpn: () => request('/vpn/disconnect', { method: 'POST' }),
 
   // Chat
   getChatSessions: () => request('/chat/sessions'),

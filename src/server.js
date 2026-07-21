@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import config from './config/index.js';
 import logger from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
-import { authMiddleware } from './middleware/auth.middleware.js';
+import { authMiddleware, verifyToken } from './middleware/auth.middleware.js';
 
 import authRoutes from './routes/auth.routes.js';
 import deviceRoutes from './routes/device.routes.js';
@@ -17,11 +17,13 @@ import settingsRoutes from './routes/settings.routes.js';
 import taskRoutes from './routes/task.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
+import vpnRoutes from './routes/vpn.routes.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
 import MikrotikAgent from './agents/mikrotik-agent.js';
 import LinuxAgent from './agents/linux-agent.js';
+import * as taskService from './services/task.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,13 +31,13 @@ const __dirname = dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
-const io = new Server(httpServer, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
-});
+const originAllowed = (origin) => !origin || config.allowedOrigins.length === 0 || config.allowedOrigins.includes(origin);
+const io = new Server(httpServer, { cors: { origin: (origin, cb) => cb(originAllowed(origin) ? null : new Error('Origin denied'), originAllowed(origin)), methods: ['GET', 'POST'] } });
 
 // Middleware
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
-app.use(cors());
+app.set('trust proxy', 1);
+app.use(cors({ origin: (origin, cb) => cb(originAllowed(origin) ? null : new Error('Origin denied'), originAllowed(origin)), credentials: false }));
 app.use(express.json({ limit: '10mb' }));
 
 // Serve frontend static files
@@ -50,6 +52,7 @@ app.use('/api/devices', authMiddleware, deviceRoutes);
 app.use('/api/settings', authMiddleware, settingsRoutes);
 app.use('/api/tasks', authMiddleware, taskRoutes);
 app.use('/api/chat', authMiddleware, chatRoutes);
+app.use('/api/vpn', authMiddleware, vpnRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -68,11 +71,25 @@ const agents = {
   linux: new LinuxAgent(),
 };
 
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token) throw new Error('Token ausente');
+    socket.user = verifyToken(token);
+    next();
+  } catch {
+    next(new Error('Não autorizado'));
+  }
+});
+
 io.on('connection', (socket) => {
   logger.info(`Dashboard client connected: ${socket.id}`);
 
   socket.on('chat:message', async ({ sessionId, message, agentType = 'support' }) => {
     try {
+      if (typeof sessionId !== 'string' || typeof message !== 'string' || message.length > 4000) throw new Error('Mensagem inválida');
+      const ownedSession = await prisma.chatSession.findUnique({ where: { id: sessionId } });
+      if (!ownedSession) throw new Error('Sessão inválida');
       const agent = agents[agentType];
       if (!agent) {
         socket.emit('chat:error', { error: `Agent "${agentType}" not found` });
@@ -83,6 +100,54 @@ io.on('connection', (socket) => {
       await prisma.chatMessage.create({
         data: { sessionId, role: 'user', content: message },
       });
+
+      // Process dashboard approvals before asking the support model to classify them.
+      // An explicit task reference is accepted, but in a single dashboard chat the
+      // administrator may simply answer SIM or NAO to the latest pending task.
+      const approvalMatch = message.trim().match(/^(?:(sim|s|yes|confirmo|aprovar|aplicar)|(n[aã]o|n|no|cancelar|rejeitar))(?:\s+#?TASK-?(\d+))?[.!]?$/i);
+      if (approvalMatch) {
+        const approved = Boolean(approvalMatch[1]);
+        const explicitNumber = approvalMatch[3] ? Number(approvalMatch[3]) : null;
+        const pendingTask = explicitNumber
+          ? await taskService.getTaskByNumber(explicitNumber)
+          : await prisma.task.findFirst({
+              where: { source: `dashboard:${sessionId}`, status: 'awaiting_approval' },
+              include: { device: true },
+              orderBy: { createdAt: 'desc' },
+            });
+
+        if (!pendingTask || pendingTask.status !== 'awaiting_approval') {
+          const text = 'Não há nenhuma alteração aguardando aprovação neste chat.';
+          await prisma.chatMessage.create({ data: { sessionId, role: 'assistant', content: text, agentUsed: 'support' } });
+          socket.emit('chat:chunk', { text });
+          socket.emit('chat:complete', { text, agentUsed: 'support', toolsUsed: [] });
+          return;
+        }
+
+        const task = await taskService.processApproval(pendingTask.taskNumber, approved);
+        if (!approved) {
+          const text = `❌ Alteração #TASK-${task.taskNumber} cancelada. Nenhuma ação foi executada.`;
+          await taskService.addTaskMessage(task.id, 'user', 'Solução REJEITADA pelo administrador no dashboard');
+          await prisma.chatMessage.create({ data: { sessionId, role: 'assistant', content: text, agentUsed: task.agentUsed } });
+          socket.emit('chat:chunk', { text });
+          socket.emit('chat:complete', { text, agentUsed: task.agentUsed, toolsUsed: [] });
+          return;
+        }
+
+        const specialistAgent = agents[task.agentUsed];
+        if (!specialistAgent || !task.deviceId) throw new Error('Especialista ou dispositivo da alteração não está disponível');
+        socket.emit('chat:chunk', { text: `✅ Alteração #TASK-${task.taskNumber} aprovada. Executando...\n\n` });
+        socket.emit('chat:typing', { agentType: task.agentUsed });
+        const execution = await specialistAgent.executeSolution(
+          task.deviceId, task.device?.name || 'Dispositivo', task.proposedSolution, task.taskNumber
+        );
+        await taskService.updateTask(task.id, { status: 'completed', executionResult: execution.text });
+        await taskService.addTaskMessage(task.id, 'agent', execution.text, task.agentUsed);
+        await prisma.chatMessage.create({ data: { sessionId, role: 'assistant', content: execution.text, agentUsed: task.agentUsed } });
+        socket.emit('chat:chunk', { text: execution.text });
+        socket.emit('chat:complete', { text: execution.text, agentUsed: task.agentUsed, toolsUsed: execution.toolsUsed || [] });
+        return;
+      }
 
       // Update session title if first message
       const session = await prisma.chatSession.findUnique({
@@ -129,7 +194,14 @@ io.on('connection', (socket) => {
               const specialistAgent = agents[deviceType];
               
               if (specialistAgent) {
-                const taskNum = Math.floor(Math.random() * 10000);
+                const dashboardTask = await taskService.createTask({
+                  source: `dashboard:${sessionId}`,
+                  originalMessage: originalRequest,
+                  deviceId,
+                  priority: classification.priority || 'medium',
+                });
+                const taskNum = dashboardTask.taskNumber;
+                await taskService.updateTask(dashboardTask.id, { status: 'diagnosing', agentUsed: deviceType });
                 const prompt = `Você recebeu uma solicitação do NOC.
 
 **Dispositivo:** ${deviceName} (ID: ${deviceId})
@@ -154,6 +226,14 @@ Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma 
 
                 result.text += `\n\n🔄 **Encaminhando para especialista em ${deviceType}...**\n\n${specialistResult.text}`;
                 result.toolsUsed.push(...specialistResult.toolsUsed);
+                const needsApproval = /responda\s+com\s+sim|aguardando\s+aprova[cç][aã]o/i.test(specialistResult.text);
+                await taskService.updateTask(dashboardTask.id, {
+                  status: needsApproval ? 'awaiting_approval' : 'completed',
+                  diagnosis: specialistResult.text,
+                  proposedSolution: needsApproval ? specialistResult.text : null,
+                  executionResult: needsApproval ? null : specialistResult.text,
+                });
+                await taskService.addTaskMessage(dashboardTask.id, 'agent', specialistResult.text, deviceType);
               }
             } else if (classification.action === 'unknown') {
               socket.emit('chat:chunk', { text: classification.message || '\n\nNão consegui identificar o equipamento ou a ação desejada.' });
@@ -208,8 +288,8 @@ app.get('*', (req, res) => {
 app.use(errorHandler);
 
 // Start server
-httpServer.listen(config.port, '0.0.0.0', () => {
-  logger.info(`🚀 NOC Agent 35 running on http://0.0.0.0:${config.port}`);
+httpServer.listen(config.port, config.host, () => {
+  logger.info(`🚀 NOC Agent 35 running on http://${config.host}:${config.port}`);
   logger.info(`📊 Dashboard: http://localhost:${config.port}`);
   logger.info(`🔌 WebSocket: ws://localhost:${config.port}`);
   logger.info(`📱 WhatsApp webhook: POST /api/webhooks/evolution`);

@@ -5,11 +5,33 @@ import { useToast } from '../App.jsx';
 
 const SECTIONS = [
   {
+    title: 'Provedor de IA',
+    icon: Activity,
+    fields: [
+      { key: 'ai_provider', label: 'Provedor principal', type: 'select', options: [['claude','Claude'],['openai','OpenAI'],['gemini','Gemini']] },
+      { key: 'ai_fallback_order', label: 'Ordem de fallback', type: 'text', placeholder: 'openai,gemini,claude', helperText: 'Lista separada por vírgulas. Provedores sem chave são ignorados.' },
+    ],
+  },
+  {
     title: 'Claude API',
     icon: Activity,
     fields: [
       { key: 'claude_api_key', label: 'API Key', type: 'password', placeholder: 'sk-ant-...' },
       { key: 'claude_model', label: 'Modelo', type: 'text', placeholder: 'claude-opus-4-7-20260324' },
+    ],
+  },
+  {
+    title: 'OpenAI API', icon: Activity,
+    fields: [
+      { key: 'openai_api_key', label: 'API Key', type: 'password', placeholder: 'sk-...' },
+      { key: 'openai_model', label: 'Modelo', type: 'text', placeholder: 'gpt-5.6' },
+    ],
+  },
+  {
+    title: 'Gemini API', icon: Activity,
+    fields: [
+      { key: 'gemini_api_key', label: 'API Key', type: 'password', placeholder: 'Chave Google AI' },
+      { key: 'gemini_model', label: 'Modelo', type: 'text', placeholder: 'gemini-3.5-flash' },
     ],
   },
   {
@@ -48,6 +70,10 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [testingClaude, setTestingClaude] = useState(false);
   const [testingEvolution, setTestingEvolution] = useState(false);
+  const [testingAI, setTestingAI] = useState('');
+  const [geminiModels, setGeminiModels] = useState([]);
+  const [loadingGeminiModels, setLoadingGeminiModels] = useState(false);
+  const [manualGeminiModel, setManualGeminiModel] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -55,6 +81,10 @@ export default function Settings() {
       .then(r => {
         const v = {};
         r.data.forEach(s => { v[s.key] = s.encrypted ? '••••••••' : s.value; });
+        v['ai_provider'] ||= 'claude';
+        v['openai_model'] ||= 'gpt-5.6-terra';
+        v['gemini_model'] ||= 'gemini-3.5-flash';
+        v['claude_model'] ||= 'claude-sonnet-5';
         v['system_webhook_url'] = window.location.origin + '/api/webhooks/zabbix';
         v['system_evolution_webhook_url'] = window.location.origin + '/api/webhooks/evolution';
         setValues(v);
@@ -121,6 +151,29 @@ export default function Settings() {
     }
   };
 
+  const handleTestAI = async provider => {
+    setTestingAI(provider);
+    try {
+      const res = await api.testAIProvider(provider, values[`${provider}_model`]);
+      toast(res.success ? `✅ ${provider} conectado!` : `❌ ${res.error}`, res.success ? 'success' : 'error');
+    } catch (err) { toast(`❌ ${err.message}`, 'error'); }
+    finally { setTestingAI(''); }
+  };
+
+  const handleLoadGeminiModels = async () => {
+    setLoadingGeminiModels(true);
+    try {
+      const res = await api.getGeminiModels(values['gemini_api_key']);
+      setGeminiModels(res.data || []);
+      if (res.data?.length && !res.data.some(model => model.id === values['gemini_model'])) {
+        setValues(v => ({ ...v, gemini_model: res.data[0].id }));
+      }
+      setManualGeminiModel(false);
+      toast(`${res.data?.length || 0} modelos compatíveis encontrados`, 'success');
+    } catch (err) { toast(`❌ ${err.message}`, 'error'); }
+    finally { setLoadingGeminiModels(false); }
+  };
+
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
   return (
@@ -132,12 +185,20 @@ export default function Settings() {
           {section.fields.map(f => (
             <div className="form-group" key={f.key}>
               <label className="form-label">{f.label}</label>
-              <input className="form-input" type={f.type} placeholder={f.placeholder}
+              {f.key === 'gemini_model' && geminiModels.length > 0 && !manualGeminiModel ? <select className="form-select" value={values[f.key] || ''} onChange={e => {
+                if (e.target.value === '__manual__') setManualGeminiModel(true);
+                else setValues(v => ({ ...v, [f.key]: e.target.value }));
+              }}>
+                {geminiModels.map(model => <option key={model.id} value={model.id}>{model.name} — {model.id}</option>)}
+                <option value="__manual__">Digitar modelo manualmente…</option>
+              </select> : f.type === 'select' ? <select className="form-select" value={values[f.key] || 'claude'} onChange={e => setValues(v => ({ ...v, [f.key]: e.target.value }))}>
+                {f.options.map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+              </select> : <input className="form-input" type={f.type} placeholder={f.placeholder}
                 value={values[f.key] || ''}
                 readOnly={f.readOnly}
                 onChange={e => !f.readOnly && setValues(v => ({ ...v, [f.key]: e.target.value }))}
                 style={f.readOnly ? { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' } : {}}
-              />
+              />}
               {f.helperText && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{f.helperText}</div>}
             </div>
           ))}
@@ -150,6 +211,11 @@ export default function Settings() {
                 {testingClaude ? <><div className="spinner" /> Testando...</> : <><CheckCircle size={16} /> Testar Conexão</>}
               </button>
             )}
+            {section.title === 'OpenAI API' && <button className="btn btn-secondary" onClick={() => handleTestAI('openai')} disabled={testingAI === 'openai'}><CheckCircle size={16} /> Testar OpenAI</button>}
+            {section.title === 'Gemini API' && <button className="btn btn-secondary" onClick={() => handleTestAI('gemini')} disabled={testingAI === 'gemini'}><CheckCircle size={16} /> Testar Gemini</button>}
+            {section.title === 'Gemini API' && <button className="btn btn-secondary" onClick={handleLoadGeminiModels} disabled={loadingGeminiModels}>
+              {loadingGeminiModels ? <><div className="spinner" /> Consultando...</> : <><Activity size={16} /> Carregar modelos</>}
+            </button>}
             {section.title === 'Evolution API (WhatsApp)' && (
               <button className="btn btn-secondary" onClick={handleTestEvolution} disabled={testingEvolution}>
                 {testingEvolution ? <><div className="spinner" /> Testando...</> : <><MessageSquare size={16} /> Testar Envio</>}

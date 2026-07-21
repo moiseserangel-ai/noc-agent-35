@@ -2,11 +2,15 @@ import 'dotenv/config';
 
 const config = {
   port: parseInt(process.env.PORT || '3000', 10),
+  host: process.env.HOST || '127.0.0.1',
   nodeEnv: process.env.NODE_ENV || 'development',
 
   encryptionKey: process.env.ENCRYPTION_KEY || '',
   jwtSecret: process.env.JWT_SECRET || 'default-jwt-secret',
   dashboardPassword: process.env.DASHBOARD_PASSWORD || 'admin',
+  allowedOrigins: (process.env.ALLOWED_ORIGINS || '').split(',').map(v => v.trim()).filter(Boolean),
+  evolutionWebhookToken: process.env.EVOLUTION_WEBHOOK_TOKEN || '',
+  zabbixWebhookToken: process.env.ZABBIX_WEBHOOK_TOKEN || '',
 
   claude: {
     apiKey: process.env.CLAUDE_API_KEY || '',

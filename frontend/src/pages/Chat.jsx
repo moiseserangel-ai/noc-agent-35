@@ -6,8 +6,12 @@ import { api } from '../lib/api.js';
 let socket = null;
 function getSocket() {
   if (!socket) {
-    socket = io(window.location.origin, { transports: ['websocket', 'polling'] });
+    socket = io(window.location.origin, {
+      transports: ['websocket', 'polling'],
+      auth: { token: localStorage.getItem('noc_token') },
+    });
   }
+  socket.auth = { token: localStorage.getItem('noc_token') };
   return socket;
 }
 
@@ -37,6 +41,16 @@ export default function Chat() {
 
   useEffect(() => {
     const s = getSocket();
+    const reconnect = () => {
+      s.auth = { token: localStorage.getItem('noc_token') };
+      if (!s.connected) s.connect();
+    };
+    const onConnectError = (err) => {
+      setIsLoading(false);
+      if (/autorizado|token/i.test(err.message || '')) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '⚠️ A sessão do chat expirou. Aguarde a renovação automática ou entre novamente.', id: Date.now() }]);
+      }
+    };
     s.on('chat:chunk', ({ text }) => setStreaming(prev => prev + text));
     s.on('chat:tool', (data) => setTools(prev => [...prev, data]));
     s.on('chat:complete', ({ text, agentUsed, toolsUsed }) => {
@@ -52,7 +66,17 @@ export default function Chat() {
       setIsLoading(false);
     });
     s.on('chat:typing', () => setIsLoading(true));
-    return () => { s.off('chat:chunk'); s.off('chat:tool'); s.off('chat:complete'); s.off('chat:error'); s.off('chat:typing'); };
+    s.on('connect_error', onConnectError);
+    document.addEventListener('visibilitychange', reconnect);
+    window.addEventListener('focus', reconnect);
+    window.addEventListener('noc:token-refreshed', reconnect);
+    return () => {
+      s.off('chat:chunk'); s.off('chat:tool'); s.off('chat:complete'); s.off('chat:error'); s.off('chat:typing');
+      s.off('connect_error', onConnectError);
+      document.removeEventListener('visibilitychange', reconnect);
+      window.removeEventListener('focus', reconnect);
+      window.removeEventListener('noc:token-refreshed', reconnect);
+    };
   }, []);
 
   const newSession = async () => {
@@ -75,7 +99,9 @@ export default function Chat() {
     setMessages(prev => [...prev, { role: 'user', content: msg, id: Date.now() }]);
     setStreaming('');
     setTools([]);
-    getSocket().emit('chat:message', { sessionId: activeSession, message: msg, agentType });
+    const s = getSocket();
+    if (!s.connected) s.connect();
+    s.emit('chat:message', { sessionId: activeSession, message: msg, agentType });
   };
 
   return (

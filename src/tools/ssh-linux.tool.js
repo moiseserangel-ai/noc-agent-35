@@ -1,6 +1,7 @@
 import { Client } from 'ssh2';
 import { getDeviceDecrypted } from '../services/device.service.js';
 import logger from '../utils/logger.js';
+import { isRemediationApproved } from '../security/execution-context.js';
 
 const BLOCKED_COMMANDS_LINUX = [
   'rm -rf /',
@@ -21,7 +22,12 @@ function isBlockedCommand(command) {
   return false;
 }
 
+const READ_ONLY_LINUX = /^(uptime|free\b|df\b|du\b|top\b|ps\b|ss\b|netstat\b|ip\s+(addr|address|route|link|neigh)\b|ping\b|traceroute\b|journalctl\b|dmesg\b|cat\s+\/((var\/log)|(proc)|(sys))\/|tail\b|head\b|grep\b|systemctl\s+(status|list-units|is-active|is-enabled|show)\b|ls\b|findmnt\b|mount\s*$|hostname\b|uname\b|who\b|w\b)/i;
+
 export async function sshLinuxExec({ deviceId, command }) {
+  if (!isRemediationApproved() && !READ_ONLY_LINUX.test(String(command).trim())) {
+    return { success: false, output: 'Comando de alteração bloqueado: diagnóstico permite somente leitura.' };
+  }
   if (isBlockedCommand(command)) {
     return {
       success: false,

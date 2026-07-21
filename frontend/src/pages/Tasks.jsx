@@ -1,21 +1,60 @@
 import { useState, useEffect } from 'react';
-import { ListTodo, ChevronDown, ChevronUp } from 'lucide-react';
+import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
+import { useToast } from '../App.jsx';
 
 export default function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', source: '', priority: '' });
   const [expanded, setExpanded] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [selectedDevices, setSelectedDevices] = useState({});
+  const [processing, setProcessing] = useState(null);
+  const toast = useToast();
+
+  useEffect(() => { api.getDevices().then(r => setDevices(r.data)).catch(() => {}); }, []);
+
+  const reprocess = async (task) => {
+    const deviceId = selectedDevices[task.id] || task.deviceId;
+    if (!deviceId) { toast('Selecione o equipamento relacionado à Task', 'error'); return; }
+    setProcessing(task.id);
+    try {
+      await api.reprocessTask(task.id, deviceId);
+      toast('Task analisada novamente pelo agente', 'success');
+      const r = await api.getTasks(filter); setTasks(r.data);
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setProcessing(null); }
+  };
+
+  const complete = async task => {
+    const note = window.prompt('Informe uma observação para a conclusão:', 'Concluída manualmente pelo administrador');
+    if (note === null) return;
+    setProcessing(task.id);
+    try {
+      await api.completeTask(task.id, note);
+      toast('Task concluída', 'success');
+      setTasks(items => items.map(item => item.id === task.id ? { ...item, status: 'completed', executionResult: note } : item));
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setProcessing(null); }
+  };
 
   useEffect(() => {
-    setLoading(true);
+    let active = true;
+    const load = (showLoading = false) => {
+    if (showLoading) setLoading(true);
     const p = {};
     if (filter.status) p.status = filter.status;
     if (filter.source) p.source = filter.source;
     if (filter.priority) p.priority = filter.priority;
-    api.getTasks(p).then(r => setTasks(r.data)).catch(() => {}).finally(() => setLoading(false));
+    api.getTasks(p).then(r => { if (active) setTasks(r.data); }).catch(() => {}).finally(() => { if (active) setLoading(false); });
+    };
+    load(true);
+    const interval = setInterval(() => load(false), 15000);
+    const resume = () => { if (document.visibilityState === 'visible') load(false); };
+    document.addEventListener('visibilitychange', resume);
+    return () => { active = false; clearInterval(interval); document.removeEventListener('visibilitychange', resume); };
   }, [filter]);
 
   return (
@@ -62,6 +101,18 @@ export default function Tasks() {
                 {t.executionResult && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 600, marginBottom: 4 }}>RESULTADO</div>
                   <pre style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap', background: 'var(--bg-primary)', padding: 12, borderRadius: 8, color: 'var(--success)' }}>{t.executionResult}</pre>
+                </div>}
+                {['pending', 'failed', 'awaiting_approval'].includes(t.status) && <div onClick={e => e.stopPropagation()} style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select className="form-select" style={{ maxWidth: 300 }} value={selectedDevices[t.id] || t.deviceId || ''} onChange={e => setSelectedDevices(v => ({ ...v, [t.id]: e.target.value }))}>
+                    <option value="">Selecione o equipamento</option>
+                    {devices.map(d => <option key={d.id} value={d.id}>{d.name} — {d.hostname}</option>)}
+                  </select>
+                  <button className="btn btn-primary" disabled={processing === t.id} onClick={() => reprocess(t)}>
+                    <RefreshCw size={15} /> {processing === t.id ? 'Processando...' : 'Reprocessar com agente'}
+                  </button>
+                  <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => complete(t)}>
+                    <CheckCircle size={15} /> Concluir manualmente
+                  </button>
                 </div>}
               </div>
             )}

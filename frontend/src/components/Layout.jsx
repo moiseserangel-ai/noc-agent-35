@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: '/tasks', label: 'Tasks', icon: ListTodo },
   { path: '/chat', label: 'Chat IA', icon: MessageSquare },
   { path: '/settings', label: 'Configurações', icon: Settings },
+  { path: '/vpn', label: 'VPN L2TP/IPsec', icon: Shield },
   { path: '/docs', label: 'Documentação', icon: BookOpen },
 ];
 

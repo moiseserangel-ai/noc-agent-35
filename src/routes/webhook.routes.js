@@ -44,6 +44,10 @@ async function processAgentRequest(classification, task) {
 
 // Evolution API Webhook (WhatsApp messages)
 router.post('/evolution', async (req, res) => {
+  const suppliedToken = req.headers['x-webhook-token'];
+  if (!config.evolutionWebhookToken || suppliedToken !== config.evolutionWebhookToken) {
+    return res.status(401).send('Invalid webhook token');
+  }
   res.status(200).send('OK');
 
   try {
@@ -141,7 +145,7 @@ router.post('/zabbix', async (req, res) => {
     logger.error(`Error reading zabbix token from DB: ${err.message}`);
   }
 
-  if (expectedToken && token !== expectedToken) {
+  if (!expectedToken || token !== expectedToken) {
     return res.status(401).json({ error: 'Invalid token' });
   }
 

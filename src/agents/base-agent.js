@@ -1,192 +1,49 @@
-import Anthropic from '@anthropic-ai/sdk';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import prisma from '../database/client.js';
+import { decrypt } from '../utils/crypto.js';
+import { providerRunners } from '../ai/providers.js';
+
+export async function getAiConfiguration() {
+  const keys = ['ai_provider', 'ai_fallback_order', 'claude_api_key', 'claude_model', 'openai_api_key', 'openai_model', 'gemini_api_key', 'gemini_model'];
+  const rows = await prisma.settings.findMany({ where: { key: { in: keys } } });
+  const values = Object.fromEntries(rows.map(r => [r.key, r.encrypted ? decrypt(r.value) : r.value]));
+  return {
+    primary: values.ai_provider || 'claude',
+    fallback: (values.ai_fallback_order || '').split(',').map(v => v.trim()).filter(Boolean),
+    providers: {
+      claude: { apiKey: values.claude_api_key || config.claude.apiKey, model: values.claude_model || config.claude.model },
+      openai: { apiKey: values.openai_api_key || '', model: values.openai_model || 'gpt-5.6' },
+      gemini: { apiKey: values.gemini_api_key || '', model: values.gemini_model || 'gemini-3.5-flash' },
+    },
+  };
+}
 
 export default class BaseAgent {
-  constructor(name, systemPrompt, tools = []) {
-    this.name = name;
-    this.systemPrompt = systemPrompt;
-    this.tools = tools;
-    this.toolHandlers = {};
-    this.client = null;
+  constructor(name, systemPrompt, tools = []) { this.name = name; this.systemPrompt = systemPrompt; this.tools = tools; this.toolHandlers = {}; }
+  registerTool(definition, handler) { this.tools.push(definition); this.toolHandlers[definition.name] = handler; }
+  async executeToolCall(name, input) {
+    const handler = this.toolHandlers[name];
+    if (!handler) return JSON.stringify({ error: `Unknown tool: ${name}` });
+    try { return JSON.stringify(await handler(input)); } catch (err) { logger.error(`Tool ${name}: ${err.message}`); return JSON.stringify({ error: err.message }); }
   }
-
-  async getClientAndModel() {
-    let apiKey = config.claude.apiKey;
-    let model = config.claude.model;
-
-    // Try to get from DB
-    const settings = await prisma.settings.findMany({
-      where: { key: { in: ['claude_api_key', 'claude_model'] } }
-    });
-
-    const dbKey = settings.find(s => s.key === 'claude_api_key');
-    const dbModel = settings.find(s => s.key === 'claude_model');
-
-    if (dbKey && dbKey.value) {
-      // Import decrypt only when needed to avoid circular deps or just use it
-      const { decrypt } = await import('../utils/crypto.js');
-      apiKey = dbKey.encrypted ? decrypt(dbKey.value) : dbKey.value;
+  async run(userMessage, _context = {}, onEvent) {
+    const cfg = await getAiConfiguration();
+    const order = [...new Set([cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
+    if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');
+    let lastError;
+    for (const provider of order) {
+      try {
+        logger.info(`[${this.name}] provider=${provider} model=${cfg.providers[provider].model}`);
+        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: userMessage, executeTool: this.executeToolCall.bind(this), onEvent });
+        return { ...result, provider };
+      } catch (err) { lastError = err; logger.error(`[${this.name}] ${provider} falhou: ${err.message}`); }
     }
-    
-    if (dbModel && dbModel.value) {
-      model = dbModel.value;
-    }
-
-    if (!apiKey) throw new Error('CLAUDE_API_KEY não configurada no banco ou .env');
-    
-    if (!this.client || this.client.apiKey !== apiKey) {
-      this.client = new Anthropic({ apiKey });
-    }
-    
-    return { client: this.client, model };
+    throw lastError || new Error('Falha em todos os provedores');
   }
-
-  registerTool(definition, handler) {
-    this.tools.push(definition);
-    this.toolHandlers[definition.name] = handler;
-  }
-
-  async executeToolCall(toolName, toolInput) {
-    const handler = this.toolHandlers[toolName];
-    if (!handler) {
-      return JSON.stringify({ error: `Unknown tool: ${toolName}` });
-    }
-    try {
-      const result = await handler(toolInput);
-      return JSON.stringify(result);
-    } catch (err) {
-      logger.error(`Tool ${toolName} error: ${err.message}`);
-      return JSON.stringify({ error: err.message });
-    }
-  }
-
-  async run(userMessage, context = {}) {
-    const { client, model } = await this.getClientAndModel();
-    const messages = [{ role: 'user', content: userMessage }];
-
-    logger.info(`[${this.name}] Processing: ${userMessage.substring(0, 100)}...`);
-
-    let response = await client.messages.create({
-      model: model,
-      max_tokens: 4096,
-      system: this.systemPrompt,
-      tools: this.tools.length > 0 ? this.tools : undefined,
-      messages,
-    });
-
-    const allToolResults = [];
-
-    while (response.stop_reason === 'tool_use') {
-      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
-      const toolResults = [];
-
-      for (const toolUse of toolUseBlocks) {
-        logger.info(`[${this.name}] Calling tool: ${toolUse.name}`, toolUse.input);
-
-        const result = await this.executeToolCall(toolUse.name, toolUse.input);
-
-        allToolResults.push({
-          tool: toolUse.name,
-          input: toolUse.input,
-          output: result,
-        });
-
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
-          content: result,
-        });
-      }
-
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
-
-      response = await client.messages.create({
-        model: model,
-        max_tokens: 4096,
-        system: this.systemPrompt,
-        tools: this.tools,
-        messages,
-      });
-    }
-
-    const textContent = response.content
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('\n');
-
-    logger.info(`[${this.name}] Response generated (${textContent.length} chars)`);
-
-    return {
-      text: textContent,
-      toolsUsed: allToolResults,
-      usage: response.usage,
-    };
-  }
-
   async runStreaming(userMessage, onChunk) {
-    const { client, model } = await this.getClientAndModel();
-    const messages = [{ role: 'user', content: userMessage }];
-
-    let fullContent = [];
-    let allToolResults = [];
-
-    const streamResponse = async () => {
-      const stream = client.messages.stream({
-        model: model,
-        max_tokens: 4096,
-        system: this.systemPrompt,
-        tools: this.tools.length > 0 ? this.tools : undefined,
-        messages,
-      });
-
-      let currentToolUse = null;
-      let toolInput = '';
-
-      stream.on('text', (text) => {
-        if (onChunk) onChunk({ type: 'text', text });
-      });
-
-      const finalMessage = await stream.finalMessage();
-      return finalMessage;
-    };
-
-    let response = await streamResponse();
-    fullContent.push(...response.content);
-
-    while (response.stop_reason === 'tool_use') {
-      const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
-      const toolResults = [];
-
-      for (const toolUse of toolUseBlocks) {
-        if (onChunk) onChunk({ type: 'tool_start', tool: toolUse.name, input: toolUse.input });
-
-        const result = await this.executeToolCall(toolUse.name, toolUse.input);
-        allToolResults.push({ tool: toolUse.name, input: toolUse.input, output: result });
-
-        if (onChunk) onChunk({ type: 'tool_result', tool: toolUse.name, output: result });
-
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolUse.id,
-          content: result,
-        });
-      }
-
-      messages.push({ role: 'assistant', content: response.content });
-      messages.push({ role: 'user', content: toolResults });
-
-      response = await streamResponse();
-      fullContent.push(...response.content);
-    }
-
-    const textContent = fullContent
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('\n');
-
-    return { text: textContent, toolsUsed: allToolResults };
+    const result = await this.run(userMessage, {}, onChunk);
+    if (result.text) onChunk?.({ type: 'text', text: result.text });
+    return result;
   }
 }

@@ -1,6 +1,7 @@
 import { Client } from 'ssh2';
 import { getDeviceDecrypted } from '../services/device.service.js';
 import logger from '../utils/logger.js';
+import { isRemediationApproved } from '../security/execution-context.js';
 
 const BLOCKED_COMMANDS_MIKROTIK = [
   '/system reset',
@@ -16,6 +17,11 @@ function isBlockedCommand(command) {
 }
 
 export async function sshMikrotikExec({ deviceId, command }) {
+  const normalized = String(command).toLowerCase().trim();
+  const readOnly = normalized.startsWith('/ping ') || normalized.startsWith('/tool traceroute ') || /\b(print|monitor|export)\b/.test(normalized);
+  if (!isRemediationApproved() && !readOnly) {
+    return { success: false, output: 'Comando de alteração bloqueado: diagnóstico permite somente leitura.' };
+  }
   if (isBlockedCommand(command)) {
     return {
       success: false,
