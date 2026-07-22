@@ -1,5 +1,7 @@
 # NOC Agent 35
 
+> A operação atual, validação de produção, backup, atualização e recuperação estão documentadas em [PRODUCTION_RUNBOOK.md](PRODUCTION_RUNBOOK.md).
+
 **AI-powered autonomous NOC monitoring system** — Diagnose and remediate network/server incidents using Claude AI agents, with WhatsApp approval workflows and Zabbix integration.
 
 ![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=nodedotjs&logoColor=white)
@@ -90,7 +92,7 @@ The system uses a **Multi-Agent Pipeline** with Claude's Native Tool Use (Functi
 
 ## Features
 
-- **Multi-Agent AI System** - Autonomous diagnosis with Claude AI (Anthropic)
+- **Multi-provider AI System** - Claude, OpenAI e Gemini com fallback configurável
 - **WhatsApp Integration** - Receive alerts and approve actions via WhatsApp (Evolution API)
 - **Zabbix Integration** - Automatic alert processing from Zabbix webhooks
 - **Real-time Dashboard** - React SPA with live AI streaming via Socket.IO
@@ -99,6 +101,9 @@ The system uses a **Multi-Agent Pipeline** with Claude's Native Tool Use (Functi
 - **Approval Workflow** - Human-in-the-loop approval before applying changes
 - **Task Tracking** - Full history of diagnostics, approvals, and executions
 - **Streaming Responses** - Real-time AI response streaming in the dashboard
+- **Professional incident workflow** - SLA, escalation, assignment, validation and audit trail
+- **Role-based access and 2FA** - Administrador, Operador, Visualização e sessões revogáveis
+- **Reports and backups** - MTTA/MTTR/SLA, CSV, backup automático e restauração validada
 
 ---
 
