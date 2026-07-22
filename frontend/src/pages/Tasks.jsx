@@ -86,7 +86,13 @@ export default function Tasks() {
     if (filter.source) p.source = filter.source;
     if (filter.priority) p.priority = filter.priority;
     if (filter.sla) p.sla = filter.sla;
-    api.getTasks(p).then(r => { if (active) setTasks(r.data); }).catch(() => {}).finally(() => { if (active) setLoading(false); });
+    api.getTasks(p).then(r => {
+      if (!active) return;
+      setTasks(current => r.data.map(fresh => {
+        const detailed = current.find(item => item.id === fresh.id && item.messages);
+        return detailed ? { ...detailed, ...fresh, messages: detailed.messages } : fresh;
+      }));
+    }).catch(() => {}).finally(() => { if (active) setLoading(false); });
     };
     load(true);
     const interval = setInterval(() => load(false), 15000);
@@ -132,7 +138,7 @@ export default function Tasks() {
               {expanded === t.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </div>
             {expanded === t.id && (
-              <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border-primary)' }}>
+              <div onClick={e => e.stopPropagation()} style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border-primary)' }}>
                 <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>RESPONSÁVEL</div><strong>{t.assignedTo || 'Não atribuído'}</strong></div>
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>PRAZO</div><strong>{t.dueAt ? new Date(t.dueAt).toLocaleString('pt-BR') : 'Sem prazo'}</strong></div>
