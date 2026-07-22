@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Activity, Lock } from 'lucide-react';
+import { Activity, Lock, User } from 'lucide-react';
 import { api } from '../lib/api.js';
 
 export default function Login({ onLogin }) {
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -12,9 +13,9 @@ export default function Login({ onLogin }) {
     setLoading(true);
     setError('');
     try {
-      const { token } = await api.login(password);
+      const { token, user } = await api.login(username, password);
       localStorage.setItem('noc_token', token);
-      onLogin();
+      onLogin(user);
     } catch (err) {
       setError('Senha incorreta');
     } finally {
@@ -36,6 +37,12 @@ export default function Login({ onLogin }) {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <div style={{ position: 'relative' }}>
+              <User size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input className="form-input" style={{ paddingLeft: 40 }} placeholder="Usuário" value={username} onChange={e => setUsername(e.target.value)} autoFocus autoComplete="username" />
+            </div>
+          </div>
+          <div className="form-group">
+            <div style={{ position: 'relative' }}>
               <Lock size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="password"
@@ -44,7 +51,7 @@ export default function Login({ onLogin }) {
                 placeholder="Senha do dashboard"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                autoFocus
+                autoComplete="current-password"
               />
             </div>
           </div>

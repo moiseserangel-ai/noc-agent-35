@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import config from './config/index.js';
 import logger from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
-import { authMiddleware, verifyToken } from './middleware/auth.middleware.js';
+import { authMiddleware, verifyToken, requireRoles, readOnlyForViewer } from './middleware/auth.middleware.js';
 
 import authRoutes from './routes/auth.routes.js';
 import deviceRoutes from './routes/device.routes.js';
@@ -18,6 +18,7 @@ import taskRoutes from './routes/task.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import vpnRoutes from './routes/vpn.routes.js';
+import userRoutes from './routes/user.routes.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -50,11 +51,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // Protected routes
-app.use('/api/devices', authMiddleware, deviceRoutes);
-app.use('/api/settings', authMiddleware, settingsRoutes);
-app.use('/api/tasks', authMiddleware, taskRoutes);
-app.use('/api/chat', authMiddleware, chatRoutes);
-app.use('/api/vpn', authMiddleware, vpnRoutes);
+app.use('/api/devices', authMiddleware, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);
+app.use('/api/settings', authMiddleware, requireRoles('admin'), settingsRoutes);
+app.use('/api/tasks', authMiddleware, readOnlyForViewer, taskRoutes);
+app.use('/api/chat', authMiddleware, requireRoles('admin', 'operator'), chatRoutes);
+app.use('/api/vpn', authMiddleware, requireRoles('admin'), vpnRoutes);
+app.use('/api/users', authMiddleware, requireRoles('admin'), userRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -89,6 +91,7 @@ io.on('connection', (socket) => {
 
   socket.on('chat:message', async ({ sessionId, message, agentType = 'support' }) => {
     try {
+      if (!['admin', 'operator'].includes(socket.user.role)) throw new Error('Sem permissão para usar agentes');
       if (typeof sessionId !== 'string' || typeof message !== 'string' || message.length > 4000) throw new Error('Mensagem inválida');
       const ownedSession = await prisma.chatSession.findUnique({ where: { id: sessionId } });
       if (!ownedSession) throw new Error('Sessão inválida');

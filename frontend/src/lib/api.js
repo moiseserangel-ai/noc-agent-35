@@ -18,15 +18,20 @@ async function request(path, options = {}) {
     throw new Error('Unauthorized');
   }
 
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  if (!res.ok) throw new Error(data.error || (res.status === 403 ? 'Sem permissão' : 'Request failed'));
   return data;
 }
 
 export const api = {
   // Auth
-  login: (password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+  login: (username, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
   verify: () => request('/auth/verify'),
   refreshSession: () => request('/auth/refresh', { method: 'POST' }),
+  changePassword: (currentPassword, newPassword) => request('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
+  getUsers: () => request('/users'),
+  createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
+  updateUser: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
 
   // Devices
   getDevices: () => request('/devices'),

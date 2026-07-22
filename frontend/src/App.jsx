@@ -10,6 +10,7 @@ import Chat from './pages/Chat.jsx';
 import Settings from './pages/Settings.jsx';
 import Docs from './pages/Docs.jsx';
 import Vpn from './pages/Vpn.jsx';
+import Users from './pages/Users.jsx';
 
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
@@ -37,11 +38,12 @@ function ToastProvider({ children }) {
 
 export default function App() {
   const [authed, setAuthed] = useState(null);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem('noc_token');
     if (!token) { setAuthed(false); return; }
-    api.verify().then(() => setAuthed(true)).catch(() => {
+    api.verify().then(result => { setUser(result.user); setAuthed(true); }).catch(() => {
       localStorage.removeItem('noc_token');
       setAuthed(false);
     });
@@ -57,6 +59,7 @@ export default function App() {
         const result = await api.refreshSession();
         if (result.token) {
           localStorage.setItem('noc_token', result.token);
+          if (result.user) setUser(result.user);
           window.dispatchEvent(new Event('noc:token-refreshed'));
         }
       } catch {
@@ -85,17 +88,18 @@ export default function App() {
         <Routes>
           {!authed ? (
             <>
-              <Route path="/login" element={<Login onLogin={() => setAuthed(true)} />} />
+              <Route path="/login" element={<Login onLogin={loggedUser => { setUser(loggedUser); setAuthed(true); }} />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </>
           ) : (
-            <Route element={<Layout onLogout={() => { localStorage.removeItem('noc_token'); setAuthed(false); }} />}>
+            <Route element={<Layout user={user} onLogout={() => { localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
               <Route index element={<Dashboard />} />
-              <Route path="devices" element={<Devices />} />
-              <Route path="tasks" element={<Tasks />} />
-              <Route path="chat" element={<Chat />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="vpn" element={<Vpn />} />
+              <Route path="devices" element={<Devices canManage={user?.role === 'admin'} />} />
+              <Route path="tasks" element={<Tasks canOperate={['admin', 'operator'].includes(user?.role)} />} />
+              <Route path="chat" element={['admin', 'operator'].includes(user?.role) ? <Chat /> : <Navigate to="/" replace />} />
+              <Route path="settings" element={user?.role === 'admin' ? <Settings /> : <Navigate to="/" replace />} />
+              <Route path="vpn" element={user?.role === 'admin' ? <Vpn /> : <Navigate to="/" replace />} />
+              <Route path="users" element={user?.role === 'admin' ? <Users /> : <Navigate to="/" replace />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

@@ -17,8 +17,21 @@ export function authMiddleware(req, res, next) {
   }
 }
 
-export function generateToken() {
-  return jwt.sign({ role: 'admin' }, config.jwtSecret, { expiresIn: '8h', issuer: 'noc-agent' });
+export function requireRoles(...roles) {
+  return (req, res, next) => roles.includes(req.user?.role)
+    ? next()
+    : res.status(403).json({ success: false, error: 'Você não tem permissão para esta operação' });
+}
+
+export function readOnlyForViewer(req, res, next) {
+  if (req.user?.role === 'viewer' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return res.status(403).json({ success: false, error: 'Perfil de visualização não pode realizar alterações' });
+  }
+  next();
+}
+
+export function generateToken(user) {
+  return jwt.sign({ sub: user.id, username: user.username, name: user.name, role: user.role, mustChangePassword: user.mustChangePassword }, config.jwtSecret, { expiresIn: '8h', issuer: 'noc-agent' });
 }
 
 export function verifyToken(token) {

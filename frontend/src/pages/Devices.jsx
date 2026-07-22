@@ -7,7 +7,7 @@ import Modal from '../components/Modal.jsx';
 
 const EMPTY_DEVICE = { name: '', hostname: '', port: 22, type: 'mikrotik', username: '', password: '', group: '', zabbixHostId: '', notes: '' };
 
-export default function Devices() {
+export default function Devices({ canManage = false }) {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -78,7 +78,7 @@ export default function Devices() {
           <h2>Equipamentos</h2>
           <p>Gerencie seus dispositivos de rede</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew}><Plus size={16} /> Adicionar</button>
+        {canManage && <button className="btn btn-primary" onClick={openNew}><Plus size={16} /> Adicionar</button>}
       </div>
 
       {devices.length === 0 ? (
@@ -96,7 +96,7 @@ export default function Devices() {
                 <th>Tipo</th>
                 <th>Porta</th>
                 <th>Grupo</th>
-                <th>Ações</th>
+                {canManage && <th>Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -107,7 +107,7 @@ export default function Devices() {
                   <td><TypeBadge type={d.type} /></td>
                   <td>{d.port}</td>
                   <td>{d.group || '—'}</td>
-                  <td>
+                  {canManage && <td>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-ghost btn-sm" onClick={() => handleTest(d.id)} disabled={testing === d.id}>
                         {testing === d.id ? <div className="spinner" /> : <Wifi size={14} />}
@@ -117,7 +117,7 @@ export default function Devices() {
                         <Trash2 size={14} />
                       </button>
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>
@@ -125,7 +125,7 @@ export default function Devices() {
         </div>
       )}
 
-      <Modal
+      {canManage && <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editDevice ? 'Editar Dispositivo' : 'Novo Dispositivo'}
@@ -182,7 +182,7 @@ export default function Devices() {
           <label className="form-label">Notas</label>
           <textarea className="form-textarea" value={form.notes} onChange={e => updateField('notes', e.target.value)} placeholder="Observações sobre o equipamento..." />
         </div>
-      </Modal>
+      </Modal>}
     </div>
   );
 }

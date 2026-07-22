@@ -18,7 +18,7 @@ const slaState = task => {
   return null;
 };
 
-export default function Tasks() {
+export default function Tasks({ canOperate = false }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', source: '', priority: '', sla: '' });
@@ -175,7 +175,7 @@ export default function Tasks() {
                     {t.messages.map(m => <div key={m.id}><div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(m.createdAt).toLocaleString('pt-BR')} · {m.agentName || m.role}</div><div style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}>{m.content}</div></div>)}
                   </div>
                 </div>}
-                <div onClick={e => e.stopPropagation()} style={{ marginTop: 16, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>
+                {canOperate && <div onClick={e => e.stopPropagation()} style={{ marginTop: 16, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8, alignItems: 'end' }}>
                     <div><label className="form-label">Responsável</label><input className="form-input" value={workflowForms[t.id]?.assignedTo || ''} onChange={e => setWorkflowForms(f => ({ ...f, [t.id]: { ...f[t.id], assignedTo: e.target.value } }))} placeholder="Nome do operador" /></div>
                     <div><label className="form-label">Prazo</label><input className="form-input" type="datetime-local" value={workflowForms[t.id]?.dueAt || ''} onChange={e => setWorkflowForms(f => ({ ...f, [t.id]: { ...f[t.id], dueAt: e.target.value } }))} /></div>
@@ -190,8 +190,8 @@ export default function Tasks() {
                     {['resolved', 'completed', 'validated', 'closed', 'cancelled', 'failed'].includes(t.status) && <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => workflow(t, 'reopen')}><RotateCcw size={15} /> Reabrir</button>}
                     {workflowForms[t.id]?.note && <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => workflow(t, 'comment')}><MessageSquare size={15} /> Comentar</button>}
                   </div>
-                </div>
-                {['pending', 'in_progress', 'failed', 'awaiting_approval'].includes(t.status) && <div onClick={e => e.stopPropagation()} style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                </div>}
+                {canOperate && ['pending', 'in_progress', 'failed', 'awaiting_approval'].includes(t.status) && <div onClick={e => e.stopPropagation()} style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <select className="form-select" style={{ maxWidth: 300 }} value={selectedDevices[t.id] || t.deviceId || ''} onChange={e => setSelectedDevices(v => ({ ...v, [t.id]: e.target.value }))}>
                     <option value="">Selecione o equipamento</option>
                     {devices.map(d => <option key={d.id} value={d.id}>{d.name} — {d.hostname}</option>)}
