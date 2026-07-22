@@ -8,6 +8,7 @@ import * as taskService from '../services/task.service.js';
 import * as evolutionService from '../services/evolution.service.js';
 import { parseZabbixAlert, formatAlertMessage } from '../services/zabbix.service.js';
 import prisma from '../database/client.js';
+import { getIncidentAutomationMode, shouldAutoDiagnoseIncident, describeIncidentPolicy } from '../services/incident-policy.service.js';
 
 const router = Router();
 
@@ -272,6 +273,18 @@ Identifique o dispositivo e encaminhe para diagnóstico.`;
       device.name.toLowerCase() === alert.host.toLowerCase() ||
       device.hostname.toLowerCase() === alert.host.toLowerCase()
     );
+    const automationMode = await getIncidentAutomationMode();
+    const autoDiagnose = shouldAutoDiagnoseIncident(alert.priority, automationMode);
+    await taskService.addTaskMessage(task.id, 'system', describeIncidentPolicy(automationMode, alert.priority));
+
+    if (!autoDiagnose) {
+      if (directDevice) {
+        await taskService.updateTask(task.id, { deviceId: directDevice.id, agentUsed: directDevice.type, status: 'pending' });
+      }
+      logger.info(`Task #${task.taskNumber} awaiting manual analysis (mode=${automationMode}, priority=${alert.priority})`);
+      return;
+    }
+
     const classification = directDevice ? {
       action: 'route_to_specialist',
       deviceId: directDevice.id,

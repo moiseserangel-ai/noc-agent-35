@@ -9,6 +9,7 @@ const SECTIONS = [
     icon: Activity,
     fields: [
       { key: 'ai_provider', label: 'Provedor principal', type: 'select', options: [['claude','Claude'],['openai','OpenAI'],['gemini','Gemini']] },
+      { key: 'ai_incident_mode', label: 'Automação de incidentes', type: 'select', defaultValue: 'hybrid', options: [['hybrid','Híbrido — automático apenas High/Disaster'],['manual','Manual — IA somente pelo botão'],['automatic','Automático — IA em todos os alertas']], helperText: 'No modo híbrido, Warning e Average criam a Task sem consumir IA.' },
       { key: 'ai_fallback_order', label: 'Ordem de fallback', type: 'text', placeholder: 'openai,gemini,claude', helperText: 'Lista separada por vírgulas. Provedores sem chave são ignorados.' },
     ],
   },
@@ -82,6 +83,7 @@ export default function Settings() {
         const v = {};
         r.data.forEach(s => { v[s.key] = s.encrypted ? '••••••••' : s.value; });
         v['ai_provider'] ||= 'claude';
+        v['ai_incident_mode'] ||= 'hybrid';
         v['openai_model'] ||= 'gpt-5.6-terra';
         v['gemini_model'] ||= 'gemini-3.5-flash';
         v['claude_model'] ||= 'claude-sonnet-5';
@@ -191,7 +193,7 @@ export default function Settings() {
               }}>
                 {geminiModels.map(model => <option key={model.id} value={model.id}>{model.name} — {model.id}</option>)}
                 <option value="__manual__">Digitar modelo manualmente…</option>
-              </select> : f.type === 'select' ? <select className="form-select" value={values[f.key] || 'claude'} onChange={e => setValues(v => ({ ...v, [f.key]: e.target.value }))}>
+              </select> : f.type === 'select' ? <select className="form-select" value={values[f.key] || f.defaultValue || 'claude'} onChange={e => setValues(v => ({ ...v, [f.key]: e.target.value }))}>
                 {f.options.map(([value,label]) => <option key={value} value={value}>{label}</option>)}
               </select> : <input className="form-input" type={f.type} placeholder={f.placeholder}
                 value={values[f.key] || ''}
