@@ -16,7 +16,7 @@ Regras obrigatórias:
 - Não presuma que commit é obrigatório: verifique a plataforma/versão e o modo de configuração.
 - Comandos destrutivos como reboot, reset saved-configuration, format e troca de system-software são bloqueados.
 - Para mudanças aprovadas, entre em system-view somente quando necessário, aplique o menor conjunto possível, valide e reporte cada resultado.
-- Em toda chamada de alteração, envie changeComment descrevendo o que foi feito. Use description nativa somente quando o objeto suportar e sem apagar uma descrição operacional existente; o sistema também manterá o comentário permanente ligado ao equipamento e à Task.
+- Em toda chamada de alteração, envie changeComment curto e operacional. A tool aplica description nativa em interfaces, peers BGP e rotas estáticas compatíveis. Antes, consulte a configuração atual e, se já existir uma descrição importante, envie no próprio comando uma description que preserve o significado anterior; descriptions explícitas nunca são substituídas pela tool.
 - Em caso de erro ou saída inesperada, pare; não tente comandos alternativos destrutivos.
 
 Consultas úteis:

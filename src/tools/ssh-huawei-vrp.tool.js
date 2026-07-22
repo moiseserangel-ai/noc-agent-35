@@ -13,6 +13,36 @@ const BLOCKED = [
   /\bdelete\s+.*\.(cfg|zip|cc)$/i,
 ];
 
+const huaweiDescription = value => normalizeChangeComment(value).replace(/[?"'\\]/g, '').slice(0, 80);
+
+export function ensureHuaweiNativeDescriptions(command, changeComment) {
+  const description = huaweiDescription(changeComment);
+  const source = String(command).split(/\r?\n/);
+  const bgpContext = source.some(line => /^bgp\s+\d+/i.test(line.trim()));
+  const result = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const line = source[index];
+    const trimmed = line.trim();
+    result.push(line);
+    if (/^interface\s+\S+/i.test(trimmed)) {
+      const block = source.slice(index + 1).findIndex(next => /^(?:interface\s+|return\b|quit\b|commit\b)/i.test(next.trim()));
+      const end = block < 0 ? source.length : index + 1 + block;
+      const hasDescription = source.slice(index + 1, end).some(next => /^description\s+/i.test(next.trim()));
+      if (!hasDescription) result.push(`description ${description}`);
+      continue;
+    }
+    if (/^ip route-static\s+/i.test(trimmed) && !/\sdescription\s+/i.test(trimmed)) {
+      result[result.length - 1] = `${line} description ${description}`;
+      continue;
+    }
+    const peer = trimmed.match(/^peer\s+(\S+)\s+(?!description\b)/i);
+    if (bgpContext && peer && !source.some(next => new RegExp(`^peer\\s+${peer[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+description\\b`, 'i').test(next.trim()))) {
+      result.push(`peer ${peer[1]} description ${description}`);
+    }
+  }
+  return result.join('\n');
+}
+
 export function validateHuaweiCommands(command, approved = isRemediationApproved()) {
   const commands = String(command || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   if (!commands.length) return { allowed: false, reason: 'Nenhum comando informado', commands: [] };
@@ -26,13 +56,18 @@ export async function sshHuaweiVrpExec({ deviceId, command, changeComment }) {
   if (!policy.allowed) return { success: false, output: `⛔ ${policy.reason}` };
   const changing = policy.commands.some(line => !READ_ONLY.test(line));
   let normalizedComment = null;
+  let executedCommands = policy.commands;
+  let nativeDescriptionApplied = false;
   if (changing) {
     try { normalizedComment = normalizeChangeComment(changeComment); } catch (error) { return { success: false, output: `Alteração bloqueada: ${error.message}` }; }
+    const enriched = ensureHuaweiNativeDescriptions(policy.commands.join('\n'), normalizedComment);
+    executedCommands = enriched.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    nativeDescriptionApplied = enriched !== policy.commands.join('\n');
   }
   const device = await getDeviceDecrypted(deviceId);
   if (!device) return { success: false, output: 'Dispositivo não encontrado' };
   if (device.type !== 'huawei_vrp') return { success: false, output: 'Dispositivo não é Huawei VRP' };
-  logger.info(`SSH Huawei VRP: ${device.hostname} → ${policy.commands.join(' | ')}`);
+  logger.info(`SSH Huawei VRP: ${device.hostname} → ${executedCommands.join(' | ')}`);
 
   return new Promise(resolve => {
     const conn = new Client();
@@ -46,16 +81,16 @@ export async function sshHuaweiVrpExec({ deviceId, command, changeComment }) {
       const commandOk = success && !/(error:|unrecognized command|wrong parameter|incomplete command)/i.test(message || output);
       if (normalizedComment && commandOk) {
         const context = getExecutionContext();
-        try { await recordDeviceChange({ deviceId, taskNumber: context.taskNumber, agentName: context.agentName || 'huawei_vrp', comment: normalizedComment, nativeAudit: 'Huawei CLI operation log' }); }
+        try { await recordDeviceChange({ deviceId, taskNumber: context.taskNumber, agentName: context.agentName || 'huawei_vrp', comment: normalizedComment, nativeAudit: nativeDescriptionApplied ? 'Huawei description + CLI operation log' : 'Huawei CLI operation log' }); }
         catch (error) { logger.error(`Falha ao registrar comentário de mudança Huawei: ${error.message}`); }
       }
-      resolve({ success: commandOk, output: `${message || output.trim() || '(sem saída)'}${normalizedComment && commandOk ? `\n📝 ${formatChangeMarker(normalizedComment, getExecutionContext().taskNumber)}` : ''}`, device: { name: device.name, hostname: device.hostname } });
+      resolve({ success: commandOk, output: `${message || output.trim() || '(sem saída)'}${normalizedComment && commandOk ? `\n📝 ${formatChangeMarker(normalizedComment, getExecutionContext().taskNumber)}${nativeDescriptionApplied ? '\n🏷️ description nativa aplicada aos objetos Huawei compatíveis.' : ''}` : ''}`, device: { name: device.name, hostname: device.hostname } });
     };
     const timeout = setTimeout(() => finish(false, `Timeout: sessão Huawei excedeu 60s em ${device.hostname}\n${output}`), 60000);
     conn.on('ready', () => {
       conn.shell({ term: 'vt100', cols: 240, rows: 1000 }, (error, stream) => {
         if (error) return finish(false, `Erro ao abrir terminal VRP: ${error.message}`);
-        const queue = ['screen-length 0 temporary', ...policy.commands];
+        const queue = ['screen-length 0 temporary', ...executedCommands];
         let index = 0;
         let lastSentAt = 0;
         const sendNext = () => {
