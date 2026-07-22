@@ -19,6 +19,9 @@ import chatRoutes from './routes/chat.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import vpnRoutes from './routes/vpn.routes.js';
 import userRoutes from './routes/user.routes.js';
+import auditRoutes from './routes/audit.routes.js';
+import { auditMutation } from './middleware/audit.middleware.js';
+import { logAudit } from './services/audit.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -51,12 +54,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/webhooks', webhookRoutes);
 
 // Protected routes
-app.use('/api/devices', authMiddleware, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);
-app.use('/api/settings', authMiddleware, requireRoles('admin'), settingsRoutes);
-app.use('/api/tasks', authMiddleware, readOnlyForViewer, taskRoutes);
-app.use('/api/chat', authMiddleware, requireRoles('admin', 'operator'), chatRoutes);
-app.use('/api/vpn', authMiddleware, requireRoles('admin'), vpnRoutes);
-app.use('/api/users', authMiddleware, requireRoles('admin'), userRoutes);
+app.use('/api/devices', authMiddleware, auditMutation, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);
+app.use('/api/settings', authMiddleware, requireRoles('admin'), auditMutation, settingsRoutes);
+app.use('/api/tasks', authMiddleware, readOnlyForViewer, auditMutation, taskRoutes);
+app.use('/api/chat', authMiddleware, requireRoles('admin', 'operator'), auditMutation, chatRoutes);
+app.use('/api/vpn', authMiddleware, requireRoles('admin'), auditMutation, vpnRoutes);
+app.use('/api/users', authMiddleware, requireRoles('admin'), auditMutation, userRoutes);
+app.use('/api/audit', authMiddleware, requireRoles('admin'), auditRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -130,6 +134,7 @@ io.on('connection', (socket) => {
         }
 
         const task = await taskService.processApproval(pendingTask.taskNumber, approved);
+        await logAudit({ userId: socket.user.sub, username: socket.user.username, displayName: socket.user.name, role: socket.user.role, action: approved ? 'approve' : 'reject', resource: 'task', resourceId: task.id, status: 'success', details: { taskNumber: task.taskNumber } });
         if (!approved) {
           const text = `❌ Alteração #TASK-${task.taskNumber} cancelada. Nenhuma ação foi executada.`;
           await taskService.addTaskMessage(task.id, 'user', 'Solução REJEITADA pelo administrador no dashboard');
@@ -148,6 +153,7 @@ io.on('connection', (socket) => {
         );
         await taskService.updateTask(task.id, { status: 'resolved', executionResult: execution.text, resolutionSummary: execution.text, resolutionType: 'agent', resolvedAt: new Date() });
         await taskService.addTaskMessage(task.id, 'agent', execution.text, task.agentUsed);
+        await logAudit({ userId: socket.user.sub, username: socket.user.username, displayName: socket.user.name, role: socket.user.role, action: 'agent_execute', resource: 'task', resourceId: task.id, status: 'success', details: { taskNumber: task.taskNumber, agent: task.agentUsed } });
         await prisma.chatMessage.create({ data: { sessionId, role: 'assistant', content: execution.text, agentUsed: task.agentUsed } });
         socket.emit('chat:chunk', { text: execution.text });
         socket.emit('chat:complete', { text: execution.text, agentUsed: task.agentUsed, toolsUsed: execution.toolsUsed || [] });

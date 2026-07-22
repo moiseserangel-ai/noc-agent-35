@@ -21,7 +21,7 @@ router.post('/:id/workflow', async (req, res, next) => {
     const task = await taskService.getTaskById(req.params.id);
     if (!task) return res.status(404).json({ success: false, error: 'Task não encontrada' });
     const action = String(req.body.action || '');
-    const actor = String(req.body.actor || 'Administrador').trim().slice(0, 100) || 'Administrador';
+    const actor = String(req.user?.name || req.user?.username || 'Sistema').trim().slice(0, 100);
     const note = String(req.body.note || '').trim().slice(0, 2000);
 
     if (action === 'assign') {

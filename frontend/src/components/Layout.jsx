@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { path: '/vpn', label: 'VPN L2TP/IPsec', icon: Shield, roles: ['admin'] },
   { path: '/docs', label: 'Documentação', icon: BookOpen },
   { path: '/users', label: 'Usuários', icon: Users, roles: ['admin'] },
+  { path: '/audit', label: 'Auditoria', icon: ScrollText, roles: ['admin'] },
 ];
 
 export default function Layout({ onLogout, user }) {

@@ -11,6 +11,7 @@ import Settings from './pages/Settings.jsx';
 import Docs from './pages/Docs.jsx';
 import Vpn from './pages/Vpn.jsx';
 import Users from './pages/Users.jsx';
+import Audit from './pages/Audit.jsx';
 
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
@@ -92,7 +93,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/login" replace />} />
             </>
           ) : (
-            <Route element={<Layout user={user} onLogout={() => { localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
+            <Route element={<Layout user={user} onLogout={async () => { try { await api.logout(); } catch {} localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
               <Route index element={<Dashboard />} />
               <Route path="devices" element={<Devices canManage={user?.role === 'admin'} />} />
               <Route path="tasks" element={<Tasks canOperate={['admin', 'operator'].includes(user?.role)} />} />
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="settings" element={user?.role === 'admin' ? <Settings /> : <Navigate to="/" replace />} />
               <Route path="vpn" element={user?.role === 'admin' ? <Vpn /> : <Navigate to="/" replace />} />
               <Route path="users" element={user?.role === 'admin' ? <Users /> : <Navigate to="/" replace />} />
+              <Route path="audit" element={user?.role === 'admin' ? <Audit /> : <Navigate to="/" replace />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

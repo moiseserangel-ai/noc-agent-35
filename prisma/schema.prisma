@@ -20,6 +20,26 @@ model User {
   updatedAt          DateTime @updatedAt
 }
 
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  username  String
+  displayName String?
+  role      String?
+  action    String
+  resource  String
+  resourceId String?
+  status    String   @default("success")
+  ipAddress String?
+  userAgent String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([username, createdAt])
+  @@index([resource, action])
+}
+
 model Device {
   id           String   @id @default(uuid())
   name         String

@@ -4,6 +4,7 @@ import { authMiddleware, generateToken } from '../middleware/auth.middleware.js'
 import prisma from '../database/client.js';
 import { decrypt } from '../utils/crypto.js';
 import { ensureAdminUser, publicUser, verifyPassword, hashPassword } from '../services/user.service.js';
+import { logAudit, requestIdentity } from '../services/audit.service.js';
 
 const router = Router();
 
@@ -24,12 +25,19 @@ router.post('/login', async (req, res) => {
   if (!user?.isActive || !(await verifyPassword(password, user.passwordHash))) {
     entry.count += 1;
     attempts.set(client, entry);
+    await logAudit({ username, action: 'login', resource: 'auth', status: 'failure', ipAddress: req.ip, userAgent: req.get('user-agent'), details: { reason: 'invalid_credentials' } });
     return res.status(401).json({ success: false, error: 'Invalid password' });
   }
   attempts.delete(client);
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   const safe = publicUser(user);
+  await logAudit({ userId: user.id, username: user.username, displayName: user.name, role: user.role, action: 'login', resource: 'auth', status: 'success', ipAddress: req.ip, userAgent: req.get('user-agent') });
   res.json({ success: true, token: generateToken(safe), user: safe });
+});
+
+router.post('/logout', authMiddleware, async (req, res) => {
+  await logAudit({ ...requestIdentity(req), action: 'logout', resource: 'auth', status: 'success' });
+  res.json({ success: true });
 });
 
 router.get('/verify', authMiddleware, async (req, res) => {
@@ -50,6 +58,7 @@ router.post('/change-password', authMiddleware, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
   if (!user || !(await verifyPassword(req.body.currentPassword, user.passwordHash))) return res.status(400).json({ success: false, error: 'Senha atual incorreta' });
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(req.body.newPassword), mustChangePassword: false } });
+  await logAudit({ ...requestIdentity(req), action: 'change_password', resource: 'auth', status: 'success' });
   res.json({ success: true });
 });
 
