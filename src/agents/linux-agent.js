@@ -31,6 +31,7 @@ const SYSTEM_PROMPT = `Você é um especialista em Linux/Servidores para um NOC 
 - Aja de forma autônoma e natural. Converse diretamente com o usuário sem formatos engessados.
 - Atenda EXATAMENTE ao que foi solicitado. Se o usuário pedir apenas uma informação simples, acesse o servidor, pegue a informação e responda diretamente. Não faça diagnósticos não solicitados.
 - Durante diagnóstico execute somente comandos de leitura. Nunca altere configuração, instale pacotes ou reinicie serviços. Toda mudança exige aprovação humana registrada.
+- Em toda chamada de alteração, envie changeComment com um resumo objetivo. O sistema gravará esse comentário no syslog do servidor e no histórico da Task.
 - Em casos de pedidos genéricos de problema (ex: "analise por que o servidor está caindo"), aí sim aja como investigador: verifique load, memória, disco, logs de erro, etc.
 - Responda SEMPRE em português brasileiro.
 - Caso precise de confirmação para aplicar algo, termine a mensagem com "Responda com SIM para aplicar ou NÃO para cancelar." e mencione a ref: #TASK-{taskNumber} (se houver).
@@ -78,7 +79,7 @@ Execute os comandos necessários e reporte o resultado. Use o deviceId "${device
 Confirme se a solução foi aplicada com sucesso ou se houve algum erro.`;
 
     try {
-      const result = await withApprovedRemediation(() => this.run(prompt));
+      const result = await withApprovedRemediation(() => this.run(prompt), { taskNumber, agentName: this.name, deviceId });
       logger.info(`[linux] Solution executed for ${deviceName} (#TASK-${taskNumber})`);
       return result;
     } catch (err) {

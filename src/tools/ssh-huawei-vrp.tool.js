@@ -1,7 +1,8 @@
 import { Client } from 'ssh2';
 import { getDeviceDecrypted } from '../services/device.service.js';
 import logger from '../utils/logger.js';
-import { isRemediationApproved } from '../security/execution-context.js';
+import { getExecutionContext, isRemediationApproved } from '../security/execution-context.js';
+import { formatChangeMarker, normalizeChangeComment, recordDeviceChange } from '../services/device-change.service.js';
 
 const READ_ONLY = /^(display\b|ping\b|tracert\b|screen-length\s+0\s+temporary\b)/i;
 const BLOCKED = [
@@ -20,9 +21,14 @@ export function validateHuaweiCommands(command, approved = isRemediationApproved
   return { allowed: true, commands };
 }
 
-export async function sshHuaweiVrpExec({ deviceId, command }) {
+export async function sshHuaweiVrpExec({ deviceId, command, changeComment }) {
   const policy = validateHuaweiCommands(command);
   if (!policy.allowed) return { success: false, output: `⛔ ${policy.reason}` };
+  const changing = policy.commands.some(line => !READ_ONLY.test(line));
+  let normalizedComment = null;
+  if (changing) {
+    try { normalizedComment = normalizeChangeComment(changeComment); } catch (error) { return { success: false, output: `Alteração bloqueada: ${error.message}` }; }
+  }
   const device = await getDeviceDecrypted(deviceId);
   if (!device) return { success: false, output: 'Dispositivo não encontrado' };
   if (device.type !== 'huawei_vrp') return { success: false, output: 'Dispositivo não é Huawei VRP' };
@@ -32,12 +38,18 @@ export async function sshHuaweiVrpExec({ deviceId, command }) {
     const conn = new Client();
     let output = '';
     let settled = false;
-    const finish = (success, message) => {
+    const finish = async (success, message) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       conn.end();
-      resolve({ success, output: message || output.trim() || '(sem saída)', device: { name: device.name, hostname: device.hostname } });
+      const commandOk = success && !/(error:|unrecognized command|wrong parameter|incomplete command)/i.test(message || output);
+      if (normalizedComment && commandOk) {
+        const context = getExecutionContext();
+        try { await recordDeviceChange({ deviceId, taskNumber: context.taskNumber, agentName: context.agentName || 'huawei_vrp', comment: normalizedComment, nativeAudit: 'Huawei CLI operation log' }); }
+        catch (error) { logger.error(`Falha ao registrar comentário de mudança Huawei: ${error.message}`); }
+      }
+      resolve({ success: commandOk, output: `${message || output.trim() || '(sem saída)'}${normalizedComment && commandOk ? `\n📝 ${formatChangeMarker(normalizedComment, getExecutionContext().taskNumber)}` : ''}`, device: { name: device.name, hostname: device.hostname } });
     };
     const timeout = setTimeout(() => finish(false, `Timeout: sessão Huawei excedeu 60s em ${device.hostname}\n${output}`), 60000);
     conn.on('ready', () => {
@@ -79,6 +91,7 @@ export const sshHuaweiVrpToolDefinition = {
     properties: {
       deviceId: { type: 'string', description: 'ID do equipamento Huawei VRP' },
       command: { type: 'string', description: 'Um ou mais comandos VRP separados por quebra de linha' },
+      changeComment: { type: 'string', description: 'Obrigatório em alterações: resumo permanente vinculado ao equipamento e à Task.' },
     },
     required: ['deviceId', 'command'],
   },

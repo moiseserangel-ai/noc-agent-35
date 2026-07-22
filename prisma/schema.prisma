@@ -98,6 +98,22 @@ model Device {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   tasks        Task[]
+  changes      DeviceChange[]
+}
+
+model DeviceChange {
+  id          String   @id @default(uuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  taskNumber  Int?
+  agentName   String
+  comment     String
+  nativeAudit String?
+  status      String   @default("applied")
+  createdAt   DateTime @default(now())
+
+  @@index([deviceId, createdAt])
+  @@index([taskNumber])
 }
 
 model Task {

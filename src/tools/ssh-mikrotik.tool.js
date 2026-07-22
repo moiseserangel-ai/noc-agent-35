@@ -1,7 +1,8 @@
 import { Client } from 'ssh2';
 import { getDeviceDecrypted } from '../services/device.service.js';
 import logger from '../utils/logger.js';
-import { isRemediationApproved } from '../security/execution-context.js';
+import { getExecutionContext, isRemediationApproved } from '../security/execution-context.js';
+import { formatChangeMarker, normalizeChangeComment, recordDeviceChange } from '../services/device-change.service.js';
 
 const BLOCKED_COMMANDS_MIKROTIK = [
   '/system reset',
@@ -16,11 +17,15 @@ function isBlockedCommand(command) {
   return BLOCKED_COMMANDS_MIKROTIK.some(blocked => cmd.includes(blocked));
 }
 
-export async function sshMikrotikExec({ deviceId, command }) {
+export async function sshMikrotikExec({ deviceId, command, changeComment }) {
   const normalized = String(command).toLowerCase().trim();
   const readOnly = normalized.startsWith('/ping ') || normalized.startsWith('/tool traceroute ') || /\b(print|monitor|export)\b/.test(normalized);
   if (!isRemediationApproved() && !readOnly) {
     return { success: false, output: 'Comando de alteração bloqueado: diagnóstico permite somente leitura.' };
+  }
+  let normalizedComment = null;
+  if (!readOnly) {
+    try { normalizedComment = normalizeChangeComment(changeComment); } catch (error) { return { success: false, output: `Alteração bloqueada: ${error.message}` }; }
   }
   if (isBlockedCommand(command)) {
     return {
@@ -64,13 +69,26 @@ export async function sshMikrotikExec({ deviceId, command }) {
         stream.on('data', (data) => { output += data.toString(); });
         stream.stderr.on('data', (data) => { errorOutput += data.toString(); });
 
-        stream.on('close', () => {
+        stream.on('close', async () => {
           clearTimeout(timeout);
-          conn.end();
           const result = (output + errorOutput).trim();
+          const commandOk = !/(failure:|bad command|syntax error|expected end)/i.test(result);
+          let auditNote = '';
+          if (normalizedComment && commandOk) {
+            const context = getExecutionContext();
+            const marker = formatChangeMarker(normalizedComment, context.taskNumber);
+            const escaped = marker.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+            try {
+              const nativeOk = await new Promise(done => conn.exec(`:log info message="${escaped}"`, (auditError, auditStream) => { if (auditError || !auditStream) return done(false); auditStream.on('close', () => done(true)); auditStream.resume(); }));
+              if (nativeOk) auditNote = 'RouterOS log';
+            } catch {}
+            try { await recordDeviceChange({ deviceId, taskNumber: context.taskNumber, agentName: context.agentName || 'mikrotik', comment: normalizedComment, nativeAudit: auditNote || 'histórico NOC' }); }
+            catch (error) { logger.error(`Falha ao registrar comentário de mudança MikroTik: ${error.message}`); }
+          }
+          conn.end();
           resolve({
-            success: true,
-            output: result || '(sem saída)',
+            success: commandOk,
+            output: `${result || '(sem saída)'}${normalizedComment && commandOk ? `\n📝 ${formatChangeMarker(normalizedComment, getExecutionContext().taskNumber)}` : ''}`,
             device: { name: device.name, hostname: device.hostname },
           });
         });
@@ -113,6 +131,7 @@ export const sshMikrotikToolDefinition = {
         type: 'string',
         description: 'Comando RouterOS a ser executado (ex: /ip address print, /interface print)',
       },
+      changeComment: { type: 'string', description: 'Obrigatório em alterações: resumo do que será configurado, vinculado à Task e registrado no equipamento.' },
     },
     required: ['deviceId', 'command'],
   },

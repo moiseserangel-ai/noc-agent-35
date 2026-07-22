@@ -1,7 +1,8 @@
 import { Client } from 'ssh2';
 import { getDeviceDecrypted } from '../services/device.service.js';
 import logger from '../utils/logger.js';
-import { isRemediationApproved } from '../security/execution-context.js';
+import { getExecutionContext, isRemediationApproved } from '../security/execution-context.js';
+import { formatChangeMarker, normalizeChangeComment, recordDeviceChange } from '../services/device-change.service.js';
 
 const BLOCKED_COMMANDS_LINUX = [
   'rm -rf /',
@@ -24,9 +25,14 @@ function isBlockedCommand(command) {
 
 const READ_ONLY_LINUX = /^(uptime|free\b|df\b|du\b|top\b|ps\b|ss\b|netstat\b|ip\s+(addr|address|route|link|neigh)\b|ping\b|traceroute\b|journalctl\b|dmesg\b|cat\s+\/((var\/log)|(proc)|(sys))\/|tail\b|head\b|grep\b|systemctl\s+(status|list-units|is-active|is-enabled|show)\b|ls\b|findmnt\b|mount\s*$|hostname\b|uname\b|who\b|w\b)/i;
 
-export async function sshLinuxExec({ deviceId, command }) {
-  if (!isRemediationApproved() && !READ_ONLY_LINUX.test(String(command).trim())) {
+export async function sshLinuxExec({ deviceId, command, changeComment }) {
+  const readOnly = READ_ONLY_LINUX.test(String(command).trim());
+  if (!isRemediationApproved() && !readOnly) {
     return { success: false, output: 'Comando de alteração bloqueado: diagnóstico permite somente leitura.' };
+  }
+  let normalizedComment = null;
+  if (!readOnly) {
+    try { normalizedComment = normalizeChangeComment(changeComment); } catch (error) { return { success: false, output: `Alteração bloqueada: ${error.message}` }; }
   }
   if (isBlockedCommand(command)) {
     return {
@@ -70,13 +76,23 @@ export async function sshLinuxExec({ deviceId, command }) {
         stream.on('data', (data) => { output += data.toString(); });
         stream.stderr.on('data', (data) => { errorOutput += data.toString(); });
 
-        stream.on('close', (code) => {
+        stream.on('close', async (code) => {
           clearTimeout(timeout);
-          conn.end();
           const result = (output + (errorOutput ? `\nSTDERR: ${errorOutput}` : '')).trim();
+          const success = code === 0 || code === null;
+          let auditNote = '';
+          if (normalizedComment && success) {
+            const context = getExecutionContext();
+            const marker = formatChangeMarker(normalizedComment, context.taskNumber);
+            const shellValue = `'${marker.replaceAll("'", "'\\\"'\\\"'")}'`;
+            try { const nativeOk = await new Promise(done => conn.exec(`logger -t noc-agent -- ${shellValue}`, (auditError, auditStream) => { if (auditError || !auditStream) return done(false); auditStream.on('close', () => done(true)); auditStream.resume(); })); if (nativeOk) auditNote = 'syslog noc-agent'; } catch {}
+            try { await recordDeviceChange({ deviceId, taskNumber: context.taskNumber, agentName: context.agentName || 'linux', comment: normalizedComment, nativeAudit: auditNote || 'histórico NOC' }); }
+            catch (error) { logger.error(`Falha ao registrar comentário de mudança Linux: ${error.message}`); }
+          }
+          conn.end();
           resolve({
-            success: code === 0 || code === null,
-            output: result || '(sem saída)',
+            success,
+            output: `${result || '(sem saída)'}${normalizedComment && success ? `\n📝 ${formatChangeMarker(normalizedComment, getExecutionContext().taskNumber)}` : ''}`,
             exitCode: code,
             device: { name: device.name, hostname: device.hostname },
           });
@@ -113,6 +129,7 @@ export const sshLinuxToolDefinition = {
         type: 'string',
         description: 'Comando Linux a ser executado (ex: systemctl status nginx, df -h)',
       },
+      changeComment: { type: 'string', description: 'Obrigatório em alterações: resumo gravado no syslog e no histórico da Task.' },
     },
     required: ['deviceId', 'command'],
   },

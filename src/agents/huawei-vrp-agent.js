@@ -16,6 +16,7 @@ Regras obrigatórias:
 - Não presuma que commit é obrigatório: verifique a plataforma/versão e o modo de configuração.
 - Comandos destrutivos como reboot, reset saved-configuration, format e troca de system-software são bloqueados.
 - Para mudanças aprovadas, entre em system-view somente quando necessário, aplique o menor conjunto possível, valide e reporte cada resultado.
+- Em toda chamada de alteração, envie changeComment descrevendo o que foi feito. Use description nativa somente quando o objeto suportar e sem apagar uma descrição operacional existente; o sistema também manterá o comentário permanente ligado ao equipamento e à Task.
 - Em caso de erro ou saída inesperada, pare; não tente comandos alternativos destrutivos.
 
 Consultas úteis:
@@ -59,7 +60,7 @@ export default class HuaweiVrpAgent extends BaseAgent {
   async executeSolution(deviceId, deviceName, solution, taskNumber) {
     try {
       const deviceContext = await contextFor(deviceId);
-      return await withApprovedRemediation(() => this.run(`Execute a mudança já aprovada da Task #TASK-${taskNumber} em ${deviceName} (ID: ${deviceId}).\n${deviceContext}\nSolução aprovada: ${solution}\nAplique somente os comandos aprovados, valide o resultado e informe rollback se houver falha. Use deviceId "${deviceId}".`));
+      return await withApprovedRemediation(() => this.run(`Execute a mudança já aprovada da Task #TASK-${taskNumber} em ${deviceName} (ID: ${deviceId}).\n${deviceContext}\nSolução aprovada: ${solution}\nAplique somente os comandos aprovados, valide o resultado e informe rollback se houver falha. Use deviceId "${deviceId}" e informe changeComment em toda alteração.`), { taskNumber, agentName: this.name, deviceId });
     } catch (error) {
       logger.error(`[huawei_vrp] Execution error: ${error.message}`);
       return { text: `❌ Erro ao aplicar solução em ${deviceName}: ${error.message}`, toolsUsed: [] };

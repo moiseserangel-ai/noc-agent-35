@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as deviceService from '../services/device.service.js';
 import { isSupportedDeviceType, publicVendorPlugins, supportedDeviceTypes } from '../vendors/registry.js';
+import { getDeviceChanges } from '../services/device-change.service.js';
 
 const router = Router();
 
@@ -12,6 +13,10 @@ router.get('/', async (req, res, next) => {
 });
 
 router.get('/catalog/types', (req, res) => res.json({ success: true, data: publicVendorPlugins() }));
+
+router.get('/:id/changes', async (req, res, next) => {
+  try { res.json({ success: true, data: await getDeviceChanges(req.params.id, req.query.limit) }); } catch (error) { next(error); }
+});
 
 router.get('/:id', async (req, res, next) => {
   try {

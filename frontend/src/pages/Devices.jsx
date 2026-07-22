@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Wifi, Edit2, Server } from 'lucide-react';
+import { Plus, Trash2, Wifi, Edit2, Server, History } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useToast } from '../App.jsx';
 import { TypeBadge } from '../components/StatusBadge.jsx';
@@ -17,6 +17,8 @@ export default function Devices({ canManage = false }) {
   const [form, setForm] = useState({ ...EMPTY_DEVICE });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(null);
+  const [historyDevice, setHistoryDevice] = useState(null);
+  const [changes, setChanges] = useState([]);
   const toast = useToast();
 
   const load = () => {
@@ -70,6 +72,7 @@ export default function Devices({ canManage = false }) {
   };
 
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
+  const openHistory = async device => { setHistoryDevice(device); setChanges([]); try { setChanges((await api.getDeviceChanges(device.id)).data); } catch(error) { toast(error.message,'error'); } };
 
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
@@ -115,6 +118,7 @@ export default function Devices({ canManage = false }) {
                         {testing === d.id ? <div className="spinner" /> : <Wifi size={14} />}
                       </button>
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(d)}><Edit2 size={14} /></button>
+                      <button className="btn btn-ghost btn-sm" title="Histórico de alterações" onClick={() => openHistory(d)}><History size={14} /></button>
                       <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(d.id, d.name)} style={{ color: 'var(--danger)' }}>
                         <Trash2 size={14} />
                       </button>
@@ -193,6 +197,9 @@ export default function Devices({ canManage = false }) {
           <textarea className="form-textarea" value={form.notes} onChange={e => updateField('notes', e.target.value)} placeholder="Observações sobre o equipamento..." />
         </div>
       </Modal>}
+      <Modal isOpen={Boolean(historyDevice)} onClose={()=>setHistoryDevice(null)} title={`Alterações — ${historyDevice?.name || ''}`} footer={<button className="btn btn-secondary" onClick={()=>setHistoryDevice(null)}>Fechar</button>}>
+        <div style={{display:'flex',flexDirection:'column',gap:10,maxHeight:'55vh',overflowY:'auto'}}>{changes.map(change=><div key={change.id} style={{padding:12,border:'1px solid var(--border-primary)',borderRadius:8}}><strong>{change.taskNumber?`#TASK-${change.taskNumber}`:'Alteração'}</strong><div style={{margin:'4px 0'}}>{change.comment}</div><small style={{color:'var(--text-muted)'}}>{new Date(change.createdAt).toLocaleString('pt-BR')} · {change.agentName} · {change.nativeAudit || 'histórico NOC'}</small></div>)}{!changes.length&&<span style={{color:'var(--text-muted)'}}>Nenhuma alteração comentada registrada.</span>}</div>
+      </Modal>
     </div>
   );
 }
