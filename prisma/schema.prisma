@@ -15,9 +15,31 @@ model User {
   role               String   @default("viewer") // admin|operator|viewer
   isActive           Boolean  @default(true)
   mustChangePassword Boolean  @default(true)
+  passwordChangedAt  DateTime?
+  twoFactorSecret    String?
+  twoFactorEnabled   Boolean  @default(false)
+  failedLoginAttempts Int     @default(0)
+  lockedUntil        DateTime?
+  sessionVersion     Int      @default(1)
   lastLoginAt        DateTime?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  sessions           AuthSession[]
+}
+
+model AuthSession {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress  String?
+  userAgent  String?
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
 }
 
 model AuditLog {

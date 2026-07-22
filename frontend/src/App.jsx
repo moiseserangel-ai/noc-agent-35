@@ -14,6 +14,7 @@ import Users from './pages/Users.jsx';
 import Audit from './pages/Audit.jsx';
 import Reports from './pages/Reports.jsx';
 import Backups from './pages/Backups.jsx';
+import Security from './pages/Security.jsx';
 
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
@@ -85,6 +86,10 @@ export default function App() {
     return <div className="loading-screen"><div className="spinner" /> Carregando...</div>;
   }
 
+  if (authed && user?.mustChangePassword) {
+    return <ToastProvider><BrowserRouter><Routes><Route path="*" element={<Security forcePasswordChange user={user} onUser={setUser} />} /></Routes></BrowserRouter></ToastProvider>;
+  }
+
   return (
     <ToastProvider>
       <BrowserRouter>
@@ -106,6 +111,7 @@ export default function App() {
               <Route path="audit" element={user?.role === 'admin' ? <Audit /> : <Navigate to="/" replace />} />
               <Route path="reports" element={<Reports />} />
               <Route path="backups" element={user?.role === 'admin' ? <Backups /> : <Navigate to="/" replace />} />
+              <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

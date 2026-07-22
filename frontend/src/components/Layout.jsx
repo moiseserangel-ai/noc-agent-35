@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { path: '/audit', label: 'Auditoria', icon: ScrollText, roles: ['admin'] },
   { path: '/reports', label: 'Relatórios', icon: BarChart3 },
   { path: '/backups', label: 'Backup e restauração', icon: DatabaseBackup, roles: ['admin'] },
+  { path: '/security', label: 'Minha segurança', icon: Shield },
 ];
 
 export default function Layout({ onLogout, user }) {

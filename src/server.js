@@ -105,11 +105,14 @@ async function getSessionHistory(sessionId, currentMessageId) {
   return selected;
 }
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
     if (!token) throw new Error('Token ausente');
-    socket.user = verifyToken(token);
+    const decoded = verifyToken(token);
+    const [user,session]=await Promise.all([prisma.user.findUnique({where:{id:decoded.sub}}),prisma.authSession.findUnique({where:{id:decoded.jti}})]);
+    if(!user?.isActive||!session||session.revokedAt||session.expiresAt<=new Date()||decoded.sessionVersion!==user.sessionVersion)throw new Error('Sessão inválida');
+    socket.user = { ...decoded,name:user.name,username:user.username,role:user.role };
     next();
   } catch {
     next(new Error('Não autorizado'));

@@ -5,12 +5,18 @@ import prisma from '../database/client.js';
 const scrypt = promisify(crypto.scrypt);
 const ROLES = ['admin', 'operator', 'viewer'];
 
-export async function hashPassword(password) {
+export async function hashPassword(password, enforcePolicy = true) {
   const value = String(password || '');
-  if (value.length < 8) throw new Error('A senha deve ter pelo menos 8 caracteres');
+  if (enforcePolicy) validatePassword(value);
   const salt = crypto.randomBytes(16).toString('hex');
   const derived = await scrypt(value, salt, 64);
   return `scrypt:${salt}:${Buffer.from(derived).toString('hex')}`;
+}
+
+export function validatePassword(value) {
+  const password=String(value||'');
+  if(password.length<10||!/[a-z]/.test(password)||!/[A-Z]/.test(password)||!/[0-9]/.test(password)||!/[^A-Za-z0-9]/.test(password)) throw new Error('A senha deve ter no mínimo 10 caracteres, com maiúscula, minúscula, número e símbolo');
+  return true;
 }
 
 export async function verifyPassword(password, encoded) {
@@ -22,7 +28,7 @@ export async function verifyPassword(password, encoded) {
 }
 
 export function publicUser(user) {
-  const { passwordHash, ...safe } = user;
+  const { passwordHash, twoFactorSecret, ...safe } = user;
   return safe;
 }
 
@@ -37,5 +43,5 @@ export async function createUser(data) {
 
 export async function ensureAdminUser(password) {
   if (await prisma.user.count()) return;
-  await prisma.user.create({ data: { username: 'admin', name: 'Administrador', role: 'admin', passwordHash: await hashPassword(password), mustChangePassword: false } });
+  await prisma.user.create({ data: { username: 'admin', name: 'Administrador', role: 'admin', passwordHash: await hashPassword(password, false), mustChangePassword: true } });
 }

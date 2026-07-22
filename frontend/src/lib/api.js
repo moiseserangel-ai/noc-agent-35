@@ -12,7 +12,7 @@ async function request(path, options = {}) {
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
   const data = await res.json();
 
-  if (res.status === 401) {
+  if (res.status === 401 && token) {
     localStorage.removeItem('noc_token');
     window.location.reload();
     throw new Error('Unauthorized');
@@ -24,11 +24,16 @@ async function request(path, options = {}) {
 
 export const api = {
   // Auth
-  login: (username, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+  login: (username, password, otp) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password, otp }) }),
   verify: () => request('/auth/verify'),
   refreshSession: () => request('/auth/refresh', { method: 'POST' }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   changePassword: (currentPassword, newPassword) => request('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, newPassword }) }),
+  setupTwoFactor: password => request('/auth/2fa/setup', { method: 'POST', body: JSON.stringify({ password }) }),
+  enableTwoFactor: code => request('/auth/2fa/enable', { method: 'POST', body: JSON.stringify({ code }) }),
+  disableTwoFactor: (password, code) => request('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ password, code }) }),
+  getSessions: () => request('/auth/sessions'),
+  revokeSession: id => request(`/auth/sessions/${id}`, { method: 'DELETE' }),
   getUsers: () => request('/users'),
   createUser: (data) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
   updateUser: (id, data) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
