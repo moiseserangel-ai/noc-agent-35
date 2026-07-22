@@ -20,6 +20,7 @@ import webhookRoutes from './routes/webhook.routes.js';
 import vpnRoutes from './routes/vpn.routes.js';
 import userRoutes from './routes/user.routes.js';
 import auditRoutes from './routes/audit.routes.js';
+import reportRoutes from './routes/report.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 
@@ -61,6 +62,7 @@ app.use('/api/chat', authMiddleware, requireRoles('admin', 'operator'), auditMut
 app.use('/api/vpn', authMiddleware, requireRoles('admin'), auditMutation, vpnRoutes);
 app.use('/api/users', authMiddleware, requireRoles('admin'), auditMutation, userRoutes);
 app.use('/api/audit', authMiddleware, requireRoles('admin'), auditRoutes);
+app.use('/api/reports', authMiddleware, reportRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

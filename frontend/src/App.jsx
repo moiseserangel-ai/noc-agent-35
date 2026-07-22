@@ -12,6 +12,7 @@ import Docs from './pages/Docs.jsx';
 import Vpn from './pages/Vpn.jsx';
 import Users from './pages/Users.jsx';
 import Audit from './pages/Audit.jsx';
+import Reports from './pages/Reports.jsx';
 
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
@@ -102,6 +103,7 @@ export default function App() {
               <Route path="vpn" element={user?.role === 'admin' ? <Vpn /> : <Navigate to="/" replace />} />
               <Route path="users" element={user?.role === 'admin' ? <Users /> : <Navigate to="/" replace />} />
               <Route path="audit" element={user?.role === 'admin' ? <Audit /> : <Navigate to="/" replace />} />
+              <Route path="reports" element={<Reports />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

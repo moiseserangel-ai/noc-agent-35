@@ -35,6 +35,7 @@ export const api = {
   deleteUser: (id) => request(`/users/${id}`, { method: 'DELETE' }),
   getAuditLogs: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/audit${qs ? `?${qs}` : ''}`); },
   getAuditOptions: () => request('/audit/options'),
+  getIncidentReport: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/reports/incidents${qs ? `?${qs}` : ''}`); },
 
   // Devices
   getDevices: () => request('/devices'),
