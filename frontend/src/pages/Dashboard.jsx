@@ -48,7 +48,7 @@ export default function Dashboard() {
         <div className="stat-card">
           <div className="stat-icon amber"><Clock size={24} /></div>
           <div>
-            <div className="stat-value">{(stats?.pending || 0) + (stats?.diagnosing || 0)}</div>
+            <div className="stat-value">{(stats?.pending || 0) + (stats?.inProgress || 0) + (stats?.diagnosing || 0)}</div>
             <div className="stat-label">Em Andamento</div>
           </div>
         </div>

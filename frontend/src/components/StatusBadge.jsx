@@ -1,9 +1,13 @@
 const STATUS_MAP = {
-  pending: { label: 'Pendente', className: 'badge-warning' },
+  pending: { label: 'Novo', className: 'badge-warning' },
+  in_progress: { label: 'Em atendimento', className: 'badge-info' },
   diagnosing: { label: 'Diagnosticando', className: 'badge-info' },
   awaiting_approval: { label: 'Aguardando', className: 'badge-cyan' },
   executing: { label: 'Executando', className: 'badge-info' },
-  completed: { label: 'Concluído', className: 'badge-success' },
+  completed: { label: 'Resolvido (legado)', className: 'badge-success' },
+  resolved: { label: 'Resolvido', className: 'badge-success' },
+  validated: { label: 'Validado', className: 'badge-cyan' },
+  closed: { label: 'Encerrado', className: 'badge-muted' },
   failed: { label: 'Falhou', className: 'badge-danger' },
   cancelled: { label: 'Cancelado', className: 'badge-muted' },
 };

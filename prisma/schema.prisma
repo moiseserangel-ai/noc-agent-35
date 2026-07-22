@@ -48,6 +48,13 @@ model Task {
   durationSeconds  Int?
   occurrenceCount  Int           @default(1)
   duplicateCount   Int           @default(0)
+  assignedTo       String?
+  acknowledgedAt   DateTime?
+  dueAt             DateTime?
+  resolutionSummary String?
+  resolutionType   String?
+  validatedAt      DateTime?
+  closedAt         DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   messages         TaskMessage[]

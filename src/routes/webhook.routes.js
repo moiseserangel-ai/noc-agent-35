@@ -97,8 +97,11 @@ router.post('/evolution', async (req, res) => {
         );
 
         await taskService.updateTask(task.id, {
-          status: 'completed',
+          status: 'resolved',
           executionResult: result.text,
+          resolutionSummary: result.text,
+          resolutionType: 'agent',
+          resolvedAt: new Date(),
         });
         await taskService.addTaskMessage(task.id, 'agent', result.text, task.agentUsed);
         await evolutionService.sendWhatsAppMessage(parsed.from, result.text);
@@ -181,12 +184,14 @@ router.post('/zabbix', async (req, res) => {
       const openedAt = existing.incidentOpenedAt || existing.createdAt;
       const durationSeconds = Math.max(0, Math.floor((resolvedAt.getTime() - openedAt.getTime()) / 1000));
       await taskService.updateTask(existing.id, {
-        status: 'completed',
+        status: 'resolved',
         zabbixStatus: 'RESOLVED',
         zabbixRecoveryId: alert.recoveryEventId,
         resolvedAt,
         lastSeenAt: resolvedAt,
         durationSeconds,
+        resolutionSummary: 'Recuperação confirmada automaticamente pelo Zabbix.',
+        resolutionType: 'zabbix',
         executionResult: `Resolvido automaticamente pelo Zabbix em ${resolvedAt.toLocaleString('pt-BR', { timeZone: 'America/Porto_Velho' })}.`,
       });
       await taskService.addTaskMessage(existing.id, 'system', `Evento Zabbix recuperado${alert.recoveryEventId ? ` (#${alert.recoveryEventId})` : ''}. Duração: ${durationSeconds}s.`);
@@ -224,10 +229,14 @@ router.post('/zabbix', async (req, res) => {
         incidentOpenedAt: eventAt,
         lastSeenAt: eventAt,
         resolvedAt: null,
+        validatedAt: null,
+        closedAt: null,
         durationSeconds: null,
         occurrenceCount: { increment: 1 },
         adminResponse: null,
         executionResult: null,
+        resolutionSummary: null,
+        resolutionType: null,
       });
       await taskService.addTaskMessage(task.id, 'system', `Incidente reaberto pelo Zabbix com EVENT.ID=${alert.eventId}.`);
       logger.info(`Task #${task.taskNumber} reopened for Zabbix EVENT.ID=${alert.eventId}`);

@@ -141,7 +141,7 @@ io.on('connection', (socket) => {
         const execution = await specialistAgent.executeSolution(
           task.deviceId, task.device?.name || 'Dispositivo', task.proposedSolution, task.taskNumber
         );
-        await taskService.updateTask(task.id, { status: 'completed', executionResult: execution.text });
+        await taskService.updateTask(task.id, { status: 'resolved', executionResult: execution.text, resolutionSummary: execution.text, resolutionType: 'agent', resolvedAt: new Date() });
         await taskService.addTaskMessage(task.id, 'agent', execution.text, task.agentUsed);
         await prisma.chatMessage.create({ data: { sessionId, role: 'assistant', content: execution.text, agentUsed: task.agentUsed } });
         socket.emit('chat:chunk', { text: execution.text });
@@ -228,10 +228,13 @@ Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma 
                 result.toolsUsed.push(...specialistResult.toolsUsed);
                 const needsApproval = /responda\s+com\s+sim|aguardando\s+aprova[cç][aã]o/i.test(specialistResult.text);
                 await taskService.updateTask(dashboardTask.id, {
-                  status: needsApproval ? 'awaiting_approval' : 'completed',
+                  status: needsApproval ? 'awaiting_approval' : 'resolved',
                   diagnosis: specialistResult.text,
                   proposedSolution: needsApproval ? specialistResult.text : null,
                   executionResult: needsApproval ? null : specialistResult.text,
+                  resolutionSummary: needsApproval ? null : specialistResult.text,
+                  resolutionType: needsApproval ? null : 'agent',
+                  resolvedAt: needsApproval ? null : new Date(),
                 });
                 await taskService.addTaskMessage(dashboardTask.id, 'agent', specialistResult.text, deviceType);
               }

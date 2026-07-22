@@ -45,6 +45,7 @@ export const api = {
   getTask: (id) => request(`/tasks/${id}`),
   reprocessTask: (id, deviceId) => request(`/tasks/${id}/reprocess`, { method: 'POST', body: JSON.stringify({ deviceId }) }),
   completeTask: (id, note) => request(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({ note }) }),
+  updateTaskWorkflow: (id, data) => request(`/tasks/${id}/workflow`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Settings
   getSettings: () => request('/settings'),

@@ -59,22 +59,25 @@ export async function getAllTasks({ status, source, priority, limit = 50 }) {
 }
 
 export async function getTaskStats() {
-  const [total, pending, diagnosing, awaiting, completed, failed] = await Promise.all([
+  const [total, pending, inProgress, diagnosing, awaiting, resolved, validated, closed, failed] = await Promise.all([
     prisma.task.count(),
     prisma.task.count({ where: { status: 'pending' } }),
+    prisma.task.count({ where: { status: 'in_progress' } }),
     prisma.task.count({ where: { status: 'diagnosing' } }),
     prisma.task.count({ where: { status: 'awaiting_approval' } }),
-    prisma.task.count({ where: { status: 'completed' } }),
+    prisma.task.count({ where: { status: { in: ['resolved', 'completed'] } } }),
+    prisma.task.count({ where: { status: 'validated' } }),
+    prisma.task.count({ where: { status: 'closed' } }),
     prisma.task.count({ where: { status: 'failed' } }),
   ]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const completedToday = await prisma.task.count({
-    where: { status: 'completed', updatedAt: { gte: today } },
+    where: { status: { in: ['resolved', 'completed', 'validated', 'closed'] }, resolvedAt: { gte: today } },
   });
 
-  return { total, pending, diagnosing, awaiting, completed, failed, completedToday };
+  return { total, pending, inProgress, diagnosing, awaiting, completed: resolved, resolved, validated, closed, failed, completedToday };
 }
 
 export async function addTaskMessage(taskId, role, content, agentName = null) {
