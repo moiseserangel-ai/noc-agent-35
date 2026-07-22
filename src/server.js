@@ -23,6 +23,7 @@ import auditRoutes from './routes/audit.routes.js';
 import reportRoutes from './routes/report.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
+import { inferWorkType } from './services/work-type.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -234,6 +235,7 @@ io.on('connection', (socket) => {
                   originalMessage: originalRequest,
                   deviceId,
                   priority: classification.priority || 'medium',
+                  workType: inferWorkType(originalRequest, 'dashboard', classification.requestType),
                 });
                 const taskNum = dashboardTask.taskNumber;
                 await taskService.updateTask(dashboardTask.id, { status: 'diagnosing', agentUsed: deviceType });

@@ -1,8 +1,9 @@
 import prisma from '../database/client.js';
 import logger from '../utils/logger.js';
 import { buildSlaFields } from './sla.service.js';
+import { inferWorkType } from './work-type.service.js';
 
-export async function createTask({ source, originalMessage, deviceId, priority, incident = {} }) {
+export async function createTask({ source, originalMessage, deviceId, priority, workType, incident = {} }) {
   const lastTask = await prisma.task.findFirst({ orderBy: { taskNumber: 'desc' } });
   const taskNumber = (lastTask?.taskNumber || 0) + 1;
 
@@ -12,6 +13,7 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
     data: {
       taskNumber,
       source,
+      workType: inferWorkType(originalMessage, source, workType),
       originalMessage,
       deviceId: deviceId || null,
       priority: priority || 'medium',

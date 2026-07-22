@@ -27,8 +27,14 @@ Quando identificar um dispositivo, responda EXATAMENTE neste formato JSON:
   "deviceType": "mikrotik" ou "linux",
   "deviceName": "<nome-do-dispositivo>",
   "originalRequest": "<o que foi pedido>",
+  "requestType": "incident" ou "consultation" ou "configuration",
   "priority": "low|medium|high|critical"
 }
+
+Classifique o campo requestType assim:
+- incident: falha, indisponibilidade, lentidão, erro ou investigação de problema
+- consultation: pedido apenas de leitura, informação, listagem ou verificação
+- configuration: criação, alteração, remoção, ativação ou aplicação de configuração
 
 ## Para aprovação de task:
 Se a mensagem contém referência a #TASK-XXX com SIM/NÃO:

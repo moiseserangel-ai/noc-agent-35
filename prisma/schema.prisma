@@ -79,6 +79,7 @@ model Task {
   deviceId         String?
   device           Device?       @relation(fields: [deviceId], references: [id])
   source           String        // "whatsapp" | "zabbix" | "dashboard"
+  workType         String        @default("incident") // incident|consultation|configuration
   status           String        @default("pending") // pending|diagnosing|awaiting_approval|executing|completed|failed|cancelled
   originalMessage  String
   diagnosis        String?

@@ -11,6 +11,7 @@ import prisma from '../database/client.js';
 import { getIncidentAutomationMode, shouldAutoDiagnoseIncident, describeIncidentPolicy } from '../services/incident-policy.service.js';
 import { buildSlaFields } from '../services/sla.service.js';
 import { notifyTask } from '../services/notification.service.js';
+import { inferWorkType } from '../services/work-type.service.js';
 
 const router = Router();
 
@@ -129,6 +130,7 @@ router.post('/evolution', async (req, res) => {
     const classification = await supportAgent.classify(parsed.text, 'whatsapp');
 
     if (classification.action === 'route_to_specialist') {
+      await taskService.updateTask(task.id, { workType: inferWorkType(parsed.text, 'whatsapp', classification.requestType) });
       const response = await processAgentRequest(classification, task);
       await evolutionService.sendWhatsAppMessage(parsed.from, response);
     } else {
