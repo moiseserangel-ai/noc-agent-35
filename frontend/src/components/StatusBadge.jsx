@@ -35,9 +35,9 @@ export function PriorityBadge({ priority }) {
 }
 
 export function TypeBadge({ type }) {
+  const types = { mikrotik: ['MikroTik','badge-cyan'], linux: ['Linux','badge-success'], huawei_vrp: ['Huawei VRP','badge-warning'] };
+  const [label, className] = types[type] || [type, 'badge-muted'];
   return (
-    <span className={`badge ${type === 'mikrotik' ? 'badge-cyan' : 'badge-success'}`}>
-      {type === 'mikrotik' ? 'MikroTik' : 'Linux'}
-    </span>
+    <span className={`badge ${className}`}>{label}</span>
   );
 }

@@ -29,8 +29,7 @@ import { inferWorkType } from './services/work-type.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
-import MikrotikAgent from './agents/mikrotik-agent.js';
-import LinuxAgent from './agents/linux-agent.js';
+import { createSpecialistAgents, getDeviceTypeLabel } from './vendors/registry.js';
 import * as taskService from './services/task.service.js';
 import { runSlaMonitor } from './services/sla.service.js';
 import { notifyTask, runCriticalReminders } from './services/notification.service.js';
@@ -83,8 +82,7 @@ app.get('/api/health', (req, res) => {
 // Socket.IO for real-time dashboard chat
 const agents = {
   support: new SupportAgent(),
-  mikrotik: new MikrotikAgent(),
-  linux: new LinuxAgent(),
+  ...createSpecialistAgents(),
 };
 
 async function getSessionHistory(sessionId, currentMessageId) {
@@ -250,7 +248,7 @@ io.on('connection', (socket) => {
                 const prompt = `Você recebeu uma solicitação do NOC.
 
 **Dispositivo:** ${deviceName} (ID: ${deviceId})
-**Tipo:** ${deviceType === 'mikrotik' ? 'MikroTik RouterOS' : 'Linux'}
+**Tipo:** ${getDeviceTypeLabel(deviceType)}
 **Task:** #TASK-${taskNum}
 **Solicitação:** ${originalRequest}
 

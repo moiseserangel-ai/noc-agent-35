@@ -5,10 +5,12 @@ import { useToast } from '../App.jsx';
 import { TypeBadge } from '../components/StatusBadge.jsx';
 import Modal from '../components/Modal.jsx';
 
-const EMPTY_DEVICE = { name: '', hostname: '', port: 22, type: 'mikrotik', username: '', password: '', group: '', zabbixHostId: '', notes: '' };
+const EMPTY_DEVICE = { name: '', hostname: '', port: 22, type: 'mikrotik', username: '', password: '', group: '', zabbixHostId: '', notes: '', manufacturer: 'MikroTik', platform: 'RouterOS', model: '', osVersion: '', capabilities: '' };
+const TYPE_DEFAULTS = { mikrotik: { manufacturer:'MikroTik',platform:'RouterOS' }, linux:{manufacturer:'',platform:'Linux'}, huawei_vrp:{manufacturer:'Huawei',platform:'VRP'} };
 
 export default function Devices({ canManage = false }) {
   const [devices, setDevices] = useState([]);
+  const [deviceTypes, setDeviceTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editDevice, setEditDevice] = useState(null);
@@ -21,7 +23,7 @@ export default function Devices({ canManage = false }) {
     api.getDevices().then(r => setDevices(r.data)).catch(() => {}).finally(() => setLoading(false));
   };
 
-  useEffect(load, []);
+  useEffect(() => { load(); api.getDeviceTypes().then(r=>setDeviceTypes(r.data)).catch(()=>{}); }, []);
 
   const openNew = () => { setEditDevice(null); setForm({ ...EMPTY_DEVICE }); setModalOpen(true); };
   const openEdit = (d) => { setEditDevice(d); setForm({ ...d, password: '' }); setModalOpen(true); };
@@ -152,11 +154,19 @@ export default function Devices({ canManage = false }) {
         </div>
         <div className="form-group">
           <label className="form-label">Tipo *</label>
-          <select className="form-select" value={form.type} onChange={e => updateField('type', e.target.value)}>
-            <option value="mikrotik">MikroTik</option>
-            <option value="linux">Linux</option>
+          <select className="form-select" value={form.type} onChange={e => { const type=e.target.value; setForm(f=>({...f,type,...TYPE_DEFAULTS[type]})); }}>
+            {(deviceTypes.length ? deviceTypes : [{type:'mikrotik',label:'MikroTik RouterOS'},{type:'linux',label:'Linux'},{type:'huawei_vrp',label:'Huawei VRP / NetEngine'}]).map(item=><option key={item.type} value={item.type}>{item.label}</option>)}
           </select>
         </div>
+        <div className="form-row">
+          <div className="form-group"><label className="form-label">Fabricante</label><input className="form-input" value={form.manufacturer || ''} onChange={e=>updateField('manufacturer',e.target.value)} placeholder="Huawei" /></div>
+          <div className="form-group"><label className="form-label">Plataforma</label><input className="form-input" value={form.platform || ''} onChange={e=>updateField('platform',e.target.value)} placeholder="VRP" /></div>
+        </div>
+        <div className="form-row">
+          <div className="form-group"><label className="form-label">Modelo</label><input className="form-input" value={form.model || ''} onChange={e=>updateField('model',e.target.value)} placeholder="NE8000 M8" /></div>
+          <div className="form-group"><label className="form-label">Versão do sistema</label><input className="form-input" value={form.osVersion || ''} onChange={e=>updateField('osVersion',e.target.value)} placeholder="V800R023..." /></div>
+        </div>
+        <div className="form-group"><label className="form-label">Capacidades</label><input className="form-input" value={form.capabilities || ''} onChange={e=>updateField('capabilities',e.target.value)} placeholder="bgp,isis,mpls,l2vpn,evpn" /><small style={{color:'var(--text-muted)'}}>Separe as tecnologias por vírgula.</small></div>
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">Usuário SSH *</label>

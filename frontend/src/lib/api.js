@@ -56,6 +56,7 @@ export const api = {
 
   // Devices
   getDevices: () => request('/devices'),
+  getDeviceTypes: () => request('/devices/catalog/types'),
   getDevice: (id) => request(`/devices/${id}`),
   createDevice: (data) => request('/devices', { method: 'POST', body: JSON.stringify(data) }),
   updateDevice: (id, data) => request(`/devices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

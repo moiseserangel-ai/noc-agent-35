@@ -119,6 +119,9 @@ export default function Docs() {
               <li>
                 <strong>Linux Agent (Especialista):</strong> Possui a Tool <code>ssh_linux_exec</code>. Da mesma forma, analisa consumo (CPU, Disco) e gerencia serviços de servidores Linux livremente.
               </li>
+              <li>
+                <strong>Huawei VRP Agent (Especialista):</strong> Voltado a NetEngine e outros equipamentos VRP. Usa SSH interativo, consultas <code>display</code> e política própria de aprovação, rollback e bloqueio destrutivo.
+              </li>
             </ul>
 
             <h4>3. Workflows (Configurações em Lote)</h4>

@@ -21,6 +21,7 @@ export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [agentType, setAgentType] = useState('support');
+  const [specialists, setSpecialists] = useState([]);
   const [streaming, setStreaming] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tools, setTools] = useState([]);
@@ -28,6 +29,7 @@ export default function Chat() {
 
   useEffect(() => {
     api.getChatSessions().then(r => setSessions(r.data)).catch(() => {});
+    api.getDeviceTypes().then(r => setSpecialists(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -143,8 +145,7 @@ export default function Chat() {
             <select className="form-select" style={{ width: 160, padding: '6px 10px', fontSize: '0.8rem' }}
               value={agentType} onChange={e => setAgentType(e.target.value)}>
               <option value="support">🧠 Suporte</option>
-              <option value="mikrotik">🔧 MikroTik</option>
-              <option value="linux">🐧 Linux</option>
+              {specialists.map(item=><option key={item.type} value={item.type}>🔧 {item.label}</option>)}
             </select>
           </div>
 

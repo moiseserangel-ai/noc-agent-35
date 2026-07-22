@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as deviceService from '../services/device.service.js';
+import { isSupportedDeviceType, publicVendorPlugins, supportedDeviceTypes } from '../vendors/registry.js';
 
 const router = Router();
 
@@ -9,6 +10,8 @@ router.get('/', async (req, res, next) => {
     res.json({ success: true, data: devices });
   } catch (err) { next(err); }
 });
+
+router.get('/catalog/types', (req, res) => res.json({ success: true, data: publicVendorPlugins() }));
 
 router.get('/:id', async (req, res, next) => {
   try {
@@ -20,16 +23,18 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { name, hostname, port, type, username, password, group, zabbixHostId, notes } = req.body;
+    const { name, hostname, port, type, username, password, group, zabbixHostId, notes, manufacturer, platform, model, osVersion, capabilities } = req.body;
     if (!name || !hostname || !type || !username || !password) {
       return res.status(400).json({ success: false, error: 'Missing required fields: name, hostname, type, username, password' });
     }
-    if (!['mikrotik', 'linux'].includes(type)) {
-      return res.status(400).json({ success: false, error: 'Type must be "mikrotik" or "linux"' });
+    if (!isSupportedDeviceType(type)) {
+      return res.status(400).json({ success: false, error: `Tipo deve ser um destes: ${supportedDeviceTypes.join(', ')}` });
     }
     const device = await deviceService.createDevice({
       name, hostname, port: port || 22, type, username, password,
       group: group || null, zabbixHostId: zabbixHostId || null, notes: notes || null,
+      manufacturer: manufacturer || null, platform: platform || null, model: model || null,
+      osVersion: osVersion || null, capabilities: capabilities || null,
     });
     res.status(201).json({ success: true, data: device });
   } catch (err) { next(err); }
@@ -37,6 +42,7 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
+    if (req.body.type && !isSupportedDeviceType(req.body.type)) return res.status(400).json({ success: false, error: `Tipo deve ser um destes: ${supportedDeviceTypes.join(', ')}` });
     const device = await deviceService.updateDevice(req.params.id, req.body);
     res.json({ success: true, data: device });
   } catch (err) { next(err); }

@@ -2,8 +2,7 @@ import { Router } from 'express';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import SupportAgent from '../agents/support-agent.js';
-import MikrotikAgent from '../agents/mikrotik-agent.js';
-import LinuxAgent from '../agents/linux-agent.js';
+import { createSpecialistAgents } from '../vendors/registry.js';
 import * as taskService from '../services/task.service.js';
 import * as evolutionService from '../services/evolution.service.js';
 import { parseZabbixAlert, formatAlertMessage } from '../services/zabbix.service.js';
@@ -16,8 +15,7 @@ import { inferWorkType } from '../services/work-type.service.js';
 const router = Router();
 
 const supportAgent = new SupportAgent();
-const mikrotikAgent = new MikrotikAgent();
-const linuxAgent = new LinuxAgent();
+const specialistAgents = createSpecialistAgents();
 
 async function processAgentRequest(classification, task) {
   const { deviceId, deviceType, deviceName, originalRequest } = classification;
@@ -25,7 +23,8 @@ async function processAgentRequest(classification, task) {
   await taskService.updateTask(task.id, { status: 'diagnosing', deviceId, agentUsed: deviceType });
   await taskService.addTaskMessage(task.id, 'system', `Encaminhado para Agent ${deviceType.toUpperCase()}`);
 
-  const agent = deviceType === 'mikrotik' ? mikrotikAgent : linuxAgent;
+  const agent = specialistAgents[deviceType];
+  if (!agent) throw new Error(`Especialista não disponível para ${deviceType}`);
 
   try {
     const result = await agent.diagnose(deviceId, deviceName, originalRequest, task.taskNumber);
@@ -95,7 +94,8 @@ router.post('/evolution', async (req, res) => {
         );
         await taskService.addTaskMessage(task.id, 'user', 'Solução APROVADA pelo admin');
 
-        const agent = task.agentUsed === 'mikrotik' ? mikrotikAgent : linuxAgent;
+        const agent = specialistAgents[task.agentUsed];
+        if (!agent) throw new Error(`Especialista não disponível para ${task.agentUsed}`);
         const result = await agent.executeSolution(
           task.deviceId, task.device?.name || 'Unknown', task.proposedSolution, taskNumber
         );

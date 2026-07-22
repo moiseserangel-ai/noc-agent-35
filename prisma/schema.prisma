@@ -83,7 +83,12 @@ model Device {
   name         String
   hostname     String
   port         Int      @default(22)
-  type         String   // "mikrotik" | "linux"
+  type         String   // mikrotik|linux|huawei_vrp (extensível via plugins)
+  manufacturer String?
+  platform     String?
+  model        String?
+  osVersion    String?
+  capabilities String?  // Lista separada por vírgulas: bgp,mpls,isis...
   username     String
   password     String   // Encrypted (AES-256-GCM)
   group        String?

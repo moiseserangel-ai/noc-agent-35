@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import * as taskService from '../services/task.service.js';
 import prisma from '../database/client.js';
-import MikrotikAgent from '../agents/mikrotik-agent.js';
-import LinuxAgent from '../agents/linux-agent.js';
+import { createSpecialistAgents } from '../vendors/registry.js';
 import { buildSlaFields } from '../services/sla.service.js';
 import { notifyTask } from '../services/notification.service.js';
 
 const router = Router();
+const specialistAgents = createSpecialistAgents();
 
 const TRANSITIONS = {
   acknowledge: { from: ['pending', 'failed'], to: 'in_progress' },
@@ -103,7 +103,7 @@ router.post('/:id/reprocess', async (req, res, next) => {
     const device = await prisma.device.findUnique({ where: { id: deviceId } });
     if (!device || !device.isActive) return res.status(404).json({ success: false, error: 'Equipamento não encontrado ou inativo' });
 
-    const agent = device.type === 'mikrotik' ? new MikrotikAgent() : device.type === 'linux' ? new LinuxAgent() : null;
+    const agent = specialistAgents[device.type] || null;
     if (!agent) return res.status(400).json({ success: false, error: 'Tipo de equipamento sem agente disponível' });
 
     await taskService.updateTask(task.id, { status: 'diagnosing', deviceId, agentUsed: device.type, adminResponse: null });
