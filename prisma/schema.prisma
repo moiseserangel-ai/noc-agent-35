@@ -38,9 +38,21 @@ model Task {
   executionResult  String?
   agentUsed        String?       // "support" | "mikrotik" | "linux"
   priority         String        @default("medium") // low|medium|high|critical
+  zabbixEventId    String?       @unique
+  zabbixRecoveryId String?
+  zabbixStatus     String?
+  incidentKey      String?
+  incidentOpenedAt DateTime?
+  lastSeenAt       DateTime?
+  resolvedAt       DateTime?
+  durationSeconds  Int?
+  occurrenceCount  Int           @default(1)
+  duplicateCount   Int           @default(0)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   messages         TaskMessage[]
+
+  @@index([incidentKey, status])
 }
 
 model TaskMessage {

@@ -7,6 +7,7 @@ import LinuxAgent from '../agents/linux-agent.js';
 import * as taskService from '../services/task.service.js';
 import * as evolutionService from '../services/evolution.service.js';
 import { parseZabbixAlert, formatAlertMessage } from '../services/zabbix.service.js';
+import prisma from '../database/client.js';
 
 const router = Router();
 
@@ -24,6 +25,12 @@ async function processAgentRequest(classification, task) {
 
   try {
     const result = await agent.diagnose(deviceId, deviceName, originalRequest, task.taskNumber);
+
+    const current = await taskService.getTaskById(task.id);
+    if (current?.zabbixStatus === 'RESOLVED') {
+      await taskService.addTaskMessage(task.id, 'agent', `${result.text}\n\nDiagnóstico finalizado após a recuperação; a Task permaneceu concluída.`, deviceType);
+      return result.text;
+    }
 
     await taskService.updateTask(task.id, {
       status: 'awaiting_approval',
@@ -135,7 +142,6 @@ router.post('/zabbix', async (req, res) => {
   // Read expected token from database
   let expectedToken = config.zabbix.webhookToken;
   try {
-    const prisma = (await import('../database/client.js')).default;
     const { decrypt } = await import('../utils/crypto.js');
     const setting = await prisma.settings.findUnique({ where: { key: 'zabbix_webhook_token' } });
     if (setting && setting.value) {
@@ -157,13 +163,89 @@ router.post('/zabbix', async (req, res) => {
 
     logger.info(`Zabbix alert: ${alert.host} - ${alert.trigger}`);
 
-    const task = await taskService.createTask({
-      source: 'zabbix',
-      originalMessage: formatAlertMessage(alert),
-      priority: alert.priority,
+    if (!alert.eventId) {
+      logger.warn('Zabbix webhook ignored: eventId ausente ou macro não resolvida');
+      return;
+    }
+
+    const now = new Date();
+    const eventAt = alert.eventAt || now;
+
+    if (alert.state === 'resolved') {
+      const existing = await prisma.task.findUnique({ where: { zabbixEventId: alert.eventId } });
+      if (!existing) {
+        logger.warn(`Recovery órfã do Zabbix para EVENT.ID=${alert.eventId}`);
+        return;
+      }
+      const resolvedAt = alert.recoveryAt || now;
+      const openedAt = existing.incidentOpenedAt || existing.createdAt;
+      const durationSeconds = Math.max(0, Math.floor((resolvedAt.getTime() - openedAt.getTime()) / 1000));
+      await taskService.updateTask(existing.id, {
+        status: 'completed',
+        zabbixStatus: 'RESOLVED',
+        zabbixRecoveryId: alert.recoveryEventId,
+        resolvedAt,
+        lastSeenAt: resolvedAt,
+        durationSeconds,
+        executionResult: `Resolvido automaticamente pelo Zabbix em ${resolvedAt.toLocaleString('pt-BR', { timeZone: 'America/Porto_Velho' })}.`,
+      });
+      await taskService.addTaskMessage(existing.id, 'system', `Evento Zabbix recuperado${alert.recoveryEventId ? ` (#${alert.recoveryEventId})` : ''}. Duração: ${durationSeconds}s.`);
+      logger.info(`Task #${existing.taskNumber} resolved by Zabbix EVENT.ID=${alert.eventId}`);
+      return;
+    }
+
+    const exactEvent = await prisma.task.findUnique({ where: { zabbixEventId: alert.eventId } });
+    if (exactEvent) {
+      await taskService.updateTask(exactEvent.id, {
+        lastSeenAt: eventAt,
+        duplicateCount: { increment: 1 },
+        zabbixStatus: 'PROBLEM',
+      });
+      await taskService.addTaskMessage(exactEvent.id, 'system', `Notificação duplicada do EVENT.ID=${alert.eventId} ignorada.`);
+      logger.info(`Duplicate Zabbix EVENT.ID=${alert.eventId} linked to Task #${exactEvent.taskNumber}`);
+      return;
+    }
+
+    const related = await prisma.task.findFirst({
+      where: { source: 'zabbix', incidentKey: alert.incidentKey },
+      orderBy: { updatedAt: 'desc' },
+      include: { device: true },
     });
 
-    await taskService.addTaskMessage(task.id, 'system', `Alerta Zabbix: ${alert.trigger}`);
+    let task;
+    if (related) {
+      task = await taskService.updateTask(related.id, {
+        status: 'pending',
+        originalMessage: formatAlertMessage(alert),
+        priority: alert.priority,
+        zabbixEventId: alert.eventId,
+        zabbixRecoveryId: null,
+        zabbixStatus: 'PROBLEM',
+        incidentOpenedAt: eventAt,
+        lastSeenAt: eventAt,
+        resolvedAt: null,
+        durationSeconds: null,
+        occurrenceCount: { increment: 1 },
+        adminResponse: null,
+        executionResult: null,
+      });
+      await taskService.addTaskMessage(task.id, 'system', `Incidente reaberto pelo Zabbix com EVENT.ID=${alert.eventId}.`);
+      logger.info(`Task #${task.taskNumber} reopened for Zabbix EVENT.ID=${alert.eventId}`);
+    } else {
+      task = await taskService.createTask({
+        source: 'zabbix',
+        originalMessage: formatAlertMessage(alert),
+        priority: alert.priority,
+        incident: {
+          zabbixEventId: alert.eventId,
+          zabbixStatus: 'PROBLEM',
+          incidentKey: alert.incidentKey,
+          incidentOpenedAt: eventAt,
+          lastSeenAt: eventAt,
+        },
+      });
+      await taskService.addTaskMessage(task.id, 'system', `Alerta Zabbix: ${alert.trigger}`);
+    }
 
     // Try to find the device by hostname or zabbixHostId
     const classificationMsg = `Alerta do Zabbix:
@@ -175,13 +257,27 @@ ${alert.itemName ? `Item: ${alert.itemName} = ${alert.itemValue}` : ''}
 
 Identifique o dispositivo e encaminhe para diagnóstico.`;
 
-    const classification = await supportAgent.classify(classificationMsg, 'zabbix');
+    const devices = await prisma.device.findMany({ where: { isActive: true } });
+    const directDevice = devices.find(device =>
+      (alert.hostId && device.zabbixHostId === alert.hostId) ||
+      device.name.toLowerCase() === alert.host.toLowerCase() ||
+      device.hostname.toLowerCase() === alert.host.toLowerCase()
+    );
+    const classification = directDevice ? {
+      action: 'route_to_specialist',
+      deviceId: directDevice.id,
+      deviceType: directDevice.type,
+      deviceName: directDevice.name,
+      originalRequest: classificationMsg,
+    } : await supportAgent.classify(classificationMsg, 'zabbix');
 
     if (classification.action === 'route_to_specialist') {
       const response = await processAgentRequest(classification, task);
       await evolutionService.sendToAdmin(response);
     } else {
       const msg = `⚠️ Alerta Zabbix recebido mas dispositivo não identificado:\n${formatAlertMessage(alert)}`;
+      await taskService.updateTask(task.id, { status: 'failed', diagnosis: msg });
+      await taskService.addTaskMessage(task.id, 'system', msg);
       await evolutionService.sendToAdmin(msg);
     }
   } catch (err) {

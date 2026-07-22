@@ -239,6 +239,10 @@ export default function Settings() {
                 <li><b>severity:</b> {'{EVENT.SEVERITY}'}</li>
                 <li><b>status:</b> {'{EVENT.STATUS}'}</li>
                 <li><b>eventId:</b> {'{EVENT.ID}'}</li>
+                <li><b>eventValue:</b> {'{EVENT.VALUE}'}</li>
+                <li><b>eventTimestamp:</b> {'{EVENT.TIMESTAMP}'}</li>
+                <li><b>recoveryEventId:</b> {'{EVENT.RECOVERY.ID}'}</li>
+                <li><b>recoveryTimestamp:</b> {'{EVENT.RECOVERY.TIMESTAMP}'}</li>
                 <li><b>itemName:</b> {'{ITEM.NAME}'}</li>
                 <li><b>itemValue:</b> {'{ITEM.VALUE}'}</li>
               </ul>
@@ -261,6 +265,10 @@ export default function Settings() {
         severity: params.severity,
         status: params.status,
         eventId: params.eventId,
+        eventValue: params.eventValue,
+        eventTimestamp: params.eventTimestamp,
+        recoveryEventId: params.recoveryEventId,
+        recoveryTimestamp: params.recoveryTimestamp,
         itemName: params.itemName,
         itemValue: params.itemValue
     };

@@ -1,7 +1,7 @@
 import prisma from '../database/client.js';
 import logger from '../utils/logger.js';
 
-export async function createTask({ source, originalMessage, deviceId, priority }) {
+export async function createTask({ source, originalMessage, deviceId, priority, incident = {} }) {
   const lastTask = await prisma.task.findFirst({ orderBy: { taskNumber: 'desc' } });
   const taskNumber = (lastTask?.taskNumber || 0) + 1;
 
@@ -12,6 +12,7 @@ export async function createTask({ source, originalMessage, deviceId, priority }
       originalMessage,
       deviceId: deviceId || null,
       priority: priority || 'medium',
+      ...incident,
     },
     include: { device: true },
   });

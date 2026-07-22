@@ -4,6 +4,13 @@ import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
 import { useToast } from '../App.jsx';
 
+const formatDuration = seconds => {
+  if (seconds === null || seconds === undefined) return '—';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}min ${seconds % 60}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}min`;
+};
+
 export default function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +97,14 @@ export default function Tasks() {
             </div>
             {expanded === t.id && (
               <div style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border-primary)' }}>
+                {t.source === 'zabbix' && <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>EVENT.ID</div><strong>{t.zabbixEventId || '—'}</strong></div>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>ESTADO ZABBIX</div><strong>{t.zabbixStatus || '—'}</strong></div>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>OCORRÊNCIAS</div><strong>{t.occurrenceCount || 1}</strong></div>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>DUPLICADAS IGNORADAS</div><strong>{t.duplicateCount || 0}</strong></div>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>DURAÇÃO</div><strong>{formatDuration(t.durationSeconds)}</strong></div>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>RESOLVIDO EM</div><strong>{t.resolvedAt ? new Date(t.resolvedAt).toLocaleString('pt-BR') : '—'}</strong></div>
+                </div>}
                 <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>MENSAGEM</div>
                   <pre style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap', background: 'var(--bg-primary)', padding: 12, borderRadius: 8 }}>{t.originalMessage}</pre>
