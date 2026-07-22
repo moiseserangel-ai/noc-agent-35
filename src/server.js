@@ -21,6 +21,7 @@ import vpnRoutes from './routes/vpn.routes.js';
 import userRoutes from './routes/user.routes.js';
 import auditRoutes from './routes/audit.routes.js';
 import reportRoutes from './routes/report.routes.js';
+import backupRoutes from './routes/backup.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -32,6 +33,7 @@ import LinuxAgent from './agents/linux-agent.js';
 import * as taskService from './services/task.service.js';
 import { runSlaMonitor } from './services/sla.service.js';
 import { notifyTask, runCriticalReminders } from './services/notification.service.js';
+import { runAutomaticBackup } from './services/backup.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -64,6 +66,7 @@ app.use('/api/vpn', authMiddleware, requireRoles('admin'), auditMutation, vpnRou
 app.use('/api/users', authMiddleware, requireRoles('admin'), auditMutation, userRoutes);
 app.use('/api/audit', authMiddleware, requireRoles('admin'), auditRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
+app.use('/api/backups', authMiddleware, requireRoles('admin'), backupRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -350,10 +353,16 @@ const criticalReminderMonitor = setInterval(() => {
 }, 60_000);
 criticalReminderMonitor.unref();
 
+const backupMonitor = setInterval(() => {
+  runAutomaticBackup().catch(err => logger.error(`Automatic backup error: ${err.message}`));
+}, 60_000);
+backupMonitor.unref();
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   clearInterval(slaMonitor);
   clearInterval(criticalReminderMonitor);
+  clearInterval(backupMonitor);
   logger.info('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();
@@ -363,6 +372,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   clearInterval(slaMonitor);
   clearInterval(criticalReminderMonitor);
+  clearInterval(backupMonitor);
   logger.info('SIGINT received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();

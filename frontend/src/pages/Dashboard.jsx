@@ -1,20 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Server, CheckCircle, Clock, AlertTriangle, Activity } from 'lucide-react';
+import { Server, CheckCircle, Clock, AlertTriangle, Activity, DatabaseBackup } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
 
-export default function Dashboard() {
+export default function Dashboard({ showBackup = false }) {
   const [stats, setStats] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [backupStatus, setBackupStatus] = useState(null);
 
   useEffect(() => {
     let active = true;
     const load = (showLoading = false) => {
     if (showLoading) setLoading(true);
-    Promise.all([api.getTaskStats(), api.getTasks({ limit: 10 })])
-      .then(([statsRes, tasksRes]) => {
-        if (active) { setStats(statsRes.data); setTasks(tasksRes.data); }
+    Promise.all([api.getTaskStats(), api.getTasks({ limit: 10 }), showBackup ? api.getBackupStatus().catch(()=>null) : Promise.resolve(null)])
+      .then(([statsRes, tasksRes, backupRes]) => {
+        if (active) { setStats(statsRes.data); setTasks(tasksRes.data); if(backupRes) setBackupStatus(backupRes.data); }
       })
       .catch(() => {})
       .finally(() => { if (active) setLoading(false); });
@@ -45,6 +46,7 @@ export default function Dashboard() {
             <div className="stat-label">Total de Tasks</div>
           </div>
         </div>
+        {showBackup && <div className="stat-card"><div className="stat-icon blue"><DatabaseBackup size={24}/></div><div><div className="stat-value" style={{fontSize:'1rem'}}>{backupStatus?.lastBackup ? new Date(backupStatus.lastBackup.createdAt).toLocaleDateString('pt-BR') : 'Pendente'}</div><div className="stat-label">Último backup</div></div></div>}
         <div className="stat-card">
           <div className="stat-icon amber"><AlertTriangle size={24} /></div>
           <div><div className="stat-value">{stats?.slaBreached || 0}</div><div className="stat-label">SLA Violado</div></div>

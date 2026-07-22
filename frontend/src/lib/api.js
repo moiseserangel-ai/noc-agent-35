@@ -36,6 +36,16 @@ export const api = {
   getAuditLogs: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/audit${qs ? `?${qs}` : ''}`); },
   getAuditOptions: () => request('/audit/options'),
   getIncidentReport: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/reports/incidents${qs ? `?${qs}` : ''}`); },
+  getBackups: () => request('/backups'),
+  getBackupStatus: () => request('/backups/status'),
+  createBackup: () => request('/backups', { method: 'POST' }),
+  updateBackupConfig: (data) => request('/backups/config', { method: 'PUT', body: JSON.stringify(data) }),
+  restoreBackup: (filename, password) => request(`/backups/${encodeURIComponent(filename)}/restore`, { method: 'POST', body: JSON.stringify({ password }) }),
+  downloadBackup: async filename => {
+    const res = await fetch(`${BASE}/backups/${encodeURIComponent(filename)}/download`, { headers: { Authorization: `Bearer ${getToken()}` } });
+    if (!res.ok) { let data={}; try{data=await res.json();}catch{} throw new Error(data.error || 'Falha ao baixar backup'); }
+    return res.blob();
+  },
 
   // Devices
   getDevices: () => request('/devices'),

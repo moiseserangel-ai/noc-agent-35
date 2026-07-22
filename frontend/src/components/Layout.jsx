@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { path: '/users', label: 'Usuários', icon: Users, roles: ['admin'] },
   { path: '/audit', label: 'Auditoria', icon: ScrollText, roles: ['admin'] },
   { path: '/reports', label: 'Relatórios', icon: BarChart3 },
+  { path: '/backups', label: 'Backup e restauração', icon: DatabaseBackup, roles: ['admin'] },
 ];
 
 export default function Layout({ onLogout, user }) {
