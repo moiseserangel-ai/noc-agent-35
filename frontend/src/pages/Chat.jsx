@@ -105,11 +105,11 @@ export default function Chat() {
   };
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 80px)' }}>
+    <div className="chat-workspace">
       {/* Sidebar sessions */}
-      <div style={{ width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="chat-sessions">
         <button className="btn btn-primary" style={{ width: '100%' }} onClick={newSession}><Plus size={16} /> Nova Conversa</button>
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div className="chat-session-list">
           {sessions.map(s => (
             <div key={s.id}
               className={`sidebar-link ${activeSession === s.id ? 'active' : ''}`}
@@ -127,7 +127,7 @@ export default function Chat() {
 
       {/* Chat area */}
       {!activeSession ? (
-        <div className="card" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="card chat-empty">
           <div className="empty-state">
             <MessageSquare size={48} />
             <p>Selecione ou crie uma conversa para testar os agentes IA.</p>

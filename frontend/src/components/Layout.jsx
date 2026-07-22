@@ -22,6 +22,9 @@ const NAV_ITEMS = [
 export default function Layout({ onLogout, user }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const visibleItems = NAV_ITEMS.filter(item => !item.roles || item.roles.includes(user?.role));
+  const currentItem = visibleItems.find(item => item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path));
+  const initials = String(user?.name || user?.username || 'U').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -31,10 +34,6 @@ export default function Layout({ onLogout, user }) {
 
   return (
     <div className="app-layout">
-      <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>
-        <Menu size={20} />
-      </button>
-
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -53,7 +52,7 @@ export default function Layout({ onLogout, user }) {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV_ITEMS.filter(item => !item.roles || item.roles.includes(user?.role)).map(item => (
+          {visibleItems.map(item => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -79,9 +78,15 @@ export default function Layout({ onLogout, user }) {
         </div>
       </aside>
 
-      <main className="main-content">
-        <Outlet />
-      </main>
+      <div className="content-shell">
+        <header className="topbar">
+          <button className="mobile-menu-btn" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
+          <div className="topbar-title"><span>Área atual</span><strong>{currentItem?.label || 'NOC Agent'}</strong></div>
+          <div className="topbar-status"><span className="status-pulse" /> Sistema online</div>
+          <div className="topbar-user" title={`${user?.name} · ${user?.role}`}><div className="user-avatar">{initials}</div><div><strong>{user?.name}</strong><span>{user?.role === 'admin' ? 'Administrador' : user?.role === 'operator' ? 'Operador NOC' : 'Visualização'}</span></div></div>
+        </header>
+        <main className="main-content"><div className="page-container"><Outlet /></div></main>
+      </div>
     </div>
   );
 }

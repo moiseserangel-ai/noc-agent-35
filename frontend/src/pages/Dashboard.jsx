@@ -8,6 +8,7 @@ export default function Dashboard({ showBackup = false }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [backupStatus, setBackupStatus] = useState(null);
+  const sourceLabel = source => String(source).startsWith('dashboard:') ? 'dashboard' : source;
 
   useEffect(() => {
     let active = true;
@@ -103,7 +104,7 @@ export default function Dashboard({ showBackup = false }) {
                     <td style={{ color: 'var(--primary)', fontWeight: 600 }}>#{task.taskNumber}</td>
                     <td>
                       <span className={`badge ${task.source === 'zabbix' ? 'badge-warning' : task.source === 'whatsapp' ? 'badge-success' : 'badge-info'}`}>
-                        {task.source}
+                        {sourceLabel(task.source)}
                       </span>
                     </td>
                     <td>{task.device?.name || '—'}</td>

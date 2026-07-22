@@ -17,6 +17,8 @@ const slaState = task => {
   if (task.slaWarningSentAt) return { label: 'SLA em atenção', className: 'badge-warning' };
   return null;
 };
+const sourceLabel = source => String(source).startsWith('dashboard:') ? 'dashboard' : source;
+const workTypeLabel = value => ({ incident: 'Incidente', consultation: 'Consulta', configuration: 'Configuração' }[value] || value);
 
 export default function Tasks({ canOperate = false }) {
   const [tasks, setTasks] = useState([]);
@@ -131,7 +133,8 @@ export default function Tasks({ canOperate = false }) {
               <span style={{ color: 'var(--primary)', fontWeight: 700, minWidth: 60 }}>#{t.taskNumber}</span>
               <StatusBadge status={t.status} /><PriorityBadge priority={t.priority} />
               {slaState(t) && <span className={`badge ${slaState(t).className}`}>{slaState(t).label}</span>}
-              <span className={`badge ${t.source === 'zabbix' ? 'badge-warning' : 'badge-success'}`}>{t.source}</span>
+              <span className={`badge ${t.workType === 'incident' ? 'badge-danger' : t.workType === 'configuration' ? 'badge-warning' : 'badge-info'}`}>{workTypeLabel(t.workType)}</span>
+              <span className={`badge ${t.source === 'zabbix' ? 'badge-warning' : 'badge-success'}`}>{sourceLabel(t.source)}</span>
               <span style={{ color: 'var(--text-secondary)', flex: 1, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {t.device?.name || t.originalMessage?.substring(0, 50)}</span>
               <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{new Date(t.createdAt).toLocaleString('pt-BR')}</span>
@@ -176,7 +179,7 @@ export default function Tasks({ canOperate = false }) {
                   </div>
                 </div>}
                 {canOperate && <div onClick={e => e.stopPropagation()} style={{ marginTop: 16, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: 8, alignItems: 'end' }}>
+                  <div className="workflow-assignment-grid">
                     <div><label className="form-label">Responsável</label><input className="form-input" value={workflowForms[t.id]?.assignedTo || ''} onChange={e => setWorkflowForms(f => ({ ...f, [t.id]: { ...f[t.id], assignedTo: e.target.value } }))} placeholder="Nome do operador" /></div>
                     <div><label className="form-label">Prazo</label><input className="form-input" type="datetime-local" value={workflowForms[t.id]?.dueAt || ''} onChange={e => setWorkflowForms(f => ({ ...f, [t.id]: { ...f[t.id], dueAt: e.target.value } }))} /></div>
                     <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => workflow(t, 'assign', { assignedTo: workflowForms[t.id]?.assignedTo, dueAt: workflowForms[t.id]?.dueAt || null })}><UserCheck size={15} /> Atribuir</button>
