@@ -11,10 +11,17 @@ const formatDuration = seconds => {
   return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}min`;
 };
 
+const slaState = task => {
+  if (task.slaResolveBreachedAt) return { label: 'SLA violado', className: 'badge-danger' };
+  if (task.slaAckBreachedAt) return { label: 'Reconhecimento atrasado', className: 'badge-warning' };
+  if (task.slaWarningSentAt) return { label: 'SLA em atenção', className: 'badge-warning' };
+  return null;
+};
+
 export default function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState({ status: '', source: '', priority: '' });
+  const [filter, setFilter] = useState({ status: '', source: '', priority: '', sla: '' });
   const [expanded, setExpanded] = useState(null);
   const [devices, setDevices] = useState([]);
   const [selectedDevices, setSelectedDevices] = useState({});
@@ -78,6 +85,7 @@ export default function Tasks() {
     if (filter.status) p.status = filter.status;
     if (filter.source) p.source = filter.source;
     if (filter.priority) p.priority = filter.priority;
+    if (filter.sla) p.sla = filter.sla;
     api.getTasks(p).then(r => { if (active) setTasks(r.data); }).catch(() => {}).finally(() => { if (active) setLoading(false); });
     };
     load(true);
@@ -103,6 +111,9 @@ export default function Tasks() {
             <option value="">Todas Fontes</option><option value="whatsapp">WhatsApp</option>
             <option value="zabbix">Zabbix</option><option value="dashboard">Dashboard</option>
           </select>
+          <select className="form-select" style={{ width: 150 }} value={filter.sla} onChange={e => setFilter(f => ({ ...f, sla: e.target.value }))}>
+            <option value="">Todos SLA</option><option value="breached">SLA violado</option>
+          </select>
         </div>
       </div>
       {loading ? <div className="loading-screen" style={{ minHeight: 200 }}><div className="spinner" /></div> :
@@ -113,6 +124,7 @@ export default function Tasks() {
             <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--primary)', fontWeight: 700, minWidth: 60 }}>#{t.taskNumber}</span>
               <StatusBadge status={t.status} /><PriorityBadge priority={t.priority} />
+              {slaState(t) && <span className={`badge ${slaState(t).className}`}>{slaState(t).label}</span>}
               <span className={`badge ${t.source === 'zabbix' ? 'badge-warning' : 'badge-success'}`}>{t.source}</span>
               <span style={{ color: 'var(--text-secondary)', flex: 1, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {t.device?.name || t.originalMessage?.substring(0, 50)}</span>
@@ -127,6 +139,9 @@ export default function Tasks() {
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>RECONHECIDO EM</div><strong>{t.acknowledgedAt ? new Date(t.acknowledgedAt).toLocaleString('pt-BR') : '—'}</strong></div>
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>VALIDADO EM</div><strong>{t.validatedAt ? new Date(t.validatedAt).toLocaleString('pt-BR') : '—'}</strong></div>
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>ENCERRADO EM</div><strong>{t.closedAt ? new Date(t.closedAt).toLocaleString('pt-BR') : '—'}</strong></div>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>SLA RECONHECIMENTO</div><strong>{t.slaAckDueAt ? new Date(t.slaAckDueAt).toLocaleString('pt-BR') : '—'}</strong></div>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>SLA RESOLUÇÃO</div><strong>{t.slaResolveDueAt ? new Date(t.slaResolveDueAt).toLocaleString('pt-BR') : '—'}</strong></div>
+                  <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>ESCALONAMENTO</div><strong>Nível {t.escalationLevel || 0}</strong></div>
                 </div>
                 {t.source === 'zabbix' && <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>EVENT.ID</div><strong>{t.zabbixEventId || '—'}</strong></div>

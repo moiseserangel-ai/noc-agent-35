@@ -24,6 +24,8 @@ import SupportAgent from './agents/support-agent.js';
 import MikrotikAgent from './agents/mikrotik-agent.js';
 import LinuxAgent from './agents/linux-agent.js';
 import * as taskService from './services/task.service.js';
+import { runSlaMonitor } from './services/sla.service.js';
+import * as evolutionService from './services/evolution.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -299,8 +301,17 @@ httpServer.listen(config.port, config.host, () => {
   logger.info(`📊 Zabbix webhook: POST /api/webhooks/zabbix`);
 });
 
+const slaMonitor = setInterval(() => {
+  runSlaMonitor(async (task, message) => {
+    io.emit('task:sla', { taskId: task.id, taskNumber: task.taskNumber, message });
+    await evolutionService.sendToAdmin(message);
+  }).catch(err => logger.error(`SLA monitor error: ${err.message}`));
+}, 60_000);
+slaMonitor.unref();
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
+  clearInterval(slaMonitor);
   logger.info('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();
@@ -308,6 +319,7 @@ process.on('SIGTERM', async () => {
 });
 
 process.on('SIGINT', async () => {
+  clearInterval(slaMonitor);
   logger.info('SIGINT received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();

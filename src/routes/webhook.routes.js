@@ -9,6 +9,7 @@ import * as evolutionService from '../services/evolution.service.js';
 import { parseZabbixAlert, formatAlertMessage } from '../services/zabbix.service.js';
 import prisma from '../database/client.js';
 import { getIncidentAutomationMode, shouldAutoDiagnoseIncident, describeIncidentPolicy } from '../services/incident-policy.service.js';
+import { buildSlaFields } from '../services/sla.service.js';
 
 const router = Router();
 
@@ -220,6 +221,7 @@ router.post('/zabbix', async (req, res) => {
 
     let task;
     if (related) {
+      const reopenedSla = await buildSlaFields(alert.priority, eventAt);
       task = await taskService.updateTask(related.id, {
         status: 'pending',
         originalMessage: formatAlertMessage(alert),
@@ -238,6 +240,10 @@ router.post('/zabbix', async (req, res) => {
         executionResult: null,
         resolutionSummary: null,
         resolutionType: null,
+        ...reopenedSla,
+        slaWarningSentAt: null,
+        slaAckBreachedAt: null,
+        slaResolveBreachedAt: null,
       });
       await taskService.addTaskMessage(task.id, 'system', `Incidente reaberto pelo Zabbix com EVENT.ID=${alert.eventId}.`);
       logger.info(`Task #${task.taskNumber} reopened for Zabbix EVENT.ID=${alert.eventId}`);

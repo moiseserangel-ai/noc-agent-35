@@ -22,6 +22,20 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'SLA de Incidentes', icon: Activity,
+    fields: [
+      { key: 'sla_warning_percent', label: 'Avisar ao atingir (%)', type: 'number', placeholder: '80', helperText: 'Percentual do prazo de resolução para gerar aviso preventivo.' },
+      { key: 'sla_critical_ack_minutes', label: 'Crítica — reconhecer (min)', type: 'number', placeholder: '5' },
+      { key: 'sla_critical_resolve_minutes', label: 'Crítica — resolver (min)', type: 'number', placeholder: '30' },
+      { key: 'sla_high_ack_minutes', label: 'Alta — reconhecer (min)', type: 'number', placeholder: '15' },
+      { key: 'sla_high_resolve_minutes', label: 'Alta — resolver (min)', type: 'number', placeholder: '120' },
+      { key: 'sla_medium_ack_minutes', label: 'Média — reconhecer (min)', type: 'number', placeholder: '60' },
+      { key: 'sla_medium_resolve_minutes', label: 'Média — resolver (min)', type: 'number', placeholder: '480' },
+      { key: 'sla_low_ack_minutes', label: 'Baixa — reconhecer (min)', type: 'number', placeholder: '240' },
+      { key: 'sla_low_resolve_minutes', label: 'Baixa — resolver (min)', type: 'number', placeholder: '1440' },
+    ],
+  },
+  {
     title: 'OpenAI API', icon: Activity,
     fields: [
       { key: 'openai_api_key', label: 'API Key', type: 'password', placeholder: 'sk-...' },
@@ -87,6 +101,11 @@ export default function Settings() {
         v['openai_model'] ||= 'gpt-5.6-terra';
         v['gemini_model'] ||= 'gemini-3.5-flash';
         v['claude_model'] ||= 'claude-sonnet-5';
+        v['sla_warning_percent'] ||= '80';
+        v['sla_critical_ack_minutes'] ||= '5'; v['sla_critical_resolve_minutes'] ||= '30';
+        v['sla_high_ack_minutes'] ||= '15'; v['sla_high_resolve_minutes'] ||= '120';
+        v['sla_medium_ack_minutes'] ||= '60'; v['sla_medium_resolve_minutes'] ||= '480';
+        v['sla_low_ack_minutes'] ||= '240'; v['sla_low_resolve_minutes'] ||= '1440';
         v['system_webhook_url'] = window.location.origin + '/api/webhooks/zabbix';
         v['system_evolution_webhook_url'] = window.location.origin + '/api/webhooks/evolution';
         setValues(v);

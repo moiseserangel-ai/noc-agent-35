@@ -46,6 +46,10 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="stat-card">
+          <div className="stat-icon amber"><AlertTriangle size={24} /></div>
+          <div><div className="stat-value">{stats?.slaBreached || 0}</div><div className="stat-label">SLA Violado</div></div>
+        </div>
+        <div className="stat-card">
           <div className="stat-icon amber"><Clock size={24} /></div>
           <div>
             <div className="stat-value">{(stats?.pending || 0) + (stats?.inProgress || 0) + (stats?.diagnosing || 0)}</div>

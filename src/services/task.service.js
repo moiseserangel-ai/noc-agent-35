@@ -1,10 +1,13 @@
 import prisma from '../database/client.js';
 import logger from '../utils/logger.js';
+import { buildSlaFields } from './sla.service.js';
 
 export async function createTask({ source, originalMessage, deviceId, priority, incident = {} }) {
   const lastTask = await prisma.task.findFirst({ orderBy: { taskNumber: 'desc' } });
   const taskNumber = (lastTask?.taskNumber || 0) + 1;
 
+  const openedAt = incident.incidentOpenedAt || new Date();
+  const sla = await buildSlaFields(priority || 'medium', openedAt);
   const task = await prisma.task.create({
     data: {
       taskNumber,
@@ -12,6 +15,7 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
       originalMessage,
       deviceId: deviceId || null,
       priority: priority || 'medium',
+      ...sla,
       ...incident,
     },
     include: { device: true },
@@ -44,11 +48,12 @@ export async function getTaskByNumber(taskNumber) {
   });
 }
 
-export async function getAllTasks({ status, source, priority, limit = 50 }) {
+export async function getAllTasks({ status, source, priority, sla, limit = 50 }) {
   const where = {};
   if (status) where.status = status;
   if (source) where.source = source;
   if (priority) where.priority = priority;
+  if (sla === 'breached') where.slaResolveBreachedAt = { not: null };
 
   return prisma.task.findMany({
     where,
@@ -59,7 +64,7 @@ export async function getAllTasks({ status, source, priority, limit = 50 }) {
 }
 
 export async function getTaskStats() {
-  const [total, pending, inProgress, diagnosing, awaiting, resolved, validated, closed, failed] = await Promise.all([
+  const [total, pending, inProgress, diagnosing, awaiting, resolved, validated, closed, failed, slaBreached] = await Promise.all([
     prisma.task.count(),
     prisma.task.count({ where: { status: 'pending' } }),
     prisma.task.count({ where: { status: 'in_progress' } }),
@@ -69,6 +74,7 @@ export async function getTaskStats() {
     prisma.task.count({ where: { status: 'validated' } }),
     prisma.task.count({ where: { status: 'closed' } }),
     prisma.task.count({ where: { status: 'failed' } }),
+    prisma.task.count({ where: { status: { notIn: ['resolved', 'completed', 'validated', 'closed', 'cancelled'] }, slaResolveBreachedAt: { not: null } } }),
   ]);
 
   const today = new Date();
@@ -77,7 +83,7 @@ export async function getTaskStats() {
     where: { status: { in: ['resolved', 'completed', 'validated', 'closed'] }, resolvedAt: { gte: today } },
   });
 
-  return { total, pending, inProgress, diagnosing, awaiting, completed: resolved, resolved, validated, closed, failed, completedToday };
+  return { total, pending, inProgress, diagnosing, awaiting, completed: resolved, resolved, validated, closed, failed, slaBreached, completedToday };
 }
 
 export async function addTaskMessage(taskId, role, content, agentName = null) {

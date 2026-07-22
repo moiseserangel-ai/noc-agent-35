@@ -3,6 +3,7 @@ import * as taskService from '../services/task.service.js';
 import prisma from '../database/client.js';
 import MikrotikAgent from '../agents/mikrotik-agent.js';
 import LinuxAgent from '../agents/linux-agent.js';
+import { buildSlaFields } from '../services/sla.service.js';
 
 const router = Router();
 
@@ -60,7 +61,7 @@ router.post('/:id/workflow', async (req, res, next) => {
     }
     if (action === 'validate') data.validatedAt = now;
     if (action === 'close') data.closedAt = now;
-    if (action === 'reopen') Object.assign(data, { resolvedAt: null, validatedAt: null, closedAt: null, resolutionSummary: null, resolutionType: null, adminResponse: null });
+    if (action === 'reopen') Object.assign(data, await buildSlaFields(task.priority, now), { resolvedAt: null, validatedAt: null, closedAt: null, resolutionSummary: null, resolutionType: null, adminResponse: null, acknowledgedAt: null, slaWarningSentAt: null, slaAckBreachedAt: null, slaResolveBreachedAt: null });
 
     const labels = { acknowledge: 'reconheceu e iniciou o atendimento', resolve: 'marcou como resolvida', validate: 'validou a resolução', close: 'encerrou', reopen: 'reabriu', cancel: 'cancelou' };
     const updated = await taskService.updateTask(task.id, data);
@@ -71,9 +72,9 @@ router.post('/:id/workflow', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { status, source, priority, limit } = req.query;
+    const { status, source, priority, sla, limit } = req.query;
     const tasks = await taskService.getAllTasks({
-      status, source, priority, limit: limit ? parseInt(limit) : 50,
+      status, source, priority, sla, limit: limit ? parseInt(limit) : 50,
     });
     res.json({ success: true, data: tasks });
   } catch (err) { next(err); }
