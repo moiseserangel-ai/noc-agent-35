@@ -176,3 +176,34 @@ model ChatMessage {
   toolCalls String?     // JSON string with tools used
   createdAt DateTime    @default(now())
 }
+
+model AiUsageLog {
+  id            String   @id @default(uuid())
+  provider      String
+  model         String
+  agentName     String?
+  status        String   // success|error|skipped
+  errorKind     String?  // rate_limit|quota|auth|model|provider|unknown
+  errorMessage  String?
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  totalTokens   Int      @default(0)
+  estimatedCost Float?
+  durationMs    Int?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([provider, createdAt])
+  @@index([status, errorKind])
+}
+
+model AiProviderState {
+  provider       String   @id
+  status         String   @default("available") // available|cooldown|quota_exhausted|error
+  reason         String?
+  cooldownUntil  DateTime?
+  consecutiveErrors Int   @default(0)
+  lastSuccessAt  DateTime?
+  lastErrorAt    DateTime?
+  updatedAt      DateTime @updatedAt
+}

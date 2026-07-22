@@ -22,6 +22,7 @@ import userRoutes from './routes/user.routes.js';
 import auditRoutes from './routes/audit.routes.js';
 import reportRoutes from './routes/report.routes.js';
 import backupRoutes from './routes/backup.routes.js';
+import aiUsageRoutes from './routes/ai-usage.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -67,6 +68,7 @@ app.use('/api/users', authMiddleware, requireRoles('admin'), auditMutation, user
 app.use('/api/audit', authMiddleware, requireRoles('admin'), auditRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/backups', authMiddleware, requireRoles('admin'), backupRoutes);
+app.use('/api/ai-usage', authMiddleware, requireRoles('admin'), auditMutation, aiUsageRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

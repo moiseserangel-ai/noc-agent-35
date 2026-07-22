@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import prisma from '../database/client.js';
 import { decrypt } from '../utils/crypto.js';
 import { providerRunners } from '../ai/providers.js';
+import { providerAvailability, recordAiFailure, recordAiSkipped, recordAiSuccess } from '../services/ai-usage.service.js';
 
 export async function getAiConfiguration() {
   const keys = ['ai_provider', 'ai_fallback_order', 'claude_api_key', 'claude_model', 'openai_api_key', 'openai_model', 'gemini_api_key', 'gemini_model'];
@@ -33,13 +34,26 @@ export default class BaseAgent {
     if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');
     let lastError;
     for (const provider of order) {
+      const availability = await providerAvailability(provider);
+      if (!availability.available) {
+        const reason = `Indisponível até ${availability.state.cooldownUntil.toISOString()}: ${availability.state.reason || 'limite temporário'}`;
+        await recordAiSkipped({ provider, model: cfg.providers[provider].model, agentName: this.name, reason });
+        logger.warn(`[${this.name}] provider=${provider} ignorado: ${reason}`);
+        continue;
+      }
+      const startedAt = Date.now();
       try {
         logger.info(`[${this.name}] provider=${provider} model=${cfg.providers[provider].model}`);
         const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: userMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent });
+        await recordAiSuccess({ provider, model: cfg.providers[provider].model, agentName: this.name, usage: result.usage, durationMs: Date.now() - startedAt });
         return { ...result, provider };
-      } catch (err) { lastError = err; logger.error(`[${this.name}] ${provider} falhou: ${err.message}`); }
+      } catch (err) {
+        lastError = err;
+        const failure = await recordAiFailure({ provider, model: cfg.providers[provider].model, agentName: this.name, error: err, durationMs: Date.now() - startedAt });
+        logger.error(`[${this.name}] ${provider} falhou (${failure.kind}): ${err.message}`);
+      }
     }
-    throw lastError || new Error('Falha em todos os provedores');
+    throw lastError || new Error('Todos os provedores configurados estão temporariamente indisponíveis. Consulte Consumo de IA.');
   }
   async runStreaming(userMessage, onChunk, context = {}) {
     const result = await this.run(userMessage, context, onChunk);

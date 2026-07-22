@@ -15,6 +15,7 @@ import Audit from './pages/Audit.jsx';
 import Reports from './pages/Reports.jsx';
 import Backups from './pages/Backups.jsx';
 import Security from './pages/Security.jsx';
+import AiUsage from './pages/AiUsage.jsx';
 
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
@@ -110,6 +111,7 @@ export default function App() {
               <Route path="users" element={user?.role === 'admin' ? <Users /> : <Navigate to="/" replace />} />
               <Route path="audit" element={user?.role === 'admin' ? <Audit /> : <Navigate to="/" replace />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="ai-usage" element={user?.role === 'admin' ? <AiUsage /> : <Navigate to="/" replace />} />
               <Route path="backups" element={user?.role === 'admin' ? <Backups /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />

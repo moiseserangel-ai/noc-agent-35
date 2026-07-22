@@ -41,6 +41,8 @@ export const api = {
   getAuditLogs: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/audit${qs ? `?${qs}` : ''}`); },
   getAuditOptions: () => request('/audit/options'),
   getIncidentReport: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/reports/incidents${qs ? `?${qs}` : ''}`); },
+  getAiUsage: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/ai-usage${qs ? `?${qs}` : ''}`); },
+  unblockAiProvider: provider => request(`/ai-usage/${provider}/unblock`, { method: 'POST' }),
   getBackups: () => request('/backups'),
   getBackupStatus: () => request('/backups/status'),
   createBackup: () => request('/backups', { method: 'POST' }),
