@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Activity, Lock, User } from 'lucide-react';
 import { api } from '../lib/api.js';
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, branding }) {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -32,11 +32,11 @@ export default function Login({ onLogin }) {
       <div className="login-card">
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
           <div className="sidebar-brand-icon" style={{ width: 56, height: 56 }}>
-            <Activity size={28} />
+            {branding?.logo ? <img className="brand-logo-image" src={branding.logo} alt="" /> : <Activity size={28} />}
           </div>
         </div>
-        <h1>NOC Agent 35</h1>
-        <p>Sistema de Monitoramento NOC com IA</p>
+        <h1>{branding?.name || 'NOC Agent 35'}</h1>
+        <p>{branding?.loginSubtitle || 'Sistema de Monitoramento NOC com IA'}</p>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">

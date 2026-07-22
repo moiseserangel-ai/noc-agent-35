@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { path: '/security', label: 'Minha segurança', icon: Shield },
 ];
 
-export default function Layout({ onLogout, user }) {
+export default function Layout({ onLogout, user, branding }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const visibleItems = NAV_ITEMS.filter(item => !item.roles || item.roles.includes(user?.role));
@@ -40,11 +40,11 @@ export default function Layout({ onLogout, user }) {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
           <div className="sidebar-brand-icon">
-            <Activity size={22} />
+            {branding?.logo ? <img className="brand-logo-image" src={branding.logo} alt="" /> : <Activity size={22} />}
           </div>
           <div className="sidebar-brand-text">
-            <h1>NOC Agent 35</h1>
-            <span>AI Monitoring</span>
+            <h1>{branding?.name || 'NOC Agent 35'}</h1>
+            <span>{branding?.subtitle || 'AI Monitoring'}</span>
           </div>
           <button className="btn-ghost" onClick={() => setSidebarOpen(false)}
             style={{ display: sidebarOpen ? 'block' : 'none', marginLeft: 'auto' }}>

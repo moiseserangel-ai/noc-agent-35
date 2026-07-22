@@ -5,6 +5,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import logger from '../utils/logger.js';
 import { providerRunners } from '../ai/providers.js';
 import { getNotificationConfig, sendTelegramMessage } from '../services/notification.service.js';
+import { saveBranding } from '../services/branding.service.js';
 
 const router = Router();
 
@@ -23,13 +24,17 @@ router.post('/test-telegram', async (req, res) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const settings = await prisma.settings.findMany();
+    const settings = await prisma.settings.findMany({ where: { key: { notIn: ['branding_logo_data', 'branding_favicon_data'] } } });
     const safe = settings.map(s => ({
       ...s,
       value: s.encrypted ? '••••••••' : s.value,
     }));
     res.json({ success: true, data: safe });
   } catch (err) { next(err); }
+});
+
+router.post('/branding', async (req, res, next) => {
+  try { res.json({ success: true, data: await saveBranding(req.body) }); } catch (error) { next(error); }
 });
 
 router.get('/:key', async (req, res, next) => {

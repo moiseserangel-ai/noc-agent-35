@@ -25,6 +25,7 @@ async function request(path, options = {}) {
 export const api = {
   // Auth
   login: (username, password, otp) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password, otp }) }),
+  getBranding: () => request('/branding'),
   verify: () => request('/auth/verify'),
   refreshSession: () => request('/auth/refresh', { method: 'POST' }),
   logout: () => request('/auth/logout', { method: 'POST' }),
@@ -78,6 +79,7 @@ export const api = {
   getSettings: () => request('/settings'),
   updateSetting: (key, value) => request(`/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   updateSettingsBulk: (settings) => request('/settings/bulk', { method: 'POST', body: JSON.stringify({ settings }) }),
+  updateBranding: data => request('/settings/branding', { method: 'POST', body: JSON.stringify(data) }),
   testClaudeAPI: (apiKey, model) => request('/settings/test-claude', { method: 'POST', body: JSON.stringify({ apiKey, model }) }),
   testAIProvider: (provider, model) => request('/settings/test-ai', { method: 'POST', body: JSON.stringify({ provider, model }) }),
   getGeminiModels: (apiKey) => request('/settings/gemini-models', { method: 'POST', body: JSON.stringify({ apiKey }) }),

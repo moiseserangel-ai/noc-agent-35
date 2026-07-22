@@ -44,6 +44,25 @@ function ToastProvider({ children }) {
 export default function App() {
   const [authed, setAuthed] = useState(null);
   const [user, setUser] = useState(null);
+  const [branding, setBranding] = useState({ name:'NOC Agent 35', subtitle:'AI Monitoring', loginSubtitle:'Sistema de Monitoramento NOC com IA', primaryColor:'#00d4ff', logo:null, favicon:null });
+
+  useEffect(() => {
+    const apply = next => {
+      setBranding(next);
+      const color = next.primaryColor || '#00d4ff';
+      document.documentElement.style.setProperty('--primary', color);
+      document.documentElement.style.setProperty('--primary-glow', `${color}26`);
+      document.documentElement.style.setProperty('--primary-strong', `${color}40`);
+      document.documentElement.style.setProperty('--border-accent', `${color}33`);
+      document.title = `${next.name || 'NOC Agent 35'} - Dashboard`;
+      const favicon = document.querySelector("link[rel='icon']");
+      if (favicon) favicon.href = next.favicon || '/favicon.svg';
+    };
+    api.getBranding().then(result => apply(result.data)).catch(() => {});
+    const changed = event => apply(event.detail);
+    window.addEventListener('noc:branding-updated', changed);
+    return () => window.removeEventListener('noc:branding-updated', changed);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('noc_token');
@@ -97,11 +116,11 @@ export default function App() {
         <Routes>
           {!authed ? (
             <>
-              <Route path="/login" element={<Login onLogin={loggedUser => { setUser(loggedUser); setAuthed(true); }} />} />
+              <Route path="/login" element={<Login branding={branding} onLogin={loggedUser => { setUser(loggedUser); setAuthed(true); }} />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </>
           ) : (
-            <Route element={<Layout user={user} onLogout={async () => { try { await api.logout(); } catch {} localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
+            <Route element={<Layout branding={branding} user={user} onLogout={async () => { try { await api.logout(); } catch {} localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
               <Route index element={<Dashboard showBackup={user?.role === 'admin'} />} />
               <Route path="devices" element={<Devices canManage={user?.role === 'admin'} />} />
               <Route path="tasks" element={<Tasks canOperate={['admin', 'operator'].includes(user?.role)} />} />

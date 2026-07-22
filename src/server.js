@@ -23,6 +23,7 @@ import auditRoutes from './routes/audit.routes.js';
 import reportRoutes from './routes/report.routes.js';
 import backupRoutes from './routes/backup.routes.js';
 import aiUsageRoutes from './routes/ai-usage.routes.js';
+import brandingRoutes from './routes/branding.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -56,6 +57,7 @@ app.use(express.static(join(__dirname, '..', 'frontend', 'dist')));
 // Public routes
 app.use('/api/auth', authRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/branding', brandingRoutes);
 
 // Protected routes
 app.use('/api/devices', authMiddleware, auditMutation, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);

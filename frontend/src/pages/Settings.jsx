@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Key, MessageSquare, Activity, Save, CheckCircle } from 'lucide-react';
+import { Key, MessageSquare, Activity, Save, CheckCircle, Palette, Image } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useToast } from '../App.jsx';
 
@@ -105,9 +105,11 @@ export default function Settings() {
   const [geminiModels, setGeminiModels] = useState([]);
   const [loadingGeminiModels, setLoadingGeminiModels] = useState(false);
   const [manualGeminiModel, setManualGeminiModel] = useState(false);
+  const [branding, setBranding] = useState({ name:'NOC Agent 35',subtitle:'AI Monitoring',loginSubtitle:'Sistema de Monitoramento NOC com IA',primaryColor:'#00d4ff',logo:null,favicon:null });
   const toast = useToast();
 
   useEffect(() => {
+    api.getBranding().then(r=>setBranding(r.data)).catch(()=>{});
     api.getSettings()
       .then(r => {
         const v = {};
@@ -132,6 +134,24 @@ export default function Settings() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  const readBrandImage = (field, file) => {
+    if (!file) return;
+    const limit = field === 'favicon' ? 256 * 1024 : 1536 * 1024;
+    if (!['image/png','image/jpeg','image/webp'].includes(file.type)) return toast('Use PNG, JPG ou WebP.','error');
+    if (file.size > limit) return toast(`Arquivo maior que ${Math.round(limit/1024)} KB.`,'error');
+    const reader = new FileReader(); reader.onload=()=>setBranding(v=>({...v,[field]:reader.result})); reader.readAsDataURL(file);
+  };
+
+  const saveBranding = async () => {
+    setSaving(true);
+    try {
+      const result = await api.updateBranding(branding);
+      setBranding(result.data);
+      window.dispatchEvent(new CustomEvent('noc:branding-updated',{detail:result.data}));
+      toast('Identidade visual atualizada.','success');
+    } catch (error) { toast(error.message,'error'); } finally { setSaving(false); }
+  };
 
   const handleSave = async (sectionFields) => {
     setSaving(true);
@@ -230,6 +250,13 @@ export default function Settings() {
   return (
     <div>
       <div className="page-header"><h2>Configurações</h2><p>Configure as APIs e credenciais do sistema</p></div>
+      <div className="settings-section">
+        <div className="settings-section-title"><Palette size={20}/> Identidade visual</div>
+        <div className="form-row"><div className="form-group"><label className="form-label">Nome do sistema</label><input className="form-input" maxLength="60" value={branding.name} onChange={e=>setBranding(v=>({...v,name:e.target.value}))}/></div><div className="form-group"><label className="form-label">Subtítulo do menu</label><input className="form-input" maxLength="80" value={branding.subtitle} onChange={e=>setBranding(v=>({...v,subtitle:e.target.value}))}/></div></div>
+        <div className="form-row"><div className="form-group"><label className="form-label">Texto da tela de login</label><input className="form-input" maxLength="120" value={branding.loginSubtitle} onChange={e=>setBranding(v=>({...v,loginSubtitle:e.target.value}))}/></div><div className="form-group"><label className="form-label">Cor principal</label><div style={{display:'flex',gap:8}}><input type="color" value={branding.primaryColor} onChange={e=>setBranding(v=>({...v,primaryColor:e.target.value}))} style={{width:52,height:42,border:0,background:'transparent'}}/><input className="form-input" value={branding.primaryColor} onChange={e=>setBranding(v=>({...v,primaryColor:e.target.value}))}/></div></div></div>
+        <div className="form-row"><div className="form-group"><label className="form-label">Logo — PNG/JPG/WebP, até 1,5 MB</label><input className="form-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>readBrandImage('logo',e.target.files[0])}/>{branding.logo&&<div style={{display:'flex',alignItems:'center',gap:10,marginTop:8}}><img src={branding.logo} alt="Prévia" style={{width:64,height:64,objectFit:'contain',background:'var(--bg-secondary)',borderRadius:8,padding:4}}/><button className="btn btn-ghost btn-sm" onClick={()=>setBranding(v=>({...v,logo:null}))}>Remover</button></div>}</div><div className="form-group"><label className="form-label">Favicon — até 256 KB</label><input className="form-input" type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>readBrandImage('favicon',e.target.files[0])}/>{branding.favicon&&<div style={{display:'flex',alignItems:'center',gap:10,marginTop:8}}><img src={branding.favicon} alt="Favicon" style={{width:40,height:40,objectFit:'contain'}}/><button className="btn btn-ghost btn-sm" onClick={()=>setBranding(v=>({...v,favicon:null}))}>Remover</button></div>}</div></div>
+        <button className="btn btn-primary" onClick={saveBranding} disabled={saving}>{saving?<><div className="spinner"/> Salvando...</>:<><Image size={16}/> Salvar identidade visual</>}</button>
+      </div>
       {SECTIONS.map(section => (
         <div key={section.title} className="settings-section">
           <div className="settings-section-title"><section.icon size={20} /> {section.title}</div>
