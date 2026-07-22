@@ -10,6 +10,7 @@ import { parseZabbixAlert, formatAlertMessage } from '../services/zabbix.service
 import prisma from '../database/client.js';
 import { getIncidentAutomationMode, shouldAutoDiagnoseIncident, describeIncidentPolicy } from '../services/incident-policy.service.js';
 import { buildSlaFields } from '../services/sla.service.js';
+import { notifyTask } from '../services/notification.service.js';
 
 const router = Router();
 
@@ -98,7 +99,7 @@ router.post('/evolution', async (req, res) => {
           task.deviceId, task.device?.name || 'Unknown', task.proposedSolution, taskNumber
         );
 
-        await taskService.updateTask(task.id, {
+        const resolvedTask = await taskService.updateTask(task.id, {
           status: 'resolved',
           executionResult: result.text,
           resolutionSummary: result.text,
@@ -106,6 +107,7 @@ router.post('/evolution', async (req, res) => {
           resolvedAt: new Date(),
         });
         await taskService.addTaskMessage(task.id, 'agent', result.text, task.agentUsed);
+        await notifyTask(resolvedTask, 'resolved', { message: 'Solução executada pelo agente após aprovação via WhatsApp.', io: req.app.get('io') });
         await evolutionService.sendWhatsAppMessage(parsed.from, result.text);
       } else {
         await taskService.addTaskMessage(task.id, 'user', 'Solução REJEITADA pelo admin');
@@ -177,7 +179,7 @@ router.post('/zabbix', async (req, res) => {
     const eventAt = alert.eventAt || now;
 
     if (alert.state === 'resolved') {
-      const existing = await prisma.task.findUnique({ where: { zabbixEventId: alert.eventId } });
+      const existing = await prisma.task.findUnique({ where: { zabbixEventId: alert.eventId }, include: { device: true } });
       if (!existing) {
         logger.warn(`Recovery órfã do Zabbix para EVENT.ID=${alert.eventId}`);
         return;
@@ -185,7 +187,7 @@ router.post('/zabbix', async (req, res) => {
       const resolvedAt = alert.recoveryAt || now;
       const openedAt = existing.incidentOpenedAt || existing.createdAt;
       const durationSeconds = Math.max(0, Math.floor((resolvedAt.getTime() - openedAt.getTime()) / 1000));
-      await taskService.updateTask(existing.id, {
+      const resolvedTask = await taskService.updateTask(existing.id, {
         status: 'resolved',
         zabbixStatus: 'RESOLVED',
         zabbixRecoveryId: alert.recoveryEventId,
@@ -197,6 +199,7 @@ router.post('/zabbix', async (req, res) => {
         executionResult: `Resolvido automaticamente pelo Zabbix em ${resolvedAt.toLocaleString('pt-BR', { timeZone: 'America/Porto_Velho' })}.`,
       });
       await taskService.addTaskMessage(existing.id, 'system', `Evento Zabbix recuperado${alert.recoveryEventId ? ` (#${alert.recoveryEventId})` : ''}. Duração: ${durationSeconds}s.`);
+      await notifyTask(resolvedTask, 'resolved', { message: `Recuperação confirmada pelo Zabbix. Duração: ${durationSeconds}s.`, io: req.app.get('io') });
       logger.info(`Task #${existing.taskNumber} resolved by Zabbix EVENT.ID=${alert.eventId}`);
       return;
     }
@@ -262,6 +265,8 @@ router.post('/zabbix', async (req, res) => {
       });
       await taskService.addTaskMessage(task.id, 'system', `Alerta Zabbix: ${alert.trigger}`);
     }
+
+    await notifyTask(task, related ? 'reopened' : 'opened', { message: formatAlertMessage(alert), io: req.app.get('io') });
 
     // Try to find the device by hostname or zabbixHostId
     const classificationMsg = `Alerta do Zabbix:

@@ -63,6 +63,7 @@ export const api = {
   testAIProvider: (provider, model) => request('/settings/test-ai', { method: 'POST', body: JSON.stringify({ provider, model }) }),
   getGeminiModels: (apiKey) => request('/settings/gemini-models', { method: 'POST', body: JSON.stringify({ apiKey }) }),
   testEvolutionAPI: (data) => request('/settings/test-evolution', { method: 'POST', body: JSON.stringify(data) }),
+  testTelegram: (token, chatId) => request('/settings/test-telegram', { method: 'POST', body: JSON.stringify({ token, chatId }) }),
   getVpn: () => request('/vpn'),
   saveVpn: (data) => request('/vpn', { method: 'PUT', body: JSON.stringify(data) }),
   connectVpn: () => request('/vpn/connect', { method: 'POST' }),

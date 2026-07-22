@@ -4,6 +4,7 @@ import prisma from '../database/client.js';
 import MikrotikAgent from '../agents/mikrotik-agent.js';
 import LinuxAgent from '../agents/linux-agent.js';
 import { buildSlaFields } from '../services/sla.service.js';
+import { notifyTask } from '../services/notification.service.js';
 
 const router = Router();
 
@@ -66,6 +67,8 @@ router.post('/:id/workflow', async (req, res, next) => {
     const labels = { acknowledge: 'reconheceu e iniciou o atendimento', resolve: 'marcou como resolvida', validate: 'validou a resolução', close: 'encerrou', reopen: 'reabriu', cancel: 'cancelou' };
     const updated = await taskService.updateTask(task.id, data);
     await taskService.addTaskMessage(task.id, 'system', `${actor} ${labels[action]} a Task.${note && action !== 'resolve' ? ` Observação: ${note}` : ''}`);
+    const notificationEvents = { acknowledge: 'acknowledged', resolve: 'resolved', validate: 'validated', close: 'closed', reopen: 'reopened' };
+    if (notificationEvents[action]) await notifyTask(updated, notificationEvents[action], { message: note, io: req.app.get('io') });
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 });
@@ -130,6 +133,7 @@ router.post('/:id/complete', async (req, res, next) => {
     const note = String(req.body.note || 'Concluída manualmente pelo administrador').slice(0, 1000);
     const updated = await taskService.updateTask(task.id, { status: 'resolved', executionResult: note, resolutionSummary: note, resolutionType: 'manual', resolvedAt: new Date(), adminResponse: 'manual' });
     await taskService.addTaskMessage(task.id, 'user', note);
+    await notifyTask(updated, 'resolved', { message: note, io: req.app.get('io') });
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 });

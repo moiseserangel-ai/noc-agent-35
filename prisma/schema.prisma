@@ -40,6 +40,22 @@ model AuditLog {
   @@index([resource, action])
 }
 
+model NotificationLog {
+  id           String   @id @default(uuid())
+  taskId       String?
+  taskNumber   Int?
+  event        String
+  channel      String
+  recipient    String?
+  status       String
+  error        String?
+  dedupKey     String   @unique
+  createdAt    DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([status, channel])
+}
+
 model Device {
   id           String   @id @default(uuid())
   name         String

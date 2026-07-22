@@ -29,7 +29,7 @@ import MikrotikAgent from './agents/mikrotik-agent.js';
 import LinuxAgent from './agents/linux-agent.js';
 import * as taskService from './services/task.service.js';
 import { runSlaMonitor } from './services/sla.service.js';
-import * as evolutionService from './services/evolution.service.js';
+import { notifyTask, runCriticalReminders } from './services/notification.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -172,8 +172,9 @@ io.on('connection', (socket) => {
         const execution = await specialistAgent.executeSolution(
           task.deviceId, task.device?.name || 'Dispositivo', task.proposedSolution, task.taskNumber
         );
-        await taskService.updateTask(task.id, { status: 'resolved', executionResult: execution.text, resolutionSummary: execution.text, resolutionType: 'agent', resolvedAt: new Date() });
+        const resolvedTask = await taskService.updateTask(task.id, { status: 'resolved', executionResult: execution.text, resolutionSummary: execution.text, resolutionType: 'agent', resolvedAt: new Date() });
         await taskService.addTaskMessage(task.id, 'agent', execution.text, task.agentUsed);
+        await notifyTask(resolvedTask, 'resolved', { message: 'Solução executada pelo agente.', io });
         await logAudit({ userId: socket.user.sub, username: socket.user.username, displayName: socket.user.name, role: socket.user.role, action: 'agent_execute', resource: 'task', resourceId: task.id, status: 'success', details: { taskNumber: task.taskNumber, agent: task.agentUsed } });
         await prisma.chatMessage.create({ data: { sessionId, role: 'assistant', content: execution.text, agentUsed: task.agentUsed } });
         socket.emit('chat:chunk', { text: execution.text });
@@ -332,16 +333,23 @@ httpServer.listen(config.port, config.host, () => {
 });
 
 const slaMonitor = setInterval(() => {
-  runSlaMonitor(async (task, message) => {
+  runSlaMonitor(async (task, message, level) => {
     io.emit('task:sla', { taskId: task.id, taskNumber: task.taskNumber, message });
-    await evolutionService.sendToAdmin(message);
+    const event = level >= 3 ? 'sla_resolution_breached' : level >= 2 ? 'sla_ack_breached' : 'sla_warning';
+    await notifyTask(task, event, { message, io });
   }).catch(err => logger.error(`SLA monitor error: ${err.message}`));
 }, 60_000);
 slaMonitor.unref();
 
+const criticalReminderMonitor = setInterval(() => {
+  runCriticalReminders(io).catch(err => logger.error(`Critical reminder error: ${err.message}`));
+}, 60_000);
+criticalReminderMonitor.unref();
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   clearInterval(slaMonitor);
+  clearInterval(criticalReminderMonitor);
   logger.info('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();
@@ -350,6 +358,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   clearInterval(slaMonitor);
+  clearInterval(criticalReminderMonitor);
   logger.info('SIGINT received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();

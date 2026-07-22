@@ -4,10 +4,22 @@ import { encrypt, decrypt } from '../utils/crypto.js';
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../utils/logger.js';
 import { providerRunners } from '../ai/providers.js';
+import { getNotificationConfig, sendTelegramMessage } from '../services/notification.service.js';
 
 const router = Router();
 
-const SENSITIVE_KEYS = ['claude_api_key', 'openai_api_key', 'gemini_api_key', 'evolution_api_key', 'zabbix_webhook_token', 'dashboard_password', 'encryption_key'];
+const SENSITIVE_KEYS = ['claude_api_key', 'openai_api_key', 'gemini_api_key', 'evolution_api_key', 'telegram_bot_token', 'zabbix_webhook_token', 'dashboard_password', 'encryption_key'];
+
+router.post('/test-telegram', async (req, res) => {
+  try {
+    const cfg = await getNotificationConfig();
+    const chatId = String(req.body.chatId || cfg.telegramChats[0] || '').trim();
+    let token = req.body.token;
+    if (!token || token === '••••••••') token = cfg.telegramToken;
+    await sendTelegramMessage(chatId, '✅ Teste do NOC Agent: integração com Telegram funcionando.', token);
+    res.json({ success: true });
+  } catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
 
 router.get('/', async (req, res, next) => {
   try {

@@ -62,6 +62,21 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Notificações e Escalonamento',
+    icon: MessageSquare,
+    fields: [
+      { key: 'notifications_enabled', label: 'Notificações habilitadas', type: 'select', defaultValue: 'false', options: [['true','Sim'],['false','Não']] },
+      { key: 'telegram_bot_token', label: 'Token do bot Telegram', type: 'password', placeholder: '123456:ABC...' },
+      { key: 'telegram_chat_ids', label: 'Chat IDs do Telegram', type: 'text', placeholder: '-1001234567890,123456789', helperText: 'Separe vários grupos ou usuários por vírgula.' },
+      { key: 'notification_base_url', label: 'URL pública do NOC Agent', type: 'text', placeholder: 'http://192.168.250.65', helperText: 'Usada para incluir o link da Task nas mensagens.' },
+      { key: 'notify_high_channels', label: 'Canais para prioridade alta', type: 'text', placeholder: 'telegram', helperText: 'Valores aceitos: telegram,whatsapp' },
+      { key: 'notify_critical_channels', label: 'Canais para prioridade crítica', type: 'text', placeholder: 'telegram,whatsapp' },
+      { key: 'notify_sla_channels', label: 'Canais para violações de SLA', type: 'text', placeholder: 'telegram,whatsapp' },
+      { key: 'notify_resolved', label: 'Notificar resolução', type: 'select', defaultValue: 'true', options: [['true','Sim'],['false','Não']] },
+      { key: 'critical_reminder_minutes', label: 'Repetir crítico sem reconhecimento (min)', type: 'number', placeholder: '30', helperText: 'Mínimo de 5 minutos.' },
+    ],
+  },
+  {
     title: 'Zabbix',
     icon: Activity,
     fields: [
@@ -85,6 +100,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [testingClaude, setTestingClaude] = useState(false);
   const [testingEvolution, setTestingEvolution] = useState(false);
+  const [testingTelegram, setTestingTelegram] = useState(false);
   const [testingAI, setTestingAI] = useState('');
   const [geminiModels, setGeminiModels] = useState([]);
   const [loadingGeminiModels, setLoadingGeminiModels] = useState(false);
@@ -106,6 +122,9 @@ export default function Settings() {
         v['sla_high_ack_minutes'] ||= '15'; v['sla_high_resolve_minutes'] ||= '120';
         v['sla_medium_ack_minutes'] ||= '60'; v['sla_medium_resolve_minutes'] ||= '480';
         v['sla_low_ack_minutes'] ||= '240'; v['sla_low_resolve_minutes'] ||= '1440';
+        v['notifications_enabled'] ||= 'false'; v['notify_high_channels'] ||= 'telegram';
+        v['notify_critical_channels'] ||= 'telegram,whatsapp'; v['notify_sla_channels'] ||= 'telegram,whatsapp'; v['notify_resolved'] ||= 'true';
+        v['critical_reminder_minutes'] ||= '30';
         v['system_webhook_url'] = window.location.origin + '/api/webhooks/zabbix';
         v['system_evolution_webhook_url'] = window.location.origin + '/api/webhooks/evolution';
         setValues(v);
@@ -170,6 +189,17 @@ export default function Settings() {
     } finally {
       setTestingEvolution(false);
     }
+  };
+
+  const handleTestTelegram = async () => {
+    setTestingTelegram(true);
+    try {
+      const firstChat = String(values['telegram_chat_ids'] || '').split(',')[0].trim();
+      if (!firstChat) throw new Error('Informe pelo menos um Chat ID');
+      await api.testTelegram(values['telegram_bot_token'] || '••••••••', firstChat);
+      toast('✅ Mensagem de teste enviada ao Telegram!', 'success');
+    } catch (err) { toast(`❌ Telegram: ${err.message}`, 'error'); }
+    finally { setTestingTelegram(false); }
   };
 
   const handleTestAI = async provider => {
@@ -242,6 +272,7 @@ export default function Settings() {
                 {testingEvolution ? <><div className="spinner" /> Testando...</> : <><MessageSquare size={16} /> Testar Envio</>}
               </button>
             )}
+            {section.title === 'Notificações e Escalonamento' && <button className="btn btn-secondary" onClick={handleTestTelegram} disabled={testingTelegram}><MessageSquare size={16} /> {testingTelegram ? 'Testando...' : 'Testar Telegram'}</button>}
           </div>
           {section.title === 'Zabbix' && (
             <div style={{ marginTop: '20px', padding: '15px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '8px' }}>
