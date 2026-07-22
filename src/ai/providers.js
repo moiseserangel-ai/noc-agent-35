@@ -6,9 +6,18 @@ const ensureOk = async response => {
   throw new Error(`HTTP ${response.status}: ${body.slice(0, 500)}`);
 };
 
-export async function runAnthropic({ apiKey, model, systemPrompt, tools, message, executeTool, onEvent }) {
+const normalizeHistory = history => (Array.isArray(history) ? history : [])
+  .filter(item => ['user', 'assistant'].includes(item.role) && typeof item.content === 'string' && item.content.trim())
+  .reduce((messages, item) => {
+    const previous = messages.at(-1);
+    if (previous?.role === item.role) previous.content += `\n\n${item.content}`;
+    else messages.push({ role: item.role, content: item.content });
+    return messages;
+  }, []);
+
+export async function runAnthropic({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent }) {
   const client = new Anthropic({ apiKey });
-  const messages = [{ role: 'user', content: message }];
+  const messages = [...normalizeHistory(history), { role: 'user', content: message }];
   const used = [];
   let response;
   do {
@@ -28,10 +37,10 @@ export async function runAnthropic({ apiKey, model, systemPrompt, tools, message
   return { text: response.content.filter(i => i.type === 'text').map(i => i.text).join('\n'), toolsUsed: used, usage: response.usage };
 }
 
-export async function runOpenAI({ apiKey, model, systemPrompt, tools, message, executeTool, onEvent }) {
+export async function runOpenAI({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent }) {
   const apiTools = tools.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.input_schema }));
   const used = [];
-  let input = message;
+  let input = [...normalizeHistory(history), { role: 'user', content: message }];
   let previousResponseId;
   let response;
   do {
@@ -56,8 +65,8 @@ export async function runOpenAI({ apiKey, model, systemPrompt, tools, message, e
   return { text, toolsUsed: used, usage: response.usage };
 }
 
-export async function runGemini({ apiKey, model, systemPrompt, tools, message, executeTool, onEvent }) {
-  const contents = [{ role: 'user', parts: [{ text: message }] }];
+export async function runGemini({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent }) {
+  const contents = [...normalizeHistory(history).map(item => ({ role: item.role === 'assistant' ? 'model' : 'user', parts: [{ text: item.content }] })), { role: 'user', parts: [{ text: message }] }];
   const apiTools = tools.length ? [{ functionDeclarations: tools.map(t => ({ name: t.name, description: t.description, parameters: t.input_schema })) }] : undefined;
   const used = [];
   let data;

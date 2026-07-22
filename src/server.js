@@ -79,6 +79,26 @@ const agents = {
   linux: new LinuxAgent(),
 };
 
+async function getSessionHistory(sessionId, currentMessageId) {
+  const rows = await prisma.chatMessage.findMany({
+    where: { sessionId, ...(currentMessageId && { id: { not: currentMessageId } }) },
+    orderBy: { createdAt: 'desc' },
+    take: 16,
+    select: { role: true, content: true },
+  });
+  const chronological = rows.reverse();
+  const selected = [];
+  let characters = 0;
+  for (let index = chronological.length - 1; index >= 0; index -= 1) {
+    const item = chronological[index];
+    const content = String(item.content || '').slice(0, 4000);
+    if (characters + content.length > 12000 && selected.length) break;
+    selected.unshift({ role: item.role === 'assistant' ? 'assistant' : 'user', content });
+    characters += content.length;
+  }
+  return selected;
+}
+
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
@@ -106,9 +126,10 @@ io.on('connection', (socket) => {
       }
 
       // Save user message
-      await prisma.chatMessage.create({
+      const savedUserMessage = await prisma.chatMessage.create({
         data: { sessionId, role: 'user', content: message },
       });
+      const history = await getSessionHistory(sessionId, savedUserMessage.id);
 
       // Process dashboard approvals before asking the support model to classify them.
       // An explicit task reference is accepted, but in a single dashboard chat the
@@ -185,7 +206,7 @@ io.on('connection', (socket) => {
         } else if (chunk.type === 'tool_result') {
           socket.emit('chat:tool', { status: 'result', tool: chunk.tool, output: chunk.output });
         }
-      });
+      }, { history });
 
       // Handle automatic routing if Support Agent was used
       if (agentType === 'support') {
@@ -233,7 +254,7 @@ Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma 
                   } else if (chunk.type === 'tool_result') {
                     socket.emit('chat:tool', { status: 'result', tool: chunk.tool, output: chunk.output });
                   }
-                });
+                }, { history });
 
                 result.text += `\n\n🔄 **Encaminhando para especialista em ${deviceType}...**\n\n${specialistResult.text}`;
                 result.toolsUsed.push(...specialistResult.toolsUsed);

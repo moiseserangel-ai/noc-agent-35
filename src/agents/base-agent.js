@@ -35,14 +35,14 @@ export default class BaseAgent {
     for (const provider of order) {
       try {
         logger.info(`[${this.name}] provider=${provider} model=${cfg.providers[provider].model}`);
-        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: userMessage, executeTool: this.executeToolCall.bind(this), onEvent });
+        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: userMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent });
         return { ...result, provider };
       } catch (err) { lastError = err; logger.error(`[${this.name}] ${provider} falhou: ${err.message}`); }
     }
     throw lastError || new Error('Falha em todos os provedores');
   }
-  async runStreaming(userMessage, onChunk) {
-    const result = await this.run(userMessage, {}, onChunk);
+  async runStreaming(userMessage, onChunk, context = {}) {
+    const result = await this.run(userMessage, context, onChunk);
     if (result.text) onChunk?.({ type: 'text', text: result.text });
     return result;
   }
