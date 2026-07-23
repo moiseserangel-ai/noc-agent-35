@@ -98,6 +98,14 @@ export const api = {
   getChatMessages: (sessionId) => request(`/chat/sessions/${sessionId}/messages`),
   deleteChatSession: (id) => request(`/chat/sessions/${id}`, { method: 'DELETE' }),
 
+  // Terminal CLI
+  getCliDevices: () => request('/cli/devices'),
+  getCliSessions: (all = false) => request(`/cli/sessions${all ? '?all=true' : ''}`),
+  createCliSession: deviceId => request('/cli/sessions', { method: 'POST', body: JSON.stringify({ deviceId }) }),
+  getCliCommands: id => request(`/cli/sessions/${id}/commands`),
+  executeCliCommand: (id, data) => request(`/cli/sessions/${id}/commands`, { method: 'POST', body: JSON.stringify(data) }),
+  closeCliSession: id => request(`/cli/sessions/${id}/close`, { method: 'POST' }),
+
   // Health
   getHealth: () => fetch(`${BASE}/health`).then(r => r.json()),
 };

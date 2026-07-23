@@ -8,54 +8,54 @@ datasource db {
 }
 
 model User {
-  id                 String   @id @default(uuid())
-  username           String   @unique
-  name               String
-  passwordHash       String
-  role               String   @default("viewer") // admin|operator|viewer
-  isActive           Boolean  @default(true)
-  mustChangePassword Boolean  @default(true)
-  passwordChangedAt  DateTime?
-  twoFactorSecret    String?
-  twoFactorEnabled   Boolean  @default(false)
-  failedLoginAttempts Int     @default(0)
-  lockedUntil        DateTime?
-  sessionVersion     Int      @default(1)
-  lastLoginAt        DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  sessions           AuthSession[]
+  id                  String        @id @default(uuid())
+  username            String        @unique
+  name                String
+  passwordHash        String
+  role                String        @default("viewer") // admin|operator|viewer
+  isActive            Boolean       @default(true)
+  mustChangePassword  Boolean       @default(true)
+  passwordChangedAt   DateTime?
+  twoFactorSecret     String?
+  twoFactorEnabled    Boolean       @default(false)
+  failedLoginAttempts Int           @default(0)
+  lockedUntil         DateTime?
+  sessionVersion      Int           @default(1)
+  lastLoginAt         DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  sessions            AuthSession[]
 }
 
 model AuthSession {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   ipAddress  String?
   userAgent  String?
-  lastSeenAt DateTime @default(now())
+  lastSeenAt DateTime  @default(now())
   expiresAt  DateTime
   revokedAt  DateTime?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  userId    String?
-  username  String
+  id          String   @id @default(uuid())
+  userId      String?
+  username    String
   displayName String?
-  role      String?
-  action    String
-  resource  String
-  resourceId String?
-  status    String   @default("success")
-  ipAddress String?
-  userAgent String?
-  details   String?
-  createdAt DateTime @default(now())
+  role        String?
+  action      String
+  resource    String
+  resourceId  String?
+  status      String   @default("success")
+  ipAddress   String?
+  userAgent   String?
+  details     String?
+  createdAt   DateTime @default(now())
 
   @@index([createdAt])
   @@index([username, createdAt])
@@ -63,40 +63,40 @@ model AuditLog {
 }
 
 model NotificationLog {
-  id           String   @id @default(uuid())
-  taskId       String?
-  taskNumber   Int?
-  event        String
-  channel      String
-  recipient    String?
-  status       String
-  error        String?
-  dedupKey     String   @unique
-  createdAt    DateTime @default(now())
+  id         String   @id @default(uuid())
+  taskId     String?
+  taskNumber Int?
+  event      String
+  channel    String
+  recipient  String?
+  status     String
+  error      String?
+  dedupKey   String   @unique
+  createdAt  DateTime @default(now())
 
   @@index([taskId, createdAt])
   @@index([status, channel])
 }
 
 model Device {
-  id           String   @id @default(uuid())
+  id           String         @id @default(uuid())
   name         String
   hostname     String
-  port         Int      @default(22)
-  type         String   // mikrotik|linux|huawei_vrp (extensível via plugins)
+  port         Int            @default(22)
+  type         String // mikrotik|linux|huawei_vrp (extensível via plugins)
   manufacturer String?
   platform     String?
   model        String?
   osVersion    String?
-  capabilities String?  // Lista separada por vírgulas: bgp,mpls,isis...
+  capabilities String? // Lista separada por vírgulas: bgp,mpls,isis...
   username     String
-  password     String   // Encrypted (AES-256-GCM)
+  password     String // Encrypted (AES-256-GCM)
   group        String?
   zabbixHostId String?
-  isActive     Boolean  @default(true)
+  isActive     Boolean        @default(true)
   notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
   tasks        Task[]
   changes      DeviceChange[]
 }
@@ -117,46 +117,46 @@ model DeviceChange {
 }
 
 model Task {
-  id               String        @id @default(uuid())
-  taskNumber       Int           @unique
-  deviceId         String?
-  device           Device?       @relation(fields: [deviceId], references: [id])
-  source           String        // "whatsapp" | "zabbix" | "dashboard"
-  workType         String        @default("incident") // incident|consultation|configuration
-  status           String        @default("pending") // pending|diagnosing|awaiting_approval|executing|completed|failed|cancelled
-  originalMessage  String
-  diagnosis        String?
-  proposedSolution String?
-  adminResponse    String?       // "yes" | "no" | null
-  executionResult  String?
-  agentUsed        String?       // "support" | "mikrotik" | "linux"
-  priority         String        @default("medium") // low|medium|high|critical
-  zabbixEventId    String?       @unique
-  zabbixRecoveryId String?
-  zabbixStatus     String?
-  incidentKey      String?
-  incidentOpenedAt DateTime?
-  lastSeenAt       DateTime?
-  resolvedAt       DateTime?
-  durationSeconds  Int?
-  occurrenceCount  Int           @default(1)
-  duplicateCount   Int           @default(0)
-  assignedTo       String?
-  acknowledgedAt   DateTime?
-  dueAt             DateTime?
-  resolutionSummary String?
-  resolutionType   String?
-  validatedAt      DateTime?
-  closedAt         DateTime?
-  slaAckDueAt      DateTime?
-  slaResolveDueAt  DateTime?
-  slaWarningSentAt DateTime?
-  slaAckBreachedAt DateTime?
+  id                   String        @id @default(uuid())
+  taskNumber           Int           @unique
+  deviceId             String?
+  device               Device?       @relation(fields: [deviceId], references: [id])
+  source               String // "whatsapp" | "zabbix" | "dashboard"
+  workType             String        @default("incident") // incident|consultation|configuration
+  status               String        @default("pending") // pending|diagnosing|awaiting_approval|executing|completed|failed|cancelled
+  originalMessage      String
+  diagnosis            String?
+  proposedSolution     String?
+  adminResponse        String? // "yes" | "no" | null
+  executionResult      String?
+  agentUsed            String? // "support" | "mikrotik" | "linux"
+  priority             String        @default("medium") // low|medium|high|critical
+  zabbixEventId        String?       @unique
+  zabbixRecoveryId     String?
+  zabbixStatus         String?
+  incidentKey          String?
+  incidentOpenedAt     DateTime?
+  lastSeenAt           DateTime?
+  resolvedAt           DateTime?
+  durationSeconds      Int?
+  occurrenceCount      Int           @default(1)
+  duplicateCount       Int           @default(0)
+  assignedTo           String?
+  acknowledgedAt       DateTime?
+  dueAt                DateTime?
+  resolutionSummary    String?
+  resolutionType       String?
+  validatedAt          DateTime?
+  closedAt             DateTime?
+  slaAckDueAt          DateTime?
+  slaResolveDueAt      DateTime?
+  slaWarningSentAt     DateTime?
+  slaAckBreachedAt     DateTime?
   slaResolveBreachedAt DateTime?
-  escalationLevel Int           @default(0)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  messages         TaskMessage[]
+  escalationLevel      Int           @default(0)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  messages             TaskMessage[]
 
   @@index([incidentKey, status])
 }
@@ -165,7 +165,7 @@ model TaskMessage {
   id        String   @id @default(uuid())
   taskId    String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  role      String   // "user" | "agent" | "system"
+  role      String // "user" | "agent" | "system"
   content   String
   agentName String?
   createdAt DateTime @default(now())
@@ -191,10 +191,10 @@ model ChatMessage {
   id        String      @id @default(uuid())
   sessionId String
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role      String      // "user" | "assistant"
+  role      String // "user" | "assistant"
   content   String
   agentUsed String?
-  toolCalls String?     // JSON string with tools used
+  toolCalls String? // JSON string with tools used
   createdAt DateTime    @default(now())
 }
 
@@ -203,8 +203,8 @@ model AiUsageLog {
   provider      String
   model         String
   agentName     String?
-  status        String   // success|error|skipped
-  errorKind     String?  // rate_limit|quota|auth|model|provider|unknown
+  status        String // success|error|skipped
+  errorKind     String? // rate_limit|quota|auth|model|provider|unknown
   errorMessage  String?
   inputTokens   Int      @default(0)
   outputTokens  Int      @default(0)
@@ -219,12 +219,49 @@ model AiUsageLog {
 }
 
 model AiProviderState {
-  provider       String   @id
-  status         String   @default("available") // available|cooldown|quota_exhausted|error
-  reason         String?
-  cooldownUntil  DateTime?
-  consecutiveErrors Int   @default(0)
-  lastSuccessAt  DateTime?
-  lastErrorAt    DateTime?
-  updatedAt      DateTime @updatedAt
+  provider          String    @id
+  status            String    @default("available") // available|cooldown|quota_exhausted|error
+  reason            String?
+  cooldownUntil     DateTime?
+  consecutiveErrors Int       @default(0)
+  lastSuccessAt     DateTime?
+  lastErrorAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+}
+
+model CliSession {
+  id           String       @id @default(uuid())
+  userId       String
+  username     String
+  userRole     String
+  deviceId     String
+  deviceName   String
+  deviceType   String
+  hostname     String
+  status       String       @default("active") // active|closed|expired
+  ipAddress    String?
+  userAgent    String?
+  startedAt    DateTime     @default(now())
+  lastActiveAt DateTime     @default(now())
+  endedAt      DateTime?
+  commands     CliCommand[]
+
+  @@index([userId, startedAt])
+  @@index([deviceId, startedAt])
+  @@index([status, lastActiveAt])
+}
+
+model CliCommand {
+  id            String     @id @default(uuid())
+  sessionId     String
+  session       CliSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  command       String
+  commandType   String // read|change
+  justification String?
+  status        String     @default("running") // running|success|failure|blocked
+  output        String?
+  durationMs    Int?
+  createdAt     DateTime   @default(now())
+
+  @@index([sessionId, createdAt])
 }
