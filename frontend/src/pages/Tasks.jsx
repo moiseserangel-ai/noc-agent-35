@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
+import AgentResponse from '../components/AgentResponse.jsx';
 import { useToast } from '../App.jsx';
 
 const formatDuration = seconds => {
@@ -166,16 +167,16 @@ export default function Tasks({ canOperate = false }) {
                 </div>
                 {t.diagnosis && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>DIAGNÓSTICO</div>
-                  <pre style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap', background: 'var(--bg-primary)', padding: 12, borderRadius: 8 }}>{t.diagnosis}</pre>
+                  <div style={{ fontSize: '0.8rem', background: 'var(--bg-primary)', padding: 12, borderRadius: 8 }}><AgentResponse content={t.diagnosis} /></div>
                 </div>}
                 {t.executionResult && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 600, marginBottom: 4 }}>RESULTADO</div>
-                  <pre style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap', background: 'var(--bg-primary)', padding: 12, borderRadius: 8, color: 'var(--success)' }}>{t.executionResult}</pre>
+                  <div style={{ fontSize: '0.8rem', background: 'var(--bg-primary)', padding: 12, borderRadius: 8 }}><AgentResponse content={t.executionResult} /></div>
                 </div>}
                 {t.messages?.length > 0 && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6 }}>LINHA DO TEMPO</div>
                   <div style={{ borderLeft: '2px solid var(--border-primary)', paddingLeft: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {t.messages.map(m => <div key={m.id}><div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(m.createdAt).toLocaleString('pt-BR')} · {m.agentName || m.role}</div><div style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap' }}>{m.content}</div></div>)}
+                    {t.messages.map(m => <div key={m.id}><div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(m.createdAt).toLocaleString('pt-BR')} · {m.agentName || m.role}</div><div style={{ fontSize: '0.8rem' }}><AgentResponse content={m.content} /></div></div>)}
                   </div>
                 </div>}
                 {canOperate && <div onClick={e => e.stopPropagation()} style={{ marginTop: 16, padding: 12, background: 'var(--bg-tertiary)', borderRadius: 8 }}>

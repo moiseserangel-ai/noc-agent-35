@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Plus, Trash2, MessageSquare, Wrench, Bot } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { api } from '../lib/api.js';
+import AgentResponse from '../components/AgentResponse.jsx';
 
 let socket = null;
 function getSocket() {
@@ -153,7 +154,7 @@ export default function Chat() {
             {messages.map((m, i) => (
               <div key={m.id || i} className={`chat-message ${m.role}`}>
                 {m.agentUsed && <div style={{ fontSize: '0.65rem', opacity: 0.7, marginBottom: 4 }}>Agent: {m.agentUsed}</div>}
-                <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                {m.role === 'assistant' ? <AgentResponse content={m.content} /> : <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>}
               </div>
             ))}
             {tools.length > 0 && tools.map((t, i) => (
@@ -162,7 +163,7 @@ export default function Chat() {
                 {t.status === 'start' ? `Executando: ${t.tool}...` : `✅ ${t.tool} concluído`}
               </div>
             ))}
-            {streaming && <div className="chat-message assistant"><div style={{ whiteSpace: 'pre-wrap' }}>{streaming}</div></div>}
+            {streaming && <div className="chat-message assistant"><AgentResponse content={streaming} /></div>}
             {isLoading && !streaming && <div className="chat-tool-indicator"><div className="spinner" /> Agente processando...</div>}
             <div ref={messagesEnd} />
           </div>
