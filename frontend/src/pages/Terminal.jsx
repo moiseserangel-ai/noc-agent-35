@@ -42,11 +42,24 @@ const commandCatalog = {
   ],
 };
 
-function InteractiveConsole({ device, onSession, onClosed }) {
+function InteractiveConsole({ device, visible, onSession, onClosed, onStatus, onActivity }) {
   const host = useRef(null);
   const terminal = useRef(null);
   const socket = useRef(null);
+  const fitAddon = useRef(null);
+  const visibleRef = useRef(visible);
   const [status, setStatus] = useState('connecting');
+
+  useEffect(() => {
+    visibleRef.current = visible;
+    if (visible) requestAnimationFrame(() => {
+      try {
+        fitAddon.current?.fit();
+        socket.current?.emit('cli:interactive:resize', { cols: terminal.current?.cols, rows: terminal.current?.rows });
+        terminal.current?.focus();
+      } catch {}
+    });
+  }, [visible]);
 
   useEffect(() => {
     if (!device || !host.current) return undefined;
@@ -67,6 +80,7 @@ function InteractiveConsole({ device, onSession, onClosed }) {
       },
     });
     const fit = new FitAddon();
+    fitAddon.current = fit;
     term.loadAddon(fit);
     term.open(host.current);
     terminal.current = term;
@@ -91,28 +105,36 @@ function InteractiveConsole({ device, onSession, onClosed }) {
       client.emit('cli:interactive:connect', { deviceId: device.id, cols: term.cols, rows: term.rows }, result => {
         if (!result?.success) {
           setStatus('error');
+          onStatus('error');
           term.writeln(`\r\n\x1b[31mFalha: ${result?.error || 'não foi possível conectar'}\x1b[0m`);
           return;
         }
         setStatus('connected');
+        onStatus('connected');
         onSession(result.session);
         term.focus();
       });
     });
-    client.on('cli:interactive:output', ({ data }) => term.write(data));
+    client.on('cli:interactive:output', ({ data }) => {
+      term.write(data);
+      if (!visibleRef.current) onActivity();
+    });
     client.on('cli:interactive:error', ({ error }) => {
       setStatus('error');
+      onStatus('error');
       term.writeln(`\r\n\x1b[31mErro SSH: ${error}\x1b[0m`);
     });
     client.on('cli:interactive:status', event => {
       if (event.status === 'closed') {
         setStatus('closed');
+        onStatus('closed');
         term.writeln(`\r\n\x1b[33mSessão encerrada: ${event.reason || 'desconectada'}\x1b[0m`);
         onClosed?.();
       }
     });
     client.on('connect_error', error => {
       setStatus('error');
+      onStatus('error');
       term.writeln(`\r\n\x1b[31mWebSocket: ${error.message}\x1b[0m`);
     });
 
@@ -124,11 +146,12 @@ function InteractiveConsole({ device, onSession, onClosed }) {
       term.dispose();
       socket.current = null;
       terminal.current = null;
+      fitAddon.current = null;
     };
   }, [device?.id]);
 
   return (
-    <section className="cli-main cli-interactive-main">
+    <div className={`cli-interactive-panel ${visible ? 'active' : ''}`}>
       <div className="cli-toolbar">
         <div><TerminalSquare size={18} /><strong>{device ? `admin@${device.hostname}` : 'Terminal interativo'}</strong></div>
         <div className={`cli-connection ${status === 'connected' ? 'online' : ''}`}><span /> {{
@@ -137,7 +160,7 @@ function InteractiveConsole({ device, onSession, onClosed }) {
       </div>
       <div className="cli-interactive-notice">Sessão SSH nativa · PTY xterm-256color · acesso administrativo auditado</div>
       <div className="cli-xterm" ref={host} onClick={() => terminal.current?.focus()} />
-    </section>
+    </div>
   );
 }
 
@@ -155,7 +178,8 @@ export default function Terminal({ user }) {
   const [busy, setBusy] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [terminalMode, setTerminalMode] = useState('controlled');
-  const [interactiveActive, setInteractiveActive] = useState(false);
+  const [interactiveTabs, setInteractiveTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState(null);
 
   const device = useMemo(() => devices.find(item => item.id === deviceId), [devices, deviceId]);
   const loadSessions = () => api.getCliSessions().then(result => setSessions(result.data)).catch(() => {});
@@ -173,9 +197,11 @@ export default function Terminal({ user }) {
   const connect = async () => {
     if (!deviceId) return;
     if (terminalMode === 'interactive') {
-      setSession(null);
-      setCommands([]);
-      setInteractiveActive(true);
+      if (interactiveTabs.length >= 5) return toast('Limite de 5 sessões interativas simultâneas.', 'error');
+      if (interactiveTabs.filter(tab => tab.device.id === deviceId).length >= 2) return toast('Limite de 2 sessões neste equipamento.', 'error');
+      const tab = { id: crypto.randomUUID(), device, status: 'connecting', unread: false, session: null };
+      setInteractiveTabs(previous => [...previous, tab]);
+      setActiveTabId(tab.id);
       return;
     }
     setBusy(true);
@@ -191,11 +217,14 @@ export default function Terminal({ user }) {
   };
 
   const openHistory = async id => {
+    if (interactiveTabs.length) {
+      toast('Feche as sessões interativas antes de abrir um histórico na Console auditada.', 'error');
+      return;
+    }
     setBusy(true);
     try {
       const result = await api.getCliCommands(id);
       setSession(result.data.session);
-      setInteractiveActive(false);
       setTerminalMode('controlled');
       setDeviceId(result.data.session.deviceId);
       setCommands(result.data.commands);
@@ -205,12 +234,6 @@ export default function Terminal({ user }) {
   };
 
   const disconnect = async () => {
-    if (interactiveActive) {
-      setInteractiveActive(false);
-      setSession(previous => previous ? { ...previous, status: 'closed' } : null);
-      loadSessions();
-      return;
-    }
     if (!session) return;
     setBusy(true);
     try {
@@ -247,7 +270,24 @@ export default function Terminal({ user }) {
   const autoComplete = (commandCatalog[device?.type] || [])
     .filter(item => currentLine && item.toLowerCase().startsWith(currentLine.toLowerCase()) && item.toLowerCase() !== currentLine.toLowerCase())
     .slice(0, 8);
-  const active = interactiveActive || session?.status === 'active';
+  const active = session?.status === 'active';
+
+  const selectTab = id => {
+    setActiveTabId(id);
+    setInteractiveTabs(previous => previous.map(tab => tab.id === id ? { ...tab, unread: false } : tab));
+  };
+
+  const closeTab = id => {
+    const tab = interactiveTabs.find(item => item.id === id);
+    if (!tab) return;
+    if (tab.status === 'connected' && !window.confirm(`Encerrar a sessão SSH com ${tab.device.name}?`)) return;
+    const remaining = interactiveTabs.filter(item => item.id !== id);
+    setInteractiveTabs(remaining);
+    if (activeTabId === id) setActiveTabId(remaining.at(-1)?.id || null);
+    window.setTimeout(loadSessions, 400);
+  };
+
+  const updateTab = (id, changes) => setInteractiveTabs(previous => previous.map(tab => tab.id === id ? { ...tab, ...changes } : tab));
 
   const completeCommand = value => {
     const lines = command.split('\n');
@@ -275,13 +315,13 @@ export default function Terminal({ user }) {
         <aside className="card cli-sidebar">
           <div>
             <label className="form-label">Equipamento</label>
-            <select className="form-select" value={deviceId} disabled={active || busy} onChange={event => setDeviceId(event.target.value)}>
+            <select className="form-select" value={deviceId} disabled={(terminalMode === 'controlled' && active) || busy} onChange={event => setDeviceId(event.target.value)}>
               {devices.map(item => <option key={item.id} value={item.id}>{item.name} · {item.hostname}</option>)}
             </select>
           </div>
           {user?.role === 'admin' && <div>
             <label className="form-label">Modo de acesso</label>
-            <select className="form-select" value={terminalMode} disabled={active || busy} onChange={event => setTerminalMode(event.target.value)}>
+            <select className="form-select" value={terminalMode} disabled={active || interactiveTabs.length > 0 || busy} onChange={event => setTerminalMode(event.target.value)}>
               <option value="controlled">Console auditada</option>
               <option value="interactive">Terminal interativo</option>
             </select>
@@ -292,9 +332,11 @@ export default function Terminal({ user }) {
             <code>{device.hostname}:{device.port}</code>
             {device.group && <span>Grupo: {device.group}</span>}
           </div>}
-          {!active
-            ? <button className="btn btn-primary" onClick={connect} disabled={!deviceId || busy}><Plug size={16} /> Abrir sessão</button>
-            : <button className="btn btn-secondary" onClick={disconnect} disabled={busy}><X size={16} /> Encerrar sessão</button>}
+          {terminalMode === 'interactive'
+            ? <button className="btn btn-primary" onClick={connect} disabled={!deviceId || busy || interactiveTabs.length >= 5}><Plug size={16} /> Nova sessão ({interactiveTabs.length}/5)</button>
+            : !active
+              ? <button className="btn btn-primary" onClick={connect} disabled={!deviceId || busy}><Plug size={16} /> Abrir sessão</button>
+              : <button className="btn btn-secondary" onClick={disconnect} disabled={busy}><X size={16} /> Encerrar sessão</button>}
 
           <div className="cli-access-note">
             <strong>Seu acesso</strong>
@@ -313,7 +355,29 @@ export default function Terminal({ user }) {
           </div>
         </aside>
 
-        {interactiveActive ? <InteractiveConsole device={device} onSession={next => { setSession(next); loadSessions(); }} onClosed={loadSessions} /> : <section className="cli-main">
+        {terminalMode === 'interactive' ? <section className="cli-main cli-interactive-main">
+          <div className="cli-tabs">
+            {interactiveTabs.map(tab => <button key={tab.id} className={activeTabId === tab.id ? 'active' : ''} onClick={() => selectTab(tab.id)}>
+              <span className={`cli-tab-status ${tab.status}`} />
+              <strong>{tab.device.name}</strong>
+              {tab.unread && <span className="cli-tab-unread" title="Nova atividade" />}
+              <span className="cli-tab-close" role="button" aria-label={`Fechar ${tab.device.name}`} onClick={event => { event.stopPropagation(); closeTab(tab.id); }}><X size={13} /></span>
+            </button>)}
+            <button className="cli-new-tab" onClick={connect} disabled={!deviceId || interactiveTabs.length >= 5}>+ Nova sessão</button>
+          </div>
+          <div className="cli-tab-panels">
+            {!interactiveTabs.length && <div className="cli-welcome">
+              <TerminalSquare size={46} />
+              <strong>Abra até 5 terminais simultâneos</strong>
+              <span>Selecione um equipamento e clique em Nova sessão. São permitidas até 2 conexões no mesmo equipamento.</span>
+            </div>}
+            {interactiveTabs.map(tab => <InteractiveConsole key={tab.id} device={tab.device} visible={activeTabId === tab.id}
+              onSession={next => { updateTab(tab.id, { session: next, status: 'connected' }); loadSessions(); }}
+              onStatus={status => updateTab(tab.id, { status })}
+              onActivity={() => updateTab(tab.id, { unread: true })}
+              onClosed={loadSessions} />)}
+          </div>
+        </section> : <section className="cli-main">
           <div className="cli-toolbar">
             <div><TerminalSquare size={18} /><strong>{session ? `${session.username}@${session.hostname}` : 'Nenhuma sessão aberta'}</strong></div>
             <div className={`cli-connection ${active ? 'online' : ''}`}><span /> {active ? 'Conectado' : statusLabel(session?.status || 'closed')}</div>

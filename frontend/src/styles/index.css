@@ -946,6 +946,23 @@ tr:last-child td { border-bottom: none; }
 .cli-session-history button small { position: absolute; top: 0.55rem; right: 0.55rem; color: var(--primary); font-size: 0.58rem; text-transform: uppercase; }
 .cli-main { display: flex; min-width: 0; min-height: 570px; flex-direction: column; overflow: hidden; border: 1px solid var(--border-primary); border-radius: var(--radius-lg); background: #080c10; box-shadow: var(--shadow-lg); }
 .cli-interactive-main { height: calc(100dvh - 205px); min-height: 570px; }
+.cli-tabs { display: flex; min-height: 44px; overflow-x: auto; border-bottom: 1px solid #26313a; background: #10171d; }
+.cli-tabs > button { position: relative; display: flex; align-items: center; gap: 0.45rem; min-width: 150px; max-width: 230px; padding: 0.55rem 0.65rem; border: 0; border-right: 1px solid #26313a; border-bottom: 2px solid transparent; background: #10171d; color: #8fa3af; cursor: pointer; }
+.cli-tabs > button:hover { background: #151e25; color: #d2dee6; }
+.cli-tabs > button.active { border-bottom-color: var(--primary); background: #080c10; color: #f1f6f9; }
+.cli-tabs > button strong { flex: 1; overflow: hidden; font-size: 0.72rem; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.cli-tabs > button.cli-new-tab { min-width: 120px; color: var(--primary); font-size: 0.7rem; }
+.cli-tabs > button.cli-new-tab:disabled { color: #586873; cursor: not-allowed; }
+.cli-tab-status { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: #71818b; }
+.cli-tab-status.connecting { background: #ffc857; box-shadow: 0 0 7px #ffc857; }
+.cli-tab-status.connected { background: #39d98a; box-shadow: 0 0 7px #39d98a; }
+.cli-tab-status.error, .cli-tab-status.closed { background: #ff6b6b; }
+.cli-tab-unread { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: #63b9f2; box-shadow: 0 0 6px #63b9f2; }
+.cli-tab-close { display: inline-flex; padding: 0.15rem; border-radius: 3px; color: #71818b; }
+.cli-tab-close:hover { background: #2b3740; color: #ff8585; }
+.cli-tab-panels { position: relative; flex: 1; min-width: 0; min-height: 0; background: #080c10; }
+.cli-interactive-panel { position: absolute; inset: 0; display: none; min-width: 0; min-height: 0; flex-direction: column; }
+.cli-interactive-panel.active { display: flex; }
 .cli-interactive-notice { padding: 0.4rem 0.85rem; border-bottom: 1px solid #26313a; background: #0d1318; color: #718591; font-family: var(--font-mono); font-size: 0.64rem; }
 .cli-xterm { flex: 1; min-width: 0; min-height: 0; padding: 0.7rem 0.4rem 0.4rem 0.75rem; overflow: hidden; background: #080c10; }
 .cli-xterm .xterm { height: 100%; }

@@ -6,6 +6,8 @@ import { logAudit } from './audit.service.js';
 import logger from '../utils/logger.js';
 
 const sessions = new Map();
+const MAX_USER_SESSIONS = 5;
+const MAX_DEVICE_SESSIONS = 2;
 const BLOCKED = [
   /\/system\s+reset/i,
   /\/system\s+routerboard\s+upgrade/i,
@@ -91,9 +93,17 @@ export function registerInteractiveCli(socket) {
       if (!device?.isActive || !['mikrotik', 'huawei_vrp', 'linux'].includes(device.type)) {
         return acknowledge({ success: false, error: 'Equipamento não encontrado, inativo ou sem suporte.' });
       }
+      const userSessions = [...sessions.values()].filter(item => item.userId === socket.user.sub);
+      if (userSessions.length >= MAX_USER_SESSIONS) {
+        return acknowledge({ success: false, error: `Limite de ${MAX_USER_SESSIONS} sessões interativas simultâneas atingido.` });
+      }
+      if (userSessions.filter(item => item.deviceId === device.id).length >= MAX_DEVICE_SESSIONS) {
+        return acknowledge({ success: false, error: `Limite de ${MAX_DEVICE_SESSIONS} sessões simultâneas neste equipamento atingido.` });
+      }
 
       const connection = new Client();
       const active = {
+        userId: socket.user.sub,
         connection,
         stream: null,
         sessionId: null,
