@@ -976,6 +976,7 @@ tr:last-child td { border-bottom: none; }
 .cli-confirm-modal { max-width: 620px; }
 .cli-warning-title { display: flex; align-items: center; gap: 0.55rem; color: var(--warning); font-size: 1rem; font-weight: 700; }
 .cli-confirm-modal > pre { max-height: 250px; padding: 0.8rem; overflow: auto; border: 1px solid var(--border-primary); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--warning); white-space: pre-wrap; }
+.cli-auto-audit { padding: 0.65rem 0.75rem; border-left: 3px solid var(--primary); background: var(--primary-glow); color: var(--text-secondary); font-size: 0.78rem; }
 .cli-confirm-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem; }
 .cli-confirm-modal > small { display: flex; align-items: center; gap: 0.3rem; margin-top: 0.8rem; color: var(--text-muted); }
 

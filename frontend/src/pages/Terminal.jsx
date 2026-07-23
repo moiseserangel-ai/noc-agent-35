@@ -124,7 +124,7 @@ export default function Terminal({ user }) {
 
           <div className="cli-access-note">
             <strong>Seu acesso</strong>
-            <span>{user?.role === 'viewer' ? 'Somente consultas' : 'Consultas e alterações controladas'}</span>
+            <span>{user?.role === 'admin' ? 'Consultas e alterações controladas' : 'Somente consultas'}</span>
           </div>
 
           <div className="cli-history-title"><History size={15} /> Sessões recentes</div>
@@ -192,16 +192,14 @@ export default function Terminal({ user }) {
           <div className="cli-warning-title"><AlertTriangle size={22} /> Confirmar alteração</div>
           <p>Este comando foi identificado como alteração de configuração. Confira antes de executar:</p>
           <pre>{pendingChange}</pre>
-          <label className="form-label">Justificativa obrigatória</label>
-          <input className="form-input" value={justification} onChange={event => setJustification(event.target.value)}
-            placeholder="Ex.: ajuste solicitado no incidente #123" autoFocus />
+          <p className="cli-auto-audit">O sistema registrará automaticamente: <strong>Alteração manual via Terminal CLI</strong>.</p>
           <div className="cli-confirm-actions">
             <button className="btn btn-secondary" onClick={() => { setPendingChange(null); setJustification(''); }}>Cancelar</button>
-            <button className="btn btn-danger" disabled={justification.trim().length < 5 || busy} onClick={() => execute({ confirmed: true })}>
+            <button className="btn btn-danger" disabled={busy} onClick={() => execute({ confirmed: true })}>
               <AlertTriangle size={15} /> Confirmar e executar
             </button>
           </div>
-          <small><Clock3 size={12} /> O usuário, comando, justificativa, resultado e horário serão registrados na auditoria.</small>
+          <small><Clock3 size={12} /> O usuário, comando, resultado e horário serão registrados na auditoria.</small>
         </div>
       </div>}
     </div>

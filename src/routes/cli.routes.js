@@ -59,6 +59,9 @@ router.post('/sessions/:id/commands', async (req, res, next) => {
     if (session.status !== 'active') return res.status(409).json({ success: false, error: 'Esta sessão CLI não está mais ativa.' });
     const policy = classifyCliCommand(session.deviceType, req.body.command);
     if (!policy.valid) return res.status(400).json({ success: false, error: policy.reason });
+    if (policy.type === 'change' && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Somente administradores podem executar alterações pelo Terminal CLI.' });
+    }
     if (policy.type === 'change' && !req.body.confirmed) {
       return res.json({ success: true, requiresConfirmation: true, data: { commandType: 'change', command: req.body.command } });
     }

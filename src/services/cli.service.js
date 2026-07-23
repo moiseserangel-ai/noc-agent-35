@@ -59,24 +59,21 @@ export async function getOwnedSession(id, user) {
 export async function executeCliCommand({ session, user, command, justification }) {
   const policy = classifyCliCommand(session.deviceType, command);
   if (!policy.valid) throw Object.assign(new Error(policy.reason), { statusCode: 400 });
-  if (policy.type === 'change' && user.role === 'viewer') throw Object.assign(new Error('Seu perfil permite somente comandos de consulta.'), { statusCode: 403 });
-  if (policy.type === 'change' && String(justification || '').trim().length < 5) {
-    throw Object.assign(new Error('Informe uma justificativa com pelo menos 5 caracteres para executar uma alteração.'), { statusCode: 400 });
-  }
+  if (policy.type === 'change' && user.role !== 'admin') throw Object.assign(new Error('Somente administradores podem executar alterações pelo Terminal CLI.'), { statusCode: 403 });
 
   const record = await prisma.cliCommand.create({
     data: {
       sessionId: session.id,
       command: String(command).trim(),
       commandType: policy.type,
-      justification: policy.type === 'change' ? String(justification).trim() : null,
+      justification: policy.type === 'change' && String(justification || '').trim() ? String(justification).trim() : null,
     },
   });
   const startedAt = Date.now();
   let result;
   try {
     const executor = EXECUTORS[session.deviceType];
-    const input = { deviceId: session.deviceId, command: String(command).trim(), changeComment: justification };
+    const input = { deviceId: session.deviceId, command: String(command).trim(), changeComment: justification || 'Alteração manual via Terminal CLI' };
     result = policy.type === 'change'
       ? await withApprovedRemediation(() => executor(input), { agentName: `cli:${user.username}`, deviceId: session.deviceId })
       : await executor(input);
