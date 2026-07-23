@@ -973,6 +973,10 @@ tr:last-child td { border-bottom: none; }
 .cli-input-row { display: flex; align-items: center; gap: 0.55rem; padding: 0.7rem 0.8rem; border-top: 1px solid #26313a; background: #121920; }
 .cli-input-row > span { color: #39d98a; font-family: var(--font-mono); font-weight: 700; }
 .cli-input-row textarea { min-height: 44px; resize: vertical; border-color: #30404b; background: #080c10; color: #e0e9ee; font-family: var(--font-mono); }
+.cli-autocomplete { display: flex; align-items: center; gap: 0.35rem; padding: 0 0.8rem 0.65rem 2rem; overflow-x: auto; background: #121920; }
+.cli-autocomplete > span { flex-shrink: 0; margin-right: 0.25rem; color: #667b88; font-size: 0.62rem; text-transform: uppercase; }
+.cli-autocomplete button { flex-shrink: 0; padding: 0.3rem 0.5rem; border: 1px solid #293943; border-radius: 4px; background: #0b1116; color: #91a7b4; cursor: pointer; font-family: var(--font-mono); font-size: 0.67rem; }
+.cli-autocomplete button:hover, .cli-autocomplete button.selected { border-color: var(--primary); background: var(--primary-glow); color: var(--primary); }
 .cli-confirm-modal { max-width: 620px; }
 .cli-warning-title { display: flex; align-items: center; gap: 0.55rem; color: var(--warning); font-size: 1rem; font-weight: 700; }
 .cli-confirm-modal > pre { max-height: 250px; padding: 0.8rem; overflow: auto; border: 1px solid var(--border-primary); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--warning); white-space: pre-wrap; }

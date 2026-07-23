@@ -10,6 +10,33 @@ const starterCommands = {
   huawei_vrp: ['display version', 'display interface brief', 'display ip routing-table', 'display alarm active'],
   linux: ['uptime', 'free -m', 'df -h', 'systemctl list-units --failed'],
 };
+const commandCatalog = {
+  mikrotik: [
+    '/system resource print', '/system identity print', '/system routerboard print', '/system clock print',
+    '/interface print', '/interface ethernet print', '/interface vlan print', '/interface bridge print',
+    '/interface bridge port print', '/ip address print', '/ip route print', '/ip arp print',
+    '/ip firewall filter print', '/ip firewall nat print', '/ip firewall mangle print',
+    '/ip dns print', '/ip dhcp-server print', '/ip dhcp-client print', '/ip service print',
+    '/ppp active print', '/ppp secret print', '/routing bgp session print', '/log print',
+    '/queue simple print', '/queue tree print', '/tool traceroute ', '/ping ',
+  ],
+  huawei_vrp: [
+    'display version', 'display device', 'display current-configuration', 'display saved-configuration',
+    'display interface brief', 'display interface ', 'display ip interface brief', 'display ip routing-table',
+    'display arp', 'display mac-address', 'display vlan', 'display bgp peer', 'display bgp routing-table',
+    'display ospf peer brief', 'display isis peer', 'display mpls lsp', 'display alarm active',
+    'display logbuffer', 'display cpu-usage', 'display memory-usage', 'ping ', 'tracert ',
+    'system-view', 'interface ', 'description ', 'undo shutdown', 'shutdown', 'quit', 'return',
+  ],
+  linux: [
+    'uptime', 'free -m', 'df -h', 'du -sh ', 'top -bn1 | head -20', 'ps aux',
+    'ss -tlnp', 'ss -s', 'ip addr show', 'ip route show', 'ip link show', 'ip neigh show',
+    'systemctl status ', 'systemctl list-units --failed', 'systemctl is-active ',
+    'journalctl -u ', 'journalctl -p err --no-pager -n 50', 'dmesg | tail -20',
+    'hostname', 'hostnamectl', 'uname -a', 'ls -la ', 'tail -n 50 ', 'grep -i ',
+    'ping -c 4 ', 'traceroute ',
+  ],
+};
 
 export default function Terminal({ user }) {
   const toast = useToast();
@@ -23,6 +50,7 @@ export default function Terminal({ user }) {
   const [pendingChange, setPendingChange] = useState(null);
   const [justification, setJustification] = useState('');
   const [busy, setBusy] = useState(false);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const device = useMemo(() => devices.find(item => item.id === deviceId), [devices, deviceId]);
   const loadSessions = () => api.getCliSessions().then(result => setSessions(result.data)).catch(() => {});
@@ -87,6 +115,7 @@ export default function Terminal({ user }) {
       } else {
         setCommands(previous => [...previous, result.data]);
         setCommand('');
+        setHistoryIndex(-1);
         setPendingChange(null);
         setJustification('');
       }
@@ -95,7 +124,26 @@ export default function Terminal({ user }) {
   };
 
   const suggestions = starterCommands[device?.type] || [];
+  const currentLine = command.split('\n').at(-1)?.trimStart() || '';
+  const autoComplete = (commandCatalog[device?.type] || [])
+    .filter(item => currentLine && item.toLowerCase().startsWith(currentLine.toLowerCase()) && item.toLowerCase() !== currentLine.toLowerCase())
+    .slice(0, 8);
   const active = session?.status === 'active';
+
+  const completeCommand = value => {
+    const lines = command.split('\n');
+    const indentation = lines.at(-1)?.match(/^\s*/)?.[0] || '';
+    lines[lines.length - 1] = `${indentation}${value}`;
+    setCommand(lines.join('\n'));
+  };
+
+  const navigateHistory = direction => {
+    const history = commands.map(item => item.command).filter(Boolean).reverse();
+    if (!history.length) return;
+    const next = Math.max(-1, Math.min(history.length - 1, historyIndex + direction));
+    setHistoryIndex(next);
+    setCommand(next === -1 ? '' : history[next]);
+  };
 
   return (
     <div>
@@ -178,11 +226,20 @@ export default function Terminal({ user }) {
             </div>
             <div className="cli-input-row">
               <span>$</span>
-              <textarea className="form-input" rows={2} value={command} onChange={event => setCommand(event.target.value)}
-                onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); execute(); } }}
-                placeholder="Digite um comando. Shift + Enter cria uma nova linha." disabled={busy} />
+              <textarea className="form-input" rows={2} value={command} onChange={event => { setCommand(event.target.value); setHistoryIndex(-1); }}
+                onKeyDown={event => {
+                  if (event.key === 'Tab' && autoComplete.length) { event.preventDefault(); completeCommand(autoComplete[0]); }
+                  else if (event.key === 'ArrowUp' && !event.shiftKey) { event.preventDefault(); navigateHistory(1); }
+                  else if (event.key === 'ArrowDown' && !event.shiftKey) { event.preventDefault(); navigateHistory(-1); }
+                  else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); execute(); }
+                }}
+                placeholder="Digite um comando. Tab completa · ↑/↓ histórico · Shift + Enter nova linha." disabled={busy} />
               <button className="btn btn-primary" onClick={() => execute()} disabled={!command.trim() || busy}><Play size={16} /> Executar</button>
             </div>
+            {autoComplete.length > 0 && <div className="cli-autocomplete">
+              <span>Tab para completar</span>
+              {autoComplete.map((item, index) => <button key={item} className={index === 0 ? 'selected' : ''} onMouseDown={event => event.preventDefault()} onClick={() => completeCommand(item)}>{item}</button>)}
+            </div>}
           </>}
         </section>
       </div>
