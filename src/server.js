@@ -28,6 +28,7 @@ import cliRoutes from './routes/cli.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
+import { registerInteractiveCli } from './services/interactive-cli.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -125,6 +126,7 @@ io.use(async (socket, next) => {
 
 io.on('connection', (socket) => {
   logger.info(`Dashboard client connected: ${socket.id}`);
+  registerInteractiveCli(socket);
 
   socket.on('chat:message', async ({ sessionId, message, agentType = 'support' }) => {
     try {

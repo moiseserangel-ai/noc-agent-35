@@ -16,7 +16,8 @@ import Reports from './pages/Reports.jsx';
 import Backups from './pages/Backups.jsx';
 import Security from './pages/Security.jsx';
 import AiUsage from './pages/AiUsage.jsx';
-import Terminal from './pages/Terminal.jsx';
+
+const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
 
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
@@ -126,7 +127,7 @@ export default function App() {
               <Route path="devices" element={<Devices canManage={user?.role === 'admin'} />} />
               <Route path="tasks" element={<Tasks canOperate={['admin', 'operator'].includes(user?.role)} />} />
               <Route path="chat" element={['admin', 'operator'].includes(user?.role) ? <Chat /> : <Navigate to="/" replace />} />
-              <Route path="terminal" element={<Terminal user={user} />} />
+              <Route path="terminal" element={<React.Suspense fallback={<div className="loading-screen"><div className="spinner" /> Carregando terminal...</div>}><Terminal user={user} /></React.Suspense>} />
               <Route path="settings" element={user?.role === 'admin' ? <Settings /> : <Navigate to="/" replace />} />
               <Route path="vpn" element={user?.role === 'admin' ? <Vpn /> : <Navigate to="/" replace />} />
               <Route path="users" element={user?.role === 'admin' ? <Users /> : <Navigate to="/" replace />} />

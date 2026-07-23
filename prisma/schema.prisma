@@ -238,6 +238,7 @@ model CliSession {
   deviceName   String
   deviceType   String
   hostname     String
+  mode         String       @default("controlled") // controlled|interactive
   status       String       @default("active") // active|closed|expired
   ipAddress    String?
   userAgent    String?

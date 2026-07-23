@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Clock3, Copy, Eraser, History, Play, Plug, TerminalSquare, X } from 'lucide-react';
+import { Terminal as XTerm } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { io } from 'socket.io-client';
+import '@xterm/xterm/css/xterm.css';
 import { api } from '../lib/api.js';
 import { useToast } from '../App.jsx';
 
@@ -38,6 +42,105 @@ const commandCatalog = {
   ],
 };
 
+function InteractiveConsole({ device, onSession, onClosed }) {
+  const host = useRef(null);
+  const terminal = useRef(null);
+  const socket = useRef(null);
+  const [status, setStatus] = useState('connecting');
+
+  useEffect(() => {
+    if (!device || !host.current) return undefined;
+    const term = new XTerm({
+      cursorBlink: true,
+      convertEol: false,
+      scrollback: 10000,
+      fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+      fontSize: 13,
+      lineHeight: 1.2,
+      theme: {
+        background: '#080c10', foreground: '#d2dee6', cursor: '#39d98a',
+        black: '#10171c', red: '#ff6b6b', green: '#39d98a', yellow: '#ffc857',
+        blue: '#63b9f2', magenta: '#c792ea', cyan: '#56d4dd', white: '#d2dee6',
+        brightBlack: '#657782', brightRed: '#ff8585', brightGreen: '#55e69a',
+        brightYellow: '#ffd978', brightBlue: '#86cbf7', brightMagenta: '#d9a8f2',
+        brightCyan: '#82e6eb', brightWhite: '#f3f7fa',
+      },
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(host.current);
+    terminal.current = term;
+    requestAnimationFrame(() => fit.fit());
+    term.writeln('\x1b[36mConectando ao equipamento via SSH...\x1b[0m');
+
+    const client = io(window.location.origin, {
+      transports: ['websocket', 'polling'],
+      auth: { token: localStorage.getItem('noc_token') },
+    });
+    socket.current = client;
+    const sendResize = () => {
+      try {
+        fit.fit();
+        client.emit('cli:interactive:resize', { cols: term.cols, rows: term.rows });
+      } catch {}
+    };
+    const observer = new ResizeObserver(sendResize);
+    observer.observe(host.current);
+    const input = term.onData(data => client.emit('cli:interactive:input', { data }));
+    client.on('connect', () => {
+      client.emit('cli:interactive:connect', { deviceId: device.id, cols: term.cols, rows: term.rows }, result => {
+        if (!result?.success) {
+          setStatus('error');
+          term.writeln(`\r\n\x1b[31mFalha: ${result?.error || 'não foi possível conectar'}\x1b[0m`);
+          return;
+        }
+        setStatus('connected');
+        onSession(result.session);
+        term.focus();
+      });
+    });
+    client.on('cli:interactive:output', ({ data }) => term.write(data));
+    client.on('cli:interactive:error', ({ error }) => {
+      setStatus('error');
+      term.writeln(`\r\n\x1b[31mErro SSH: ${error}\x1b[0m`);
+    });
+    client.on('cli:interactive:status', event => {
+      if (event.status === 'closed') {
+        setStatus('closed');
+        term.writeln(`\r\n\x1b[33mSessão encerrada: ${event.reason || 'desconectada'}\x1b[0m`);
+        onClosed?.();
+      }
+    });
+    client.on('connect_error', error => {
+      setStatus('error');
+      term.writeln(`\r\n\x1b[31mWebSocket: ${error.message}\x1b[0m`);
+    });
+
+    return () => {
+      observer.disconnect();
+      input.dispose();
+      client.emit('cli:interactive:disconnect');
+      client.disconnect();
+      term.dispose();
+      socket.current = null;
+      terminal.current = null;
+    };
+  }, [device?.id]);
+
+  return (
+    <section className="cli-main cli-interactive-main">
+      <div className="cli-toolbar">
+        <div><TerminalSquare size={18} /><strong>{device ? `admin@${device.hostname}` : 'Terminal interativo'}</strong></div>
+        <div className={`cli-connection ${status === 'connected' ? 'online' : ''}`}><span /> {{
+          connecting: 'Conectando', connected: 'SSH conectado', closed: 'Encerrado', error: 'Erro',
+        }[status]}</div>
+      </div>
+      <div className="cli-interactive-notice">Sessão SSH nativa · PTY xterm-256color · acesso administrativo auditado</div>
+      <div className="cli-xterm" ref={host} onClick={() => terminal.current?.focus()} />
+    </section>
+  );
+}
+
 export default function Terminal({ user }) {
   const toast = useToast();
   const outputEnd = useRef(null);
@@ -51,6 +154,8 @@ export default function Terminal({ user }) {
   const [justification, setJustification] = useState('');
   const [busy, setBusy] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [terminalMode, setTerminalMode] = useState('controlled');
+  const [interactiveActive, setInteractiveActive] = useState(false);
 
   const device = useMemo(() => devices.find(item => item.id === deviceId), [devices, deviceId]);
   const loadSessions = () => api.getCliSessions().then(result => setSessions(result.data)).catch(() => {});
@@ -67,6 +172,12 @@ export default function Terminal({ user }) {
 
   const connect = async () => {
     if (!deviceId) return;
+    if (terminalMode === 'interactive') {
+      setSession(null);
+      setCommands([]);
+      setInteractiveActive(true);
+      return;
+    }
     setBusy(true);
     try {
       const result = await api.createCliSession(deviceId);
@@ -84,6 +195,8 @@ export default function Terminal({ user }) {
     try {
       const result = await api.getCliCommands(id);
       setSession(result.data.session);
+      setInteractiveActive(false);
+      setTerminalMode('controlled');
       setDeviceId(result.data.session.deviceId);
       setCommands(result.data.commands);
       setPendingChange(null);
@@ -92,6 +205,12 @@ export default function Terminal({ user }) {
   };
 
   const disconnect = async () => {
+    if (interactiveActive) {
+      setInteractiveActive(false);
+      setSession(previous => previous ? { ...previous, status: 'closed' } : null);
+      loadSessions();
+      return;
+    }
     if (!session) return;
     setBusy(true);
     try {
@@ -128,7 +247,7 @@ export default function Terminal({ user }) {
   const autoComplete = (commandCatalog[device?.type] || [])
     .filter(item => currentLine && item.toLowerCase().startsWith(currentLine.toLowerCase()) && item.toLowerCase() !== currentLine.toLowerCase())
     .slice(0, 8);
-  const active = session?.status === 'active';
+  const active = interactiveActive || session?.status === 'active';
 
   const completeCommand = value => {
     const lines = command.split('\n');
@@ -160,6 +279,13 @@ export default function Terminal({ user }) {
               {devices.map(item => <option key={item.id} value={item.id}>{item.name} · {item.hostname}</option>)}
             </select>
           </div>
+          {user?.role === 'admin' && <div>
+            <label className="form-label">Modo de acesso</label>
+            <select className="form-select" value={terminalMode} disabled={active || busy} onChange={event => setTerminalMode(event.target.value)}>
+              <option value="controlled">Console auditada</option>
+              <option value="interactive">Terminal interativo</option>
+            </select>
+          </div>}
           {device && <div className="cli-device-summary">
             <strong>{device.name}</strong>
             <span>{typeLabel(device.type)}</span>
@@ -187,7 +313,7 @@ export default function Terminal({ user }) {
           </div>
         </aside>
 
-        <section className="cli-main">
+        {interactiveActive ? <InteractiveConsole device={device} onSession={next => { setSession(next); loadSessions(); }} onClosed={loadSessions} /> : <section className="cli-main">
           <div className="cli-toolbar">
             <div><TerminalSquare size={18} /><strong>{session ? `${session.username}@${session.hostname}` : 'Nenhuma sessão aberta'}</strong></div>
             <div className={`cli-connection ${active ? 'online' : ''}`}><span /> {active ? 'Conectado' : statusLabel(session?.status || 'closed')}</div>
@@ -241,7 +367,7 @@ export default function Terminal({ user }) {
               {autoComplete.map((item, index) => <button key={item} className={index === 0 ? 'selected' : ''} onMouseDown={event => event.preventDefault()} onClick={() => completeCommand(item)}>{item}</button>)}
             </div>}
           </>}
-        </section>
+        </section>}
       </div>
 
       {pendingChange && <div className="modal-overlay">
