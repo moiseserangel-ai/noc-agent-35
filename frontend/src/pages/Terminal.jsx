@@ -9,6 +9,7 @@ import { useToast } from '../App.jsx';
 
 const typeLabel = value => ({ mikrotik: 'MikroTik RouterOS', huawei_vrp: 'Huawei VRP', linux: 'Linux' }[value] || value);
 const statusLabel = value => ({ active: 'Ativa', closed: 'Encerrada', expired: 'Expirada' }[value] || value);
+const newTerminalId = () => globalThis.crypto?.randomUUID?.() || `cli-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const starterCommands = {
   mikrotik: ['/system resource print', '/interface print', '/ip address print', '/ip route print'],
   huawei_vrp: ['display version', 'display interface brief', 'display ip routing-table', 'display alarm active'],
@@ -199,7 +200,7 @@ export default function Terminal({ user }) {
     if (terminalMode === 'interactive') {
       if (interactiveTabs.length >= 5) return toast('Limite de 5 sessões interativas simultâneas.', 'error');
       if (interactiveTabs.filter(tab => tab.device.id === deviceId).length >= 2) return toast('Limite de 2 sessões neste equipamento.', 'error');
-      const tab = { id: crypto.randomUUID(), device, status: 'connecting', unread: false, session: null };
+      const tab = { id: newTerminalId(), device, status: 'connecting', unread: false, session: null };
       setInteractiveTabs(previous => [...previous, tab]);
       setActiveTabId(tab.id);
       return;
