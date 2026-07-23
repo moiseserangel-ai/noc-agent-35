@@ -105,6 +105,9 @@ export default function Settings() {
   const [geminiModels, setGeminiModels] = useState([]);
   const [loadingGeminiModels, setLoadingGeminiModels] = useState(false);
   const [manualGeminiModel, setManualGeminiModel] = useState(false);
+  const [openaiModels, setOpenaiModels] = useState([]);
+  const [loadingOpenaiModels, setLoadingOpenaiModels] = useState(false);
+  const [manualOpenaiModel, setManualOpenaiModel] = useState(false);
   const [branding, setBranding] = useState({ name:'NOC Agent 35',subtitle:'AI Monitoring',loginSubtitle:'Sistema de Monitoramento NOC com IA',primaryColor:'#00d4ff',logo:null,favicon:null });
   const toast = useToast();
 
@@ -116,7 +119,7 @@ export default function Settings() {
         r.data.forEach(s => { v[s.key] = s.encrypted ? '••••••••' : s.value; });
         v['ai_provider'] ||= 'claude';
         v['ai_incident_mode'] ||= 'hybrid';
-        v['openai_model'] ||= 'gpt-5.6-terra';
+        v['openai_model'] ||= 'gpt-5.6-sol';
         v['gemini_model'] ||= 'gemini-3.5-flash';
         v['claude_model'] ||= 'claude-sonnet-5';
         v['sla_warning_percent'] ||= '80';
@@ -245,6 +248,18 @@ export default function Settings() {
     finally { setLoadingGeminiModels(false); }
   };
 
+  const handleLoadOpenAIModels = async () => {
+    setLoadingOpenaiModels(true);
+    try {
+      const res = await api.getOpenAIModels(values['openai_api_key']);
+      setOpenaiModels(res.data || []);
+      if (res.data?.length && !res.data.some(model => model.id === values['openai_model'])) setValues(v => ({ ...v, openai_model: res.data[0].id }));
+      setManualOpenaiModel(false);
+      toast(`${res.data?.length || 0} modelos de texto encontrados`, 'success');
+    } catch (error) { toast(`❌ ${error.message}`, 'error'); }
+    finally { setLoadingOpenaiModels(false); }
+  };
+
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
   return (
@@ -263,7 +278,13 @@ export default function Settings() {
           {section.fields.map(f => (
             <div className="form-group" key={f.key}>
               <label className="form-label">{f.label}</label>
-              {f.key === 'gemini_model' && geminiModels.length > 0 && !manualGeminiModel ? <select className="form-select" value={values[f.key] || ''} onChange={e => {
+              {f.key === 'openai_model' && openaiModels.length > 0 && !manualOpenaiModel ? <select className="form-select" value={values[f.key] || ''} onChange={e => {
+                if (e.target.value === '__manual__') setManualOpenaiModel(true);
+                else setValues(v => ({ ...v, [f.key]: e.target.value }));
+              }}>
+                {openaiModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
+                <option value="__manual__">Digitar modelo manualmente…</option>
+              </select> : f.key === 'gemini_model' && geminiModels.length > 0 && !manualGeminiModel ? <select className="form-select" value={values[f.key] || ''} onChange={e => {
                 if (e.target.value === '__manual__') setManualGeminiModel(true);
                 else setValues(v => ({ ...v, [f.key]: e.target.value }));
               }}>
@@ -290,6 +311,7 @@ export default function Settings() {
               </button>
             )}
             {section.title === 'OpenAI API' && <button className="btn btn-secondary" onClick={() => handleTestAI('openai')} disabled={testingAI === 'openai'}><CheckCircle size={16} /> Testar OpenAI</button>}
+            {section.title === 'OpenAI API' && <button className="btn btn-secondary" onClick={handleLoadOpenAIModels} disabled={loadingOpenaiModels}>{loadingOpenaiModels ? <><div className="spinner"/> Consultando...</> : <><Activity size={16}/> Carregar modelos</>}</button>}
             {section.title === 'Gemini API' && <button className="btn btn-secondary" onClick={() => handleTestAI('gemini')} disabled={testingAI === 'gemini'}><CheckCircle size={16} /> Testar Gemini</button>}
             {section.title === 'Gemini API' && <button className="btn btn-secondary" onClick={handleLoadGeminiModels} disabled={loadingGeminiModels}>
               {loadingGeminiModels ? <><div className="spinner" /> Consultando...</> : <><Activity size={16} /> Carregar modelos</>}

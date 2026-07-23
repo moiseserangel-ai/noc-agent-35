@@ -6,6 +6,7 @@ import logger from '../utils/logger.js';
 import { providerRunners } from '../ai/providers.js';
 import { getNotificationConfig, sendTelegramMessage } from '../services/notification.service.js';
 import { saveBranding } from '../services/branding.service.js';
+import { listOpenAiModels } from '../services/openai-model.service.js';
 
 const router = Router();
 
@@ -135,7 +136,7 @@ router.post('/test-claude', async (req, res, next) => {
 router.post('/test-ai', async (req, res) => {
   try {
     const { provider } = req.body;
-    const defaultModels = { openai: 'gpt-5.6-terra', gemini: 'gemini-3.5-flash' };
+    const defaultModels = { openai: 'gpt-5.6-sol', gemini: 'gemini-3.5-flash' };
     const model = String(req.body.model || defaultModels[provider] || '').trim();
     const keyName = `${provider}_api_key`;
     if (!providerRunners[provider] || !['openai', 'gemini'].includes(provider)) return res.status(400).json({ success: false, error: 'Provedor inválido' });
@@ -175,6 +176,19 @@ router.post('/gemini-models', async (req, res) => {
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
   }
+});
+
+router.post('/openai-models', async (req, res) => {
+  try {
+    let { apiKey } = req.body;
+    if (!apiKey || apiKey === '••••••••') {
+      const setting = await prisma.settings.findUnique({ where: { key: 'openai_api_key' } });
+      if (!setting?.value) return res.status(400).json({ success: false, error: 'Informe ou salve a API key da OpenAI primeiro' });
+      apiKey = setting.encrypted ? decrypt(setting.value) : setting.value;
+    }
+    const models = await listOpenAiModels(apiKey);
+    res.json({ success: true, data: models });
+  } catch (error) { res.status(error.statusCode || 400).json({ success: false, error: error.message }); }
 });
 
 router.post('/test-evolution', async (req, res, next) => {

@@ -14,7 +14,7 @@ export async function getAiConfiguration() {
     fallback: (values.ai_fallback_order || '').split(',').map(v => v.trim()).filter(Boolean),
     providers: {
       claude: { apiKey: values.claude_api_key || config.claude.apiKey, model: values.claude_model || config.claude.model },
-      openai: { apiKey: values.openai_api_key || '', model: values.openai_model || 'gpt-5.6' },
+      openai: { apiKey: values.openai_api_key || '', model: values.openai_model || 'gpt-5.6-sol' },
       gemini: { apiKey: values.gemini_api_key || '', model: values.gemini_model || 'gemini-3.5-flash' },
     },
   };
