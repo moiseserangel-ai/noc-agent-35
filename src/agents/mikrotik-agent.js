@@ -3,6 +3,8 @@ import { sshMikrotikExec, sshMikrotikToolDefinition } from '../tools/ssh-mikroti
 import { pingHost, pingToolDefinition, tracerouteHost, tracerouteToolDefinition } from '../tools/network.tool.js';
 import logger from '../utils/logger.js';
 import { withApprovedRemediation } from '../security/execution-context.js';
+import { configurationPlanningInstruction } from '../services/agent-approval-policy.service.js';
+import { inferWorkType } from '../services/work-type.service.js';
 
 const SYSTEM_PROMPT = `Você é um especialista em MikroTik RouterOS para um NOC (Network Operations Center).
 
@@ -45,13 +47,15 @@ export default class MikrotikAgent extends BaseAgent {
   }
 
   async diagnose(deviceId, deviceName, request, taskNumber) {
+    const planningInstruction = configurationPlanningInstruction(inferWorkType(request), taskNumber);
     const prompt = `Você recebeu uma solicitação do NOC.
 
 **Dispositivo:** ${deviceName} (ID: ${deviceId})
 **Tipo:** MikroTik RouterOS
 **Task:** #TASK-${taskNumber}
 **Solicitação:** ${request}
-Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma possível. Use o deviceId "${deviceId}" em todas as chamadas de tools.`;
+Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma possível. Use o deviceId "${deviceId}" em todas as chamadas de tools.
+${planningInstruction}`;
 
     try {
       const result = await this.run(prompt);

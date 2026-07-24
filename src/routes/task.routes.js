@@ -4,6 +4,7 @@ import prisma from '../database/client.js';
 import { createSpecialistAgents } from '../vendors/registry.js';
 import { buildSlaFields } from '../services/sla.service.js';
 import { notifyTask } from '../services/notification.service.js';
+import { configurationPlanningInstruction, specialistResultNeedsApproval } from '../services/agent-approval-policy.service.js';
 
 const router = Router();
 const specialistAgents = createSpecialistAgents();
@@ -109,8 +110,9 @@ router.post('/:id/reprocess', async (req, res, next) => {
     await taskService.updateTask(task.id, { status: 'diagnosing', deviceId, agentUsed: device.type, adminResponse: null });
     await taskService.addTaskMessage(task.id, 'system', `Reprocessamento manual iniciado para ${device.name}`);
 
-    const result = await agent.diagnose(device.id, device.name, task.originalMessage, task.taskNumber);
-    const needsApproval = /responda\s+com\s+sim|aguardando\s+aprova[cç][aã]o/i.test(result.text);
+    const request = `${task.originalMessage}${configurationPlanningInstruction(task.workType, task.taskNumber)}`;
+    const result = await agent.diagnose(device.id, device.name, request, task.taskNumber);
+    const needsApproval = specialistResultNeedsApproval(task.workType, result.text);
     const updated = await taskService.updateTask(task.id, {
       status: needsApproval ? 'awaiting_approval' : 'resolved',
       diagnosis: result.text,

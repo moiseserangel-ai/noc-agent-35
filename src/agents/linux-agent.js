@@ -3,6 +3,8 @@ import { sshLinuxExec, sshLinuxToolDefinition } from '../tools/ssh-linux.tool.js
 import { pingHost, pingToolDefinition, tracerouteHost, tracerouteToolDefinition } from '../tools/network.tool.js';
 import logger from '../utils/logger.js';
 import { withApprovedRemediation } from '../security/execution-context.js';
+import { configurationPlanningInstruction } from '../services/agent-approval-policy.service.js';
+import { inferWorkType } from '../services/work-type.service.js';
 
 const SYSTEM_PROMPT = `Você é um especialista em Linux/Servidores para um NOC (Network Operations Center).
 
@@ -47,13 +49,15 @@ export default class LinuxAgent extends BaseAgent {
   }
 
   async diagnose(deviceId, deviceName, request, taskNumber) {
+    const planningInstruction = configurationPlanningInstruction(inferWorkType(request), taskNumber);
     const prompt = `Você recebeu uma solicitação do NOC.
 
 **Servidor:** ${deviceName} (ID: ${deviceId})
 **Tipo:** Linux
 **Task:** #TASK-${taskNumber}
 **Solicitação:** ${request}
-Acesse o servidor, analise e atenda à solicitação da forma mais autônoma possível. Use o deviceId "${deviceId}" em todas as chamadas de tools.`;
+Acesse o servidor, analise e atenda à solicitação da forma mais autônoma possível. Use o deviceId "${deviceId}" em todas as chamadas de tools.
+${planningInstruction}`;
 
     try {
       const result = await this.run(prompt);

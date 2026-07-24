@@ -29,6 +29,7 @@ import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
 import { registerInteractiveCli } from './services/interactive-cli.service.js';
+import { configurationPlanningInstruction, specialistResultNeedsApproval } from './services/agent-approval-policy.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -258,7 +259,8 @@ io.on('connection', (socket) => {
 **Task:** #TASK-${taskNum}
 **Solicitação:** ${originalRequest}
 
-Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma possível. Use o deviceId "${deviceId}" em todas as chamadas de tools.`;
+Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma possível. Use o deviceId "${deviceId}" em todas as chamadas de tools.
+${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
 
                 socket.emit('chat:chunk', { text: `\n\n🔄 **Encaminhando para especialista em ${deviceType}...**\n\n` });
                 socket.emit('chat:typing', { agentType: deviceType });
@@ -275,7 +277,7 @@ Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma 
 
                 result.text += `\n\n🔄 **Encaminhando para especialista em ${deviceType}...**\n\n${specialistResult.text}`;
                 result.toolsUsed.push(...specialistResult.toolsUsed);
-                const needsApproval = /responda\s+com\s+sim|aguardando\s+aprova[cç][aã]o/i.test(specialistResult.text);
+                const needsApproval = specialistResultNeedsApproval(dashboardTask.workType, specialistResult.text);
                 await taskService.updateTask(dashboardTask.id, {
                   status: needsApproval ? 'awaiting_approval' : 'resolved',
                   diagnosis: specialistResult.text,

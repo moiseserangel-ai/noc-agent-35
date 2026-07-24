@@ -4,6 +4,8 @@ import { pingHost, pingToolDefinition, tracerouteHost, tracerouteToolDefinition 
 import { getDeviceById } from '../services/device.service.js';
 import { withApprovedRemediation } from '../security/execution-context.js';
 import logger from '../utils/logger.js';
+import { configurationPlanningInstruction } from '../services/agent-approval-policy.service.js';
+import { inferWorkType } from '../services/work-type.service.js';
 
 const SYSTEM_PROMPT = `Você é especialista em Huawei VRP, com foco na família NetEngine 8000, atuando em um NOC.
 
@@ -50,7 +52,8 @@ export default class HuaweiVrpAgent extends BaseAgent {
 
   async diagnose(deviceId, deviceName, request, taskNumber) {
     try {
-      return await this.run(`Solicitação NOC para ${deviceName} (ID: ${deviceId}), Task #TASK-${taskNumber}.\n${await contextFor(deviceId)}\nSolicitação: ${request}\nUse o deviceId "${deviceId}" nas tools.`);
+      const planningInstruction = configurationPlanningInstruction(inferWorkType(request), taskNumber);
+      return await this.run(`Solicitação NOC para ${deviceName} (ID: ${deviceId}), Task #TASK-${taskNumber}.\n${await contextFor(deviceId)}\nSolicitação: ${request}\nUse o deviceId "${deviceId}" nas tools.\n${planningInstruction}`);
     } catch (error) {
       logger.error(`[huawei_vrp] Diagnosis error: ${error.message}`);
       return { text: `❌ Erro ao diagnosticar ${deviceName}: ${error.message}`, toolsUsed: [] };
