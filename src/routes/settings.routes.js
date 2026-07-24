@@ -7,6 +7,7 @@ import { providerRunners } from '../ai/providers.js';
 import { getNotificationConfig, sendTelegramMessage } from '../services/notification.service.js';
 import { saveBranding } from '../services/branding.service.js';
 import { listOpenAiModels } from '../services/openai-model.service.js';
+import { listAnthropicModels } from '../services/anthropic-model.service.js';
 
 const router = Router();
 
@@ -187,6 +188,19 @@ router.post('/openai-models', async (req, res) => {
       apiKey = setting.encrypted ? decrypt(setting.value) : setting.value;
     }
     const models = await listOpenAiModels(apiKey);
+    res.json({ success: true, data: models });
+  } catch (error) { res.status(error.statusCode || 400).json({ success: false, error: error.message }); }
+});
+
+router.post('/claude-models', async (req, res) => {
+  try {
+    let { apiKey } = req.body;
+    if (!apiKey || apiKey === '••••••••') {
+      const setting = await prisma.settings.findUnique({ where: { key: 'claude_api_key' } });
+      if (!setting?.value) return res.status(400).json({ success: false, error: 'Informe ou salve a API key do Claude primeiro' });
+      apiKey = setting.encrypted ? decrypt(setting.value) : setting.value;
+    }
+    const models = await listAnthropicModels(apiKey);
     res.json({ success: true, data: models });
   } catch (error) { res.status(error.statusCode || 400).json({ success: false, error: error.message }); }
 });

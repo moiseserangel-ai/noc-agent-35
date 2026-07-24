@@ -108,6 +108,9 @@ export default function Settings() {
   const [openaiModels, setOpenaiModels] = useState([]);
   const [loadingOpenaiModels, setLoadingOpenaiModels] = useState(false);
   const [manualOpenaiModel, setManualOpenaiModel] = useState(false);
+  const [claudeModels, setClaudeModels] = useState([]);
+  const [loadingClaudeModels, setLoadingClaudeModels] = useState(false);
+  const [manualClaudeModel, setManualClaudeModel] = useState(false);
   const [branding, setBranding] = useState({ name:'NOC Agent 35',subtitle:'AI Monitoring',loginSubtitle:'Sistema de Monitoramento NOC com IA',primaryColor:'#00d4ff',logo:null,favicon:null });
   const toast = useToast();
 
@@ -260,6 +263,20 @@ export default function Settings() {
     finally { setLoadingOpenaiModels(false); }
   };
 
+  const handleLoadClaudeModels = async () => {
+    setLoadingClaudeModels(true);
+    try {
+      const res = await api.getClaudeModels(values['claude_api_key']);
+      setClaudeModels(res.data || []);
+      if (res.data?.length && !res.data.some(model => model.id === values['claude_model'])) {
+        setValues(v => ({ ...v, claude_model: res.data[0].id }));
+      }
+      setManualClaudeModel(false);
+      toast(`${res.data?.length || 0} modelos Claude encontrados`, 'success');
+    } catch (error) { toast(`❌ ${error.message}`, 'error'); }
+    finally { setLoadingClaudeModels(false); }
+  };
+
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
   return (
@@ -278,7 +295,13 @@ export default function Settings() {
           {section.fields.map(f => (
             <div className="form-group" key={f.key}>
               <label className="form-label">{f.label}</label>
-              {f.key === 'openai_model' && openaiModels.length > 0 && !manualOpenaiModel ? <select className="form-select" value={values[f.key] || ''} onChange={e => {
+              {f.key === 'claude_model' && claudeModels.length > 0 && !manualClaudeModel ? <select className="form-select" value={values[f.key] || ''} onChange={e => {
+                if (e.target.value === '__manual__') setManualClaudeModel(true);
+                else setValues(v => ({ ...v, [f.key]: e.target.value }));
+              }}>
+                {claudeModels.map(model => <option key={model.id} value={model.id}>{model.name} — {model.id}</option>)}
+                <option value="__manual__">Digitar modelo manualmente…</option>
+              </select> : f.key === 'openai_model' && openaiModels.length > 0 && !manualOpenaiModel ? <select className="form-select" value={values[f.key] || ''} onChange={e => {
                 if (e.target.value === '__manual__') setManualOpenaiModel(true);
                 else setValues(v => ({ ...v, [f.key]: e.target.value }));
               }}>
@@ -310,6 +333,9 @@ export default function Settings() {
                 {testingClaude ? <><div className="spinner" /> Testando...</> : <><CheckCircle size={16} /> Testar Conexão</>}
               </button>
             )}
+            {section.title === 'Claude API' && <button className="btn btn-secondary" onClick={handleLoadClaudeModels} disabled={loadingClaudeModels}>
+              {loadingClaudeModels ? <><div className="spinner" /> Consultando...</> : <><Activity size={16} /> Carregar modelos</>}
+            </button>}
             {section.title === 'OpenAI API' && <button className="btn btn-secondary" onClick={() => handleTestAI('openai')} disabled={testingAI === 'openai'}><CheckCircle size={16} /> Testar OpenAI</button>}
             {section.title === 'OpenAI API' && <button className="btn btn-secondary" onClick={handleLoadOpenAIModels} disabled={loadingOpenaiModels}>{loadingOpenaiModels ? <><div className="spinner"/> Consultando...</> : <><Activity size={16}/> Carregar modelos</>}</button>}
             {section.title === 'Gemini API' && <button className="btn btn-secondary" onClick={() => handleTestAI('gemini')} disabled={testingAI === 'gemini'}><CheckCircle size={16} /> Testar Gemini</button>}
