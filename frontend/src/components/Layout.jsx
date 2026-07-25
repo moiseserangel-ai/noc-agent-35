@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { path: '/audit', label: 'Auditoria', icon: ScrollText, roles: ['admin'] },
   { path: '/reports', label: 'Relatórios', icon: BarChart3 },
   { path: '/ai-usage', label: 'Consumo de IA', icon: Gauge, roles: ['admin'] },
+  { path: '/knowledge', label: 'Base de conhecimento', icon: Library, roles: ['admin'] },
   { path: '/backups', label: 'Backup e restauração', icon: DatabaseBackup, roles: ['admin'] },
   { path: '/security', label: 'Minha segurança', icon: Shield },
 ];

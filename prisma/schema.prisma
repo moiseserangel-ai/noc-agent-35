@@ -229,6 +229,53 @@ model AiProviderState {
   updatedAt         DateTime  @updatedAt
 }
 
+model KnowledgeDocument {
+  id         String           @id @default(uuid())
+  title      String
+  filename   String
+  sourceType String           @default("markdown") // markdown|text|pdf|url
+  sourceUrl  String?
+  content    String
+  agentScope String           @default("global") // global|support|mikrotik|linux|huawei_vrp
+  tags       String?
+  status     String           @default("active") // active|disabled
+  chunkCount Int              @default(0)
+  uploadedBy String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  chunks     KnowledgeChunk[]
+
+  @@index([agentScope, status])
+  @@index([updatedAt])
+}
+
+model KnowledgeChunk {
+  id         String            @id @default(uuid())
+  documentId String
+  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  position   Int
+  heading    String?
+  content    String
+  searchText String
+  createdAt  DateTime          @default(now())
+
+  @@unique([documentId, position])
+  @@index([documentId])
+}
+
+model KnowledgeRetrievalLog {
+  id          String   @id @default(uuid())
+  agentName   String
+  query       String
+  documentIds String
+  chunkIds    String
+  resultCount Int
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([agentName, createdAt])
+}
+
 model CliSession {
   id           String       @id @default(uuid())
   userId       String

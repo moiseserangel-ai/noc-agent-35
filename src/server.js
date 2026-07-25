@@ -25,6 +25,7 @@ import backupRoutes from './routes/backup.routes.js';
 import aiUsageRoutes from './routes/ai-usage.routes.js';
 import brandingRoutes from './routes/branding.routes.js';
 import cliRoutes from './routes/cli.routes.js';
+import knowledgeRoutes from './routes/knowledge.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -74,6 +75,7 @@ app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/backups', authMiddleware, requireRoles('admin'), backupRoutes);
 app.use('/api/ai-usage', authMiddleware, requireRoles('admin'), auditMutation, aiUsageRoutes);
 app.use('/api/cli', authMiddleware, auditMutation, cliRoutes);
+app.use('/api/knowledge', authMiddleware, requireRoles('admin'), auditMutation, knowledgeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -289,8 +291,14 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
                 });
                 await taskService.addTaskMessage(dashboardTask.id, 'agent', specialistResult.text, deviceType);
               }
+            } else if (classification.action === 'knowledge_answer') {
+              const answer = classification.message || 'Não encontrei conteúdo suficiente na base de conhecimento para responder.';
+              result.text = answer;
+              socket.emit('chat:chunk', { text: answer });
             } else if (classification.action === 'unknown') {
-              socket.emit('chat:chunk', { text: classification.message || '\n\nNão consegui identificar o equipamento ou a ação desejada.' });
+              const answer = classification.message || 'Não consegui identificar o equipamento ou a ação desejada.';
+              result.text = answer;
+              socket.emit('chat:chunk', { text: answer });
             }
           } catch (e) {
             logger.warn(`Could not parse JSON for specialist routing: ${e.message}`);

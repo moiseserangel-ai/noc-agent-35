@@ -99,6 +99,15 @@ export const api = {
   getChatMessages: (sessionId) => request(`/chat/sessions/${sessionId}/messages`),
   deleteChatSession: (id) => request(`/chat/sessions/${id}`, { method: 'DELETE' }),
 
+  // Base de conhecimento
+  getKnowledgeDocuments: () => request('/knowledge'),
+  getKnowledgeDocument: id => request(`/knowledge/${id}`),
+  createKnowledgeDocument: data => request('/knowledge', { method: 'POST', body: JSON.stringify(data) }),
+  updateKnowledgeDocument: (id, data) => request(`/knowledge/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  setKnowledgeDocumentStatus: (id, status) => request(`/knowledge/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  deleteKnowledgeDocument: id => request(`/knowledge/${id}`, { method: 'DELETE' }),
+  testKnowledgeSearch: (query, agentScope) => request('/knowledge/test/search', { method: 'POST', body: JSON.stringify({ query, agentScope }) }),
+
   // Terminal CLI
   getCliDevices: () => request('/cli/devices'),
   getCliSessions: (all = false) => request(`/cli/sessions${all ? '?all=true' : ''}`),

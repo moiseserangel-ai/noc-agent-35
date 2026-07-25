@@ -4,6 +4,7 @@ import prisma from '../database/client.js';
 import { decrypt } from '../utils/crypto.js';
 import { providerRunners } from '../ai/providers.js';
 import { providerAvailability, recordAiFailure, recordAiSkipped, recordAiSuccess } from '../services/ai-usage.service.js';
+import { knowledgeContext } from '../services/knowledge.service.js';
 
 export async function getAiConfiguration() {
   const keys = ['ai_provider', 'ai_fallback_order', 'claude_api_key', 'claude_model', 'openai_api_key', 'openai_model', 'gemini_api_key', 'gemini_model'];
@@ -29,6 +30,7 @@ export default class BaseAgent {
     try { return JSON.stringify(await handler(input)); } catch (err) { logger.error(`Tool ${name}: ${err.message}`); return JSON.stringify({ error: err.message }); }
   }
   async run(userMessage, _context = {}, onEvent) {
+    const contextualMessage = `${userMessage}${await knowledgeContext(userMessage, this.name)}`;
     const cfg = await getAiConfiguration();
     const order = [...new Set([cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
     if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');
@@ -44,7 +46,7 @@ export default class BaseAgent {
       const startedAt = Date.now();
       try {
         logger.info(`[${this.name}] provider=${provider} model=${cfg.providers[provider].model}`);
-        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: userMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent });
+        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: contextualMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent });
         await recordAiSuccess({ provider, model: cfg.providers[provider].model, agentName: this.name, usage: result.usage, durationMs: Date.now() - startedAt });
         return { ...result, provider };
       } catch (err) {

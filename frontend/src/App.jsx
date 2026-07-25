@@ -16,6 +16,7 @@ import Reports from './pages/Reports.jsx';
 import Backups from './pages/Backups.jsx';
 import Security from './pages/Security.jsx';
 import AiUsage from './pages/AiUsage.jsx';
+import Knowledge from './pages/Knowledge.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
 
@@ -134,6 +135,7 @@ export default function App() {
               <Route path="audit" element={user?.role === 'admin' ? <Audit /> : <Navigate to="/" replace />} />
               <Route path="reports" element={<Reports />} />
               <Route path="ai-usage" element={user?.role === 'admin' ? <AiUsage /> : <Navigate to="/" replace />} />
+              <Route path="knowledge" element={user?.role === 'admin' ? <Knowledge /> : <Navigate to="/" replace />} />
               <Route path="backups" element={user?.role === 'admin' ? <Backups /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />

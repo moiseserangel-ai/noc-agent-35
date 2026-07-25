@@ -755,7 +755,10 @@ tr:last-child td { border-bottom: none; }
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(410px, 0.75fr);
-  min-height: 100vh;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   overflow: hidden;
   isolation: isolate;
   background: #050810;
@@ -775,7 +778,8 @@ tr:last-child td { border-bottom: none; }
 .login-showcase {
   display: flex;
   min-width: 0;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   flex-direction: column;
   padding: clamp(30px, 4.5vw, 70px) clamp(34px, 6vw, 96px);
 }
@@ -828,7 +832,8 @@ tr:last-child td { border-bottom: none; }
 .login-integrations small { padding: 0.25rem 0.55rem; border: 1px solid rgba(120, 145, 170, 0.15); border-radius: 999px; background: rgba(11, 18, 29, 0.65); color: #76869a; font-size: 0.6rem; }
 .login-access {
   display: flex;
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   align-items: center;
   justify-content: center;
   padding: clamp(24px, 4vw, 60px);
@@ -870,14 +875,57 @@ tr:last-child td { border-bottom: none; }
   .login-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .login-feature:nth-child(n+5) { display: none; }
 }
+@media (min-width: 861px) and (max-height: 850px) {
+  .login-showcase { padding-top: 28px; padding-bottom: 28px; }
+  .login-brand-mark { width: 42px; height: 42px; border-radius: 12px; }
+  .login-hero { margin-top: clamp(24px, 4.5vh, 42px); }
+  .login-hero h1 { font-size: clamp(2rem, 3.7vw, 3.65rem); }
+  .login-hero > p { margin-top: 0.9rem; line-height: 1.55; }
+  .login-proof { margin-top: 1rem; }
+  .login-feature-grid { margin-top: clamp(20px, 3.5vh, 34px); }
+  .login-feature { padding: 0.7rem; }
+  .login-integrations { padding-top: 1.2rem; }
+  .login-access { padding-top: 24px; padding-bottom: 24px; }
+  .login-security-badge { margin-bottom: 1rem; }
+  .login-form { margin-top: 1.5rem; }
+  .login-access footer { margin-top: 1.8rem; }
+}
+@media (min-width: 861px) and (max-height: 720px) {
+  .login-showcase { padding-top: 20px; padding-bottom: 20px; }
+  .login-brand-mark { width: 38px; height: 38px; }
+  .login-brand span { display: none; }
+  .login-hero { margin-top: 18px; }
+  .login-eyebrow { margin-bottom: 0.6rem; }
+  .login-hero h1 { font-size: clamp(1.8rem, 3.2vw, 3rem); }
+  .login-hero > p { margin-top: 0.65rem; font-size: 0.84rem; line-height: 1.45; }
+  .login-proof { margin-top: 0.75rem; }
+  .login-feature-grid { margin-top: 16px; }
+  .login-feature { align-items: center; padding: 0.55rem 0.65rem; }
+  .login-feature > div { width: 30px; height: 30px; }
+  .login-feature p { display: none; }
+  .login-feature strong { margin-bottom: 0; }
+  .login-integrations { padding-top: 0.8rem; }
+  .login-integrations > span { display: none; }
+  .login-access { padding-top: 18px; padding-bottom: 18px; }
+  .login-security-badge { margin-bottom: 0.75rem; }
+  .login-form { margin-top: 1.15rem; }
+  .login-form .form-group { margin-bottom: 0.8rem; }
+  .login-field .form-input { height: 44px; }
+  .login-restricted { margin-top: 0.9rem; padding-top: 0.85rem; }
+  .login-access footer { margin-top: 1rem; }
+}
+@media (min-width: 861px) and (max-height: 610px) {
+  .login-page { height: auto; min-height: 100dvh; overflow-x: hidden; overflow-y: auto; }
+  .login-showcase, .login-access { height: auto; min-height: 610px; }
+}
 @media (max-width: 860px) {
-  .login-page { display: flex; min-height: 100dvh; flex-direction: column; overflow: auto; }
-  .login-access { order: -1; width: 100%; min-height: 100dvh; padding: 32px 22px; border-left: 0; }
+  .login-page { display: flex; height: auto; min-height: 100dvh; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+  .login-access { order: -1; width: 100%; height: auto; min-height: 100dvh; padding: 32px 22px; border-left: 0; }
   .login-access-inner { max-width: 430px; }
   .login-mobile-brand { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 2.2rem; }
   .login-mobile-brand strong { font-size: 0.95rem; }
   .login-mobile-brand .login-brand-mark { width: 44px; height: 44px; }
-  .login-showcase { min-height: auto; padding: 56px 24px; }
+  .login-showcase { height: auto; min-height: auto; padding: 56px 24px; }
   .login-showcase > .login-brand { display: none; }
   .login-hero { margin-top: 0; }
   .login-hero h1 { font-size: clamp(2rem, 8vw, 3.2rem); }
@@ -896,6 +944,45 @@ tr:last-child td { border-bottom: none; }
   .login-proof { flex-direction: column; }
   .login-feature-grid { grid-template-columns: 1fr; }
   .login-feature:nth-child(n+5) { display: none; }
+}
+
+/* ═══ Settings ═══ */
+.knowledge-summary { display: grid; grid-template-columns: minmax(190px, .45fr) minmax(190px, .45fr) minmax(320px, 1.1fr); gap: var(--space-md); margin-bottom: var(--space-md); }
+.knowledge-safety { display: flex; flex-direction: column; justify-content: center; padding: 14px 18px; border: 1px solid rgba(0,230,118,.2); border-radius: var(--radius-lg); background: var(--success-dim); }
+.knowledge-safety strong { color: var(--success); font-size: .8rem; }
+.knowledge-safety span { color: var(--text-secondary); font-size: .72rem; line-height: 1.45; }
+.knowledge-grid { display: grid; grid-template-columns: minmax(330px,.75fr) minmax(420px,1.25fr); gap: var(--space-md); }
+.knowledge-editor .card-header p, .knowledge-grid .card-header p { color: var(--text-muted); font-size: .72rem; }
+.knowledge-source-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; padding: 4px; border-radius: var(--radius-md); background: var(--bg-input); }
+.knowledge-source-tabs button { display: flex; min-height: 38px; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); font: inherit; font-size: .72rem; cursor: pointer; }
+.knowledge-source-tabs button.active { background: var(--primary-glow); color: var(--primary); box-shadow: inset 0 0 0 1px var(--border-accent); }
+.knowledge-refresh { display: flex; align-items: center; gap: 8px; margin: -4px 0 14px; color: var(--text-secondary); font-size: .7rem; cursor: pointer; }
+.knowledge-refresh input { accent-color: var(--primary); }
+.knowledge-dropzone { display: flex; width: 100%; min-height: 116px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; margin-bottom: 16px; padding: 16px; border: 1px dashed var(--border-secondary); border-radius: var(--radius-md); background: var(--bg-input); color: var(--text-secondary); cursor: pointer; transition: var(--transition-fast); }
+.knowledge-dropzone:hover, .knowledge-dropzone.selected { border-color: var(--primary); background: var(--primary-glow); color: var(--primary); }
+.knowledge-dropzone strong { font-size: .82rem; }
+.knowledge-dropzone span { color: var(--text-muted); font-size: .66rem; text-align: center; }
+.knowledge-file-preview { display: flex; align-items: center; gap: 7px; margin: -5px 0 14px; color: var(--success); font-size: .7rem; }
+.knowledge-search { display: grid; grid-template-columns: 190px 1fr; gap: 8px; margin-bottom: 14px; }
+.knowledge-search > div { display: flex; gap: 7px; }
+.knowledge-search .btn { flex: 0 0 44px; justify-content: center; padding: 0; }
+.knowledge-results { display: flex; max-height: 455px; flex-direction: column; gap: 8px; overflow-y: auto; }
+.knowledge-results article { padding: 12px; border: 1px solid var(--border-primary); border-radius: var(--radius-md); background: var(--bg-input); }
+.knowledge-results article header { display: flex; justify-content: space-between; gap: 10px; }
+.knowledge-results article header strong { color: var(--primary); font-size: .78rem; }
+.knowledge-results article header span, .knowledge-results article small, .knowledge-muted { color: var(--text-muted); font-size: .66rem; }
+.knowledge-results article p { display: -webkit-box; margin-top: 7px; overflow: hidden; color: var(--text-secondary); font-size: .72rem; line-height: 1.55; white-space: pre-wrap; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
+.table-actions { display: flex; justify-content: flex-end; gap: 3px; }
+
+@media (max-width: 1050px) {
+  .knowledge-summary { grid-template-columns: 1fr 1fr; }
+  .knowledge-safety { grid-column: 1 / -1; }
+  .knowledge-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .knowledge-summary { grid-template-columns: 1fr; }
+  .knowledge-safety { grid-column: auto; }
+  .knowledge-search { grid-template-columns: 1fr; }
 }
 
 /* ═══ Settings ═══ */
