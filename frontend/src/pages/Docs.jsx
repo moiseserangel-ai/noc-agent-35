@@ -11,11 +11,10 @@ export default function Docs() {
         <p>Guias de configuração e integração das APIs</p>
       </div>
 
-      <div className="tabs">
+      <div className="docs-tabs">
         <button 
           className={`tab-btn ${activeTab === 'evolution' ? 'active' : ''}`}
           onClick={() => setActiveTab('evolution')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: activeTab === 'evolution' ? 'var(--primary)' : 'transparent', border: '1px solid var(--primary)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text)', marginRight: '8px' }}
         >
           <MessageSquare size={16} />
           Evolution API (WhatsApp)
@@ -23,7 +22,6 @@ export default function Docs() {
         <button 
           className={`tab-btn ${activeTab === 'claude' ? 'active' : ''}`}
           onClick={() => setActiveTab('claude')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: activeTab === 'claude' ? 'var(--primary)' : 'transparent', border: '1px solid var(--primary)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text)', marginRight: '8px' }}
         >
           <Activity size={16} />
           Claude API (Anthropic)
@@ -31,7 +29,6 @@ export default function Docs() {
         <button 
           className={`tab-btn ${activeTab === 'architecture' ? 'active' : ''}`}
           onClick={() => setActiveTab('architecture')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: activeTab === 'architecture' ? 'var(--primary)' : 'transparent', border: '1px solid var(--primary)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text)' }}
         >
           <Cpu size={16} />
           Arquitetura dos Agentes
@@ -61,7 +58,7 @@ export default function Docs() {
 
             <h4>3. Configurando o Webhook no Evolution</h4>
             <p>Para que o NOC Agent receba suas respostas, você deve configurar o Webhook na Evolution API apontando para o seu servidor NOC.</p>
-            <pre style={{ background: '#0f172a', padding: '12px', borderRadius: '4px', marginTop: '8px', overflowX: 'auto' }}>
+            <pre className="docs-code-block">
               <code>URL do Webhook: http://IP_DO_NOC:3000/api/webhooks/evolution</code>
               <br/>
               <code>Eventos marcados: messages.upsert</code>
@@ -83,7 +80,7 @@ export default function Docs() {
 
             <h4>2. Entendendo os Modelos</h4>
             <p>A Anthropic atualiza os modelos frequentemente. No painel de configurações do NOC Agent, você deve usar o <strong>ID exato da API</strong>. Alguns dos modelos mais recomendados:</p>
-            <ul style={{ background: '#0f172a', padding: '16px 32px', borderRadius: '4px', listStyleType: 'disc' }}>
+            <ul className="docs-highlight-list">
               <li><strong>Claude 3.5 Sonnet:</strong> <code>claude-3-5-sonnet-20241022</code> (Rápido, inteligente, excelente para código e diagnóstico avançado. É o mais recomendado).</li>
               <li><strong>Claude 3 Haiku:</strong> <code>claude-3-haiku-20240307</code> (Mais barato e ultrarrápido, ótimo se você tiver centenas de alertas pequenos).</li>
               <li><strong>Claude 3 Opus:</strong> <code>claude-3-opus-20240229</code> (Maior raciocínio, porém mais lento e caro).</li>
@@ -107,7 +104,7 @@ export default function Docs() {
             </p>
 
             <h4>2. A Rede de Agentes</h4>
-            <ul style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <ul className="docs-agent-list">
               <li>
                 <strong>Support Agent (Orquestrador):</strong> Quando você manda mensagem no Dashboard, WhatsApp ou chega um alerta do Zabbix, ele é o primeiro a ler. 
                 A função dele não é consertar a rede, e sim <strong>descobrir de qual equipamento estamos falando</strong> (usando a Tool <code>search_device</code>) e encaminhar a tarefa para o especialista correto na mesma hora.

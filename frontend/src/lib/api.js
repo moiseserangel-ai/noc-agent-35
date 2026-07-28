@@ -54,6 +54,17 @@ export const api = {
     if (!res.ok) { let data={}; try{data=await res.json();}catch{} throw new Error(data.error || 'Falha ao baixar backup'); }
     return res.blob();
   },
+  getDeviceBackups: () => request('/device-backups'),
+  getDeviceBackupSnapshots: (deviceId, limit = 100) => request(`/device-backups/snapshots?deviceId=${encodeURIComponent(deviceId)}&limit=${limit}`),
+  saveDeviceBackupPolicy: (deviceId, data) => request(`/device-backups/policies/${deviceId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  runDeviceBackup: deviceId => request(`/device-backups/run/${deviceId}`, { method: 'POST' }),
+  compareDeviceBackups: (before, after) => request(`/device-backups/compare?before=${encodeURIComponent(before)}&after=${encodeURIComponent(after)}`),
+  deleteDeviceBackup: id => request(`/device-backups/snapshots/${id}`, { method: 'DELETE' }),
+  downloadDeviceBackup: async id => {
+    const res = await fetch(`${BASE}/device-backups/snapshots/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${getToken()}` } });
+    if (!res.ok) { let data={}; try{data=await res.json();}catch{} throw new Error(data.error || 'Falha ao baixar configuração'); }
+    return { blob: await res.blob(), filename: res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] || 'configuracao.txt' };
+  },
 
   // Devices
   getDevices: () => request('/devices'),
@@ -107,6 +118,9 @@ export const api = {
   setKnowledgeDocumentStatus: (id, status) => request(`/knowledge/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   deleteKnowledgeDocument: id => request(`/knowledge/${id}`, { method: 'DELETE' }),
   testKnowledgeSearch: (query, agentScope) => request('/knowledge/test/search', { method: 'POST', body: JSON.stringify({ query, agentScope }) }),
+  discoverKnowledgePages: data => request('/knowledge/crawl/discover', { method: 'POST', body: JSON.stringify(data) }),
+  importKnowledgePages: data => request('/knowledge/crawl/import', { method: 'POST', body: JSON.stringify(data) }),
+  getKnowledgeImportJob: id => request(`/knowledge/crawl/jobs/${id}`),
 
   // Terminal CLI
   getCliDevices: () => request('/cli/devices'),

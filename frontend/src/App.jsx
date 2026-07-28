@@ -17,11 +17,29 @@ import Backups from './pages/Backups.jsx';
 import Security from './pages/Security.jsx';
 import AiUsage from './pages/AiUsage.jsx';
 import Knowledge from './pages/Knowledge.jsx';
+import DeviceBackups from './pages/DeviceBackups.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
 
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
+
+const themePrimary = (color, light) => {
+  const match = String(color || '').match(/^#([0-9a-f]{6})$/i);
+  if (!light || !match) return color || '#00d4ff';
+  const rgb = [0, 2, 4].map(index => parseInt(match[1].slice(index, index + 2), 16));
+  const luminance = (rgb[0] * .299 + rgb[1] * .587 + rgb[2] * .114) / 255;
+  if (luminance < .48) return color;
+  return `#${rgb.map(value => Math.round(value * .58).toString(16).padStart(2, '0')).join('')}`;
+};
+
+const applyPrimary = (color, light = document.documentElement.dataset.theme === 'light') => {
+  const primary = themePrimary(color, light);
+  document.documentElement.style.setProperty('--primary', primary);
+  document.documentElement.style.setProperty('--primary-glow', `${primary}1c`);
+  document.documentElement.style.setProperty('--primary-strong', `${primary}33`);
+  document.documentElement.style.setProperty('--border-accent', `${primary}38`);
+};
 
 function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
@@ -48,15 +66,27 @@ export default function App() {
   const [authed, setAuthed] = useState(null);
   const [user, setUser] = useState(null);
   const [branding, setBranding] = useState({ name:'NOC Agent 35', subtitle:'AI Monitoring', loginSubtitle:'Sistema de Monitoramento NOC com IA', primaryColor:'#00d4ff', logo:null, favicon:null });
+  const [theme, setTheme] = useState(() => localStorage.getItem('noc_theme') || 'dark');
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    const applyTheme = () => {
+      const resolved = theme === 'auto' ? (media.matches ? 'light' : 'dark') : theme;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.style.colorScheme = resolved;
+      applyPrimary(branding.primaryColor || '#00d4ff', resolved === 'light');
+    };
+    localStorage.setItem('noc_theme', theme);
+    applyTheme();
+    media.addEventListener?.('change', applyTheme);
+    return () => media.removeEventListener?.('change', applyTheme);
+  }, [theme, branding.primaryColor]);
 
   useEffect(() => {
     const apply = next => {
       setBranding(next);
       const color = next.primaryColor || '#00d4ff';
-      document.documentElement.style.setProperty('--primary', color);
-      document.documentElement.style.setProperty('--primary-glow', `${color}26`);
-      document.documentElement.style.setProperty('--primary-strong', `${color}40`);
-      document.documentElement.style.setProperty('--border-accent', `${color}33`);
+      applyPrimary(color);
       document.title = `${next.name || 'NOC Agent 35'} - Dashboard`;
       const favicon = document.querySelector("link[rel='icon']");
       if (favicon) favicon.href = next.favicon || '/favicon.svg';
@@ -119,11 +149,11 @@ export default function App() {
         <Routes>
           {!authed ? (
             <>
-              <Route path="/login" element={<Login branding={branding} onLogin={loggedUser => { setUser(loggedUser); setAuthed(true); }} />} />
+              <Route path="/login" element={<Login branding={branding} theme={theme} onTheme={setTheme} onLogin={loggedUser => { setUser(loggedUser); setAuthed(true); }} />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </>
           ) : (
-            <Route element={<Layout branding={branding} user={user} onLogout={async () => { try { await api.logout(); } catch {} localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
+            <Route element={<Layout branding={branding} user={user} theme={theme} onTheme={setTheme} onLogout={async () => { try { await api.logout(); } catch {} localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
               <Route index element={<Dashboard showBackup={user?.role === 'admin'} />} />
               <Route path="devices" element={<Devices canManage={user?.role === 'admin'} />} />
               <Route path="tasks" element={<Tasks canOperate={['admin', 'operator'].includes(user?.role)} />} />
@@ -137,6 +167,7 @@ export default function App() {
               <Route path="ai-usage" element={user?.role === 'admin' ? <AiUsage /> : <Navigate to="/" replace />} />
               <Route path="knowledge" element={user?.role === 'admin' ? <Knowledge /> : <Navigate to="/" replace />} />
               <Route path="backups" element={user?.role === 'admin' ? <Backups /> : <Navigate to="/" replace />} />
+              <Route path="device-backups" element={user?.role === 'admin' ? <DeviceBackups /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />

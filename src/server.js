@@ -26,11 +26,14 @@ import aiUsageRoutes from './routes/ai-usage.routes.js';
 import brandingRoutes from './routes/branding.routes.js';
 import cliRoutes from './routes/cli.routes.js';
 import knowledgeRoutes from './routes/knowledge.routes.js';
+import deviceBackupRoutes from './routes/device-backup.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
 import { registerInteractiveCli } from './services/interactive-cli.service.js';
 import { configurationPlanningInstruction, specialistResultNeedsApproval } from './services/agent-approval-policy.service.js';
+import { resumeKnowledgeImportJobs } from './services/knowledge.service.js';
+import { runDeviceBackupScheduler } from './services/device-backup.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -76,6 +79,7 @@ app.use('/api/backups', authMiddleware, requireRoles('admin'), backupRoutes);
 app.use('/api/ai-usage', authMiddleware, requireRoles('admin'), auditMutation, aiUsageRoutes);
 app.use('/api/cli', authMiddleware, auditMutation, cliRoutes);
 app.use('/api/knowledge', authMiddleware, requireRoles('admin'), auditMutation, knowledgeRoutes);
+app.use('/api/device-backups', authMiddleware, requireRoles('admin'), auditMutation, deviceBackupRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -358,6 +362,8 @@ httpServer.listen(config.port, config.host, () => {
   logger.info(`📊 Zabbix webhook: POST /api/webhooks/zabbix`);
 });
 
+resumeKnowledgeImportJobs().catch(err => logger.error(`Knowledge import recovery error: ${err.message}`));
+
 const slaMonitor = setInterval(() => {
   runSlaMonitor(async (task, message, level) => {
     io.emit('task:sla', { taskId: task.id, taskNumber: task.taskNumber, message });
@@ -377,11 +383,18 @@ const backupMonitor = setInterval(() => {
 }, 60_000);
 backupMonitor.unref();
 
+const deviceBackupMonitor = setInterval(() => {
+  runDeviceBackupScheduler().catch(err => logger.error(`Device backup scheduler error: ${err.message}`));
+}, 60_000);
+deviceBackupMonitor.unref();
+runDeviceBackupScheduler().catch(err => logger.error(`Initial device backup scheduler error: ${err.message}`));
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   clearInterval(slaMonitor);
   clearInterval(criticalReminderMonitor);
   clearInterval(backupMonitor);
+  clearInterval(deviceBackupMonitor);
   logger.info('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();
@@ -392,6 +405,7 @@ process.on('SIGINT', async () => {
   clearInterval(slaMonitor);
   clearInterval(criticalReminderMonitor);
   clearInterval(backupMonitor);
+  clearInterval(deviceBackupMonitor);
   logger.info('SIGINT received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();

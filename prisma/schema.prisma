@@ -79,26 +79,28 @@ model NotificationLog {
 }
 
 model Device {
-  id           String         @id @default(uuid())
-  name         String
-  hostname     String
-  port         Int            @default(22)
-  type         String // mikrotik|linux|huawei_vrp (extensível via plugins)
-  manufacturer String?
-  platform     String?
-  model        String?
-  osVersion    String?
-  capabilities String? // Lista separada por vírgulas: bgp,mpls,isis...
-  username     String
-  password     String // Encrypted (AES-256-GCM)
-  group        String?
-  zabbixHostId String?
-  isActive     Boolean        @default(true)
-  notes        String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  tasks        Task[]
-  changes      DeviceChange[]
+  id            String               @id @default(uuid())
+  name          String
+  hostname      String
+  port          Int                  @default(22)
+  type          String // mikrotik|linux|huawei_vrp (extensível via plugins)
+  manufacturer  String?
+  platform      String?
+  model         String?
+  osVersion     String?
+  capabilities  String? // Lista separada por vírgulas: bgp,mpls,isis...
+  username      String
+  password      String // Encrypted (AES-256-GCM)
+  group         String?
+  zabbixHostId  String?
+  isActive      Boolean              @default(true)
+  notes         String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  tasks         Task[]
+  changes       DeviceChange[]
+  backupPolicy  DeviceBackupPolicy?
+  configBackups DeviceConfigBackup[]
 }
 
 model DeviceChange {
@@ -114,6 +116,48 @@ model DeviceChange {
 
   @@index([deviceId, createdAt])
   @@index([taskNumber])
+}
+
+model DeviceBackupPolicy {
+  id         String    @id @default(uuid())
+  deviceId   String    @unique
+  device     Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  enabled    Boolean   @default(false)
+  frequency  String    @default("daily") // daily|weekly
+  hour       Int       @default(2)
+  weekday    Int       @default(0) // 0=domingo
+  retention  Int       @default(14)
+  lastRunAt  DateTime?
+  lastStatus String?
+  lastError  String?
+  nextRunAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([enabled, nextRunAt])
+}
+
+model DeviceConfigBackup {
+  id           String   @id @default(uuid())
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  type         String // manual|automatic
+  status       String // success|failed
+  content      String?
+  sha256       String?
+  size         Int      @default(0)
+  deviceName   String
+  hostname     String
+  deviceType   String
+  manufacturer String?
+  model        String?
+  osVersion    String?
+  error        String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+
+  @@index([deviceId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Task {
@@ -230,22 +274,24 @@ model AiProviderState {
 }
 
 model KnowledgeDocument {
-  id         String           @id @default(uuid())
-  title      String
-  filename   String
-  sourceType String           @default("markdown") // markdown|text|pdf|url
-  sourceUrl  String?
-  content    String
-  agentScope String           @default("global") // global|support|mikrotik|linux|huawei_vrp
-  tags       String?
-  status     String           @default("active") // active|disabled
-  chunkCount Int              @default(0)
-  uploadedBy String
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
-  chunks     KnowledgeChunk[]
+  id                String           @id @default(uuid())
+  title             String
+  filename          String
+  sourceType        String           @default("markdown") // markdown|text|pdf|url
+  sourceUrl         String?
+  collectionRootUrl String?
+  content           String
+  agentScope        String           @default("global") // global|support|mikrotik|linux|huawei_vrp
+  tags              String?
+  status            String           @default("active") // active|disabled
+  chunkCount        Int              @default(0)
+  uploadedBy        String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  chunks            KnowledgeChunk[]
 
   @@index([agentScope, status])
+  @@index([collectionRootUrl])
   @@index([updatedAt])
 }
 
@@ -274,6 +320,27 @@ model KnowledgeRetrievalLog {
 
   @@index([createdAt])
   @@index([agentName, createdAt])
+}
+
+model KnowledgeImportJob {
+  id          String    @id @default(uuid())
+  startUrl    String
+  urls        String
+  agentScope  String
+  tags        String?
+  status      String    @default("queued") // queued|running|completed|completed_with_errors|failed
+  totalPages  Int
+  processed   Int       @default(0)
+  imported    Int       @default(0)
+  failed      Int       @default(0)
+  currentUrl  String?
+  errors      String?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([status, createdAt])
 }
 
 model CliSession {

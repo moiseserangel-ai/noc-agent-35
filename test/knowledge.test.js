@@ -22,6 +22,19 @@ test('aceita TXT e PDF processado nos limites permitidos', () => {
   assert.equal(validateDocumentInput({ filename: 'ne8000.pdf', sourceType: 'pdf', title: 'NE8000', content: 'Texto previamente extraído do manual', agentScope: 'huawei_vrp' }).sourceType, 'pdf');
 });
 
+test('preserva vínculo da página com a coleção principal', () => {
+  const document = validateDocumentInput({
+    filename: 'manual.mikrotik.com',
+    sourceType: 'url',
+    sourceUrl: 'https://manual.mikrotik.com/docs/firewall-and-quality-of-service/firewall/',
+    collectionRootUrl: 'https://manual.mikrotik.com/docs/firewall-and-quality-of-service/',
+    title: 'Firewall',
+    content: 'Conteúdo técnico do manual de firewall RouterOS',
+    agentScope: 'mikrotik',
+  });
+  assert.equal(document.collectionRootUrl, 'https://manual.mikrotik.com/docs/firewall-and-quality-of-service/');
+});
+
 test('bloqueia links HTTP e endereços privados antes do download', async () => {
   await assert.rejects(fetchKnowledgeUrl('http://example.com/manual'), /Somente links HTTPS/);
   await assert.rejects(fetchKnowledgeUrl('https://127.0.0.1/manual'), /rede privada/);

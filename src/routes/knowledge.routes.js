@@ -1,14 +1,42 @@
 import { Router } from 'express';
 import prisma from '../database/client.js';
-import { createKnowledgeDocument, KNOWLEDGE_SCOPES, searchKnowledge, updateKnowledgeDocument } from '../services/knowledge.service.js';
+import { createKnowledgeDocument, createKnowledgeImportJob, discoverRelatedPages, KNOWLEDGE_SCOPES, searchKnowledge, updateKnowledgeDocument } from '../services/knowledge.service.js';
 
 const router = Router();
+
+router.post('/crawl/discover', async (req, res, next) => {
+  try {
+    const result = await discoverRelatedPages(String(req.body.startUrl || ''), { maxDepth: req.body.maxDepth, maxPages: req.body.maxPages });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    if (/URL|HTTPS|link|página|docs|Huawei|catálogo|seção|rede privada|HTTP|conexão|limite|conteúdo/i.test(error.message)) return res.status(400).json({ success: false, error: error.message });
+    next(error);
+  }
+});
+
+router.post('/crawl/import', async (req, res, next) => {
+  try {
+    const job = await createKnowledgeImportJob(req.body, req.user.username);
+    res.status(202).json({ success: true, data: job, message: 'Importação iniciada em segundo plano' });
+  } catch (error) {
+    if (/Selecione|Especialista|URL|docs/i.test(error.message)) return res.status(400).json({ success: false, error: error.message });
+    next(error);
+  }
+});
+
+router.get('/crawl/jobs/:id', async (req, res, next) => {
+  try {
+    const job = await prisma.knowledgeImportJob.findUnique({ where: { id: req.params.id } });
+    if (!job) return res.status(404).json({ success: false, error: 'Importação não encontrada' });
+    res.json({ success: true, data: { ...job, errors: job.errors ? JSON.parse(job.errors) : [] } });
+  } catch (error) { next(error); }
+});
 
 router.get('/', async (req, res, next) => {
   try {
     const documents = await prisma.knowledgeDocument.findMany({
       orderBy: { updatedAt: 'desc' },
-      select: { id: true, title: true, filename: true, sourceType: true, sourceUrl: true, agentScope: true, tags: true, status: true, chunkCount: true, uploadedBy: true, createdAt: true, updatedAt: true },
+      select: { id: true, title: true, filename: true, sourceType: true, sourceUrl: true, collectionRootUrl: true, agentScope: true, tags: true, status: true, chunkCount: true, uploadedBy: true, createdAt: true, updatedAt: true },
     });
     res.json({ success: true, data: documents, scopes: KNOWLEDGE_SCOPES });
   } catch (error) { next(error); }

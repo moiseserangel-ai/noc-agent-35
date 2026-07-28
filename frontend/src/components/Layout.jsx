@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore
 } from 'lucide-react';
+import ThemeSelector from './ThemeSelector.jsx';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -19,10 +20,11 @@ const NAV_ITEMS = [
   { path: '/ai-usage', label: 'Consumo de IA', icon: Gauge, roles: ['admin'] },
   { path: '/knowledge', label: 'Base de conhecimento', icon: Library, roles: ['admin'] },
   { path: '/backups', label: 'Backup e restauração', icon: DatabaseBackup, roles: ['admin'] },
+  { path: '/device-backups', label: 'Backup de equipamentos', icon: ArchiveRestore, roles: ['admin'] },
   { path: '/security', label: 'Minha segurança', icon: Shield },
 ];
 
-export default function Layout({ onLogout, user, branding }) {
+export default function Layout({ onLogout, user, branding, theme, onTheme }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const visibleItems = NAV_ITEMS.filter(item => !item.roles || item.roles.includes(user?.role));
@@ -85,6 +87,7 @@ export default function Layout({ onLogout, user, branding }) {
         <header className="topbar">
           <button className="mobile-menu-btn" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
           <div className="topbar-title"><span>Área atual</span><strong>{currentItem?.label || 'NOC Agent'}</strong></div>
+          <ThemeSelector value={theme} onChange={onTheme}/>
           <div className="topbar-status"><span className="status-pulse" /> Sistema online</div>
           <div className="topbar-user" title={`${user?.name} · ${user?.role}`}><div className="user-avatar">{initials}</div><div><strong>{user?.name}</strong><span>{user?.role === 'admin' ? 'Administrador' : user?.role === 'operator' ? 'Operador NOC' : 'Visualização'}</span></div></div>
         </header>

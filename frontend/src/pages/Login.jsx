@@ -4,6 +4,7 @@ import {
   MessageSquare, Server, Shield, TerminalSquare, User,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
+import ThemeSelector from '../components/ThemeSelector.jsx';
 
 const FEATURES = [
   { icon: Activity, title: 'Monitoramento inteligente', text: 'Alertas do Zabbix, incidentes, SLA e acompanhamento operacional em tempo real.' },
@@ -16,7 +17,7 @@ const FEATURES = [
 
 const INTEGRATIONS = ['Zabbix', 'MikroTik', 'Huawei', 'Linux', 'WhatsApp', 'Telegram', 'Claude', 'OpenAI', 'Gemini'];
 
-export default function Login({ onLogin, branding }) {
+export default function Login({ onLogin, branding, theme, onTheme }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -49,6 +50,7 @@ export default function Login({ onLogin, branding }) {
 
   return (
     <main className="login-page">
+      <div className="login-theme"><ThemeSelector value={theme} onChange={onTheme} compact/></div>
       <div className="login-ambient" aria-hidden="true">
         <span className="login-orb login-orb-one" />
         <span className="login-orb login-orb-two" />
