@@ -24,6 +24,7 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.16.0",
     "socket.io": "^4.7.5",
     "ssh2": "^1.16.0",
     "winston": "^3.14.0"

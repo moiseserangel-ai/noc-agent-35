@@ -51,6 +51,12 @@ async function record(task, event, channel, recipient, status, error = null) {
   catch (err) { if (err.code === 'P2002') return false; throw err; }
 }
 
+async function recordStandalone(resourceId, event, channel, recipient, status, error = null) {
+  const dedupKey = `${resourceId}:${event}:${channel}:${recipient || 'default'}`;
+  try { await prisma.notificationLog.create({ data:{event,channel,recipient:recipient||null,status,error:error?.slice(0,1000)||null,dedupKey} }); return true; }
+  catch(error){if(error.code==='P2002')return false;throw error;}
+}
+
 export async function notifyTask(task, event, { message = '', io = null } = {}) {
   const cfg = await getNotificationConfig();
   if (!cfg.enabled || (event === 'resolved' && !cfg.notifyResolved)) return [];
@@ -88,5 +94,46 @@ export async function runCriticalReminders(io = null) {
   const bucket = Math.floor(Date.now() / (minutes * 60_000));
   const results = [];
   for (const task of tasks) results.push(...await notifyTask(task, `critical_reminder_${bucket}`, { message: `Incidente crítico permanece sem reconhecimento há mais de ${minutes} minutos.`, io }));
+  return results;
+}
+
+export async function notifyComplianceException(exception, thresholdDays, io = null) {
+  const cfg=await getNotificationConfig();
+  if(!cfg.enabled)return [];
+  const event=`compliance_exception_expiry_${thresholdDays}d`;
+  const text=[
+    thresholdDays<=1?'🚨 Exceção de compliance vence em até 1 dia':'⚠️ Exceção de compliance próxima do vencimento',
+    `Equipamento: ${exception.device.name}`,
+    `Controle: ${exception.ruleKey}`,
+    `Vencimento: ${exception.expiresAt.toLocaleString('pt-BR',{timeZone:'America/Porto_Velho'})}`,
+    `Responsável: ${exception.approvedBy}`,
+    `Justificativa: ${exception.reason}`,
+    cfg.baseUrl?`Revisar: ${cfg.baseUrl}/compliance`:'',
+  ].filter(Boolean).join('\n');
+  const results=[];
+  if(await recordStandalone(`compliance-exception:${exception.id}`,event,'panel',null,'sent')){
+    io?.emit('compliance:notification',{exceptionId:exception.id,event,message:text});
+    results.push({channel:'panel',status:'sent'});
+  }
+  const channels=thresholdDays<=1?cfg.criticalChannels:cfg.highChannels;
+  for(const channel of [...new Set(channels)]){
+    const recipients=channel==='telegram'?cfg.telegramChats:[null];
+    for(const recipient of recipients){
+      const dedupKey=`compliance-exception:${exception.id}:${event}:${channel}:${recipient||'default'}`;
+      if(await prisma.notificationLog.findUnique({where:{dedupKey}}))continue;
+      try{
+        if(channel==='telegram')await sendTelegramMessage(recipient,text,cfg.telegramToken);
+        else if(channel==='whatsapp'){const sent=await sendToAdmin(text);if(!sent)throw new Error('WhatsApp Admin não configurado');}
+        else continue;
+        await recordStandalone(`compliance-exception:${exception.id}`,event,channel,recipient,'sent');
+        results.push({channel,recipient,status:'sent'});
+      }catch(error){
+        await recordStandalone(`compliance-exception:${exception.id}`,event,channel,recipient,'failed',error.message);
+        results.push({channel,recipient,status:'failed',error:error.message});
+        logger.warn(`Compliance exception notification ${channel} failed: ${error.message}`);
+      }
+    }
+  }
+  await logAudit({username:'system',displayName:'Sistema de notificações',role:'system',action:'expiry_notice',resource:'compliance_exception',resourceId:exception.id,status:results.some(item=>item.status==='failed')?'failure':'success',details:{thresholdDays,channels:results.map(item=>({channel:item.channel,status:item.status}))}});
   return results;
 }

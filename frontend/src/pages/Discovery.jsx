@@ -1,0 +1,52 @@
+import { useEffect, useState } from 'react';
+import { Ban, CheckCircle2, Eye, Network, Plus, Radar, RefreshCw, Server, Trash2, X } from 'lucide-react';
+import { api } from '../lib/api.js';
+import { useToast } from '../App.jsx';
+
+const statusLabel={queued:'Na fila',running:'Descobrindo',completed:'Concluída',failed:'Falhou',cancelled:'Cancelada'};
+const stateLabel={new:'Novo',known:'Já cadastrado',imported:'Importado',ignored:'Ignorado'};
+const fmt=value=>value?new Date(value).toLocaleString('pt-BR'):'—';
+
+export default function Discovery(){
+  const [data,setData]=useState({jobs:[],summary:{}});
+  const [loading,setLoading]=useState(true);
+  const [scan,setScan]=useState(null);
+  const [expanded,setExpanded]=useState(null);
+  const [importHost,setImportHost]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const toast=useToast();
+  const load=async(silent=false)=>{
+    if(!silent)setLoading(true);
+    try{const result=(await api.getDiscovery()).data;setData(result);if(!expanded&&result.jobs[0])setExpanded(result.jobs[0].id);}
+    catch(error){if(!silent)toast(error.message,'error');}
+    finally{if(!silent)setLoading(false);}
+  };
+  useEffect(()=>{load();const interval=setInterval(()=>{if(data.jobs.some(item=>['queued','running'].includes(item.status)))load(true);},2500);return()=>clearInterval(interval);},[data.jobs.some(item=>['queued','running'].includes(item.status))]);
+  const start=async()=>{
+    if(!window.confirm(`Confirmar descoberta TCP somente leitura da faixa ${scan.cidr}?`))return;
+    setBusy(true);
+    try{const result=await api.startDiscovery({...scan,ports:scan.ports.split(',').map(value=>Number(value.trim())),confirmed:true});toast(result.message,'success');setScan(null);await load();}
+    catch(error){toast(error.message,'error');}finally{setBusy(false);}
+  };
+  const cancel=async job=>{if(!window.confirm('Cancelar esta descoberta?'))return;try{await api.cancelDiscovery(job.id);toast('Cancelamento solicitado.','success');await load();}catch(error){toast(error.message,'error');}};
+  const remove=async job=>{if(!window.confirm('Excluir este histórico e os hosts encontrados nele?'))return;try{await api.deleteDiscovery(job.id);toast('Histórico excluído.','success');await load();}catch(error){toast(error.message,'error');}};
+  const ignore=async host=>{try{await api.ignoreDiscoveredHost(host.id);await load(true);}catch(error){toast(error.message,'error');}};
+  const importDevice=async()=>{
+    setBusy(true);
+    try{const result=await api.importDiscoveredHost(importHost.id,importHost);toast(result.message,'success');setImportHost(null);await load();}
+    catch(error){toast(error.message,'error');}finally{setBusy(false);}
+  };
+  return <div>
+    <div className="page-header page-header-actions"><div><h2>Inventário e descoberta</h2><p>Localize ativos em redes privadas e importe equipamentos de forma controlada</p></div><div><button className="btn btn-secondary" onClick={()=>load()}><RefreshCw size={15}/> Atualizar</button><button className="btn btn-primary" onClick={()=>setScan({cidr:'192.168.0.0/24',ports:'22,80,443,8291,8728,8729',timeoutMs:900})}><Radar size={16}/> Nova descoberta</button></div></div>
+    <div className="compliance-notice discovery-notice"><Network size={20}/><div><strong>Descoberta limitada e sem credenciais</strong><span>São permitidas somente redes privadas entre /24 e /32. A varredura verifica portas TCP autorizadas e não executa comandos nos equipamentos.</span></div></div>
+    <div className="stats-grid"><div className="stat-card"><Radar/><div><span className="stat-label">Observações</span><div className="stat-value">{data.summary.discovered||0}</div></div></div><div className="stat-card"><Plus/><div><span className="stat-label">Novos ativos</span><div className="stat-value">{data.summary.new||0}</div></div></div><div className="stat-card"><Server/><div><span className="stat-label">Já cadastrados</span><div className="stat-value">{data.summary.known||0}</div></div></div><div className="stat-card"><CheckCircle2/><div><span className="stat-label">Importados</span><div className="stat-value">{data.summary.imported||0}</div></div></div></div>
+    {loading?<div className="loading-screen" style={{minHeight:240}}><div className="spinner"/></div>:!data.jobs.length?<div className="card empty-state"><Radar/><p>Nenhuma descoberta executada.</p></div>:<div className="discovery-jobs">{data.jobs.map(job=><section className="card discovery-job" key={job.id}>
+      <header onClick={()=>setExpanded(expanded===job.id?null:job.id)}><div className={`discovery-job-icon ${job.status}`}><Radar size={18}/></div><div><strong>{job.cidr}</strong><span>{fmt(job.createdAt)} · portas {job.ports}</span></div><div className="discovery-progress"><span>{job.scanned}/{job.totalHosts}</span><div><i style={{width:`${job.totalHosts?job.scanned/job.totalHosts*100:0}%`}}/></div></div><span className={`status-badge status-${job.status}`}>{statusLabel[job.status]}</span><strong>{job.found} encontrado(s)</strong><Eye size={16}/></header>
+      {expanded===job.id&&<div className="discovery-job-body">{job.error&&<div className="change-validation-summary danger">{job.error}</div>}<div className="discovery-job-actions">{['queued','running'].includes(job.status)?<button className="btn btn-danger btn-sm" onClick={()=>cancel(job)}><Ban size={14}/> Cancelar</button>:<button className="btn btn-ghost btn-sm" onClick={()=>remove(job)}><Trash2 size={14}/> Excluir histórico</button>}</div>
+        {!job.hosts.length?<div className="empty-state"><p>Nenhum serviço detectado até o momento.</p></div>:<div className="table-container"><table><thead><tr><th>Endereço</th><th>Identificação</th><th>Portas abertas</th><th>Confiança</th><th>Estado</th><th></th></tr></thead><tbody>{job.hosts.map(host=><tr key={host.id}><td><strong>{host.ipAddress}</strong><br/><small>{host.latencyMs||'—'} ms</small></td><td>{host.manufacturer||'Não identificado'}<br/><small>{host.detectedType||host.sshBanner||'Serviço genérico'}</small></td><td><code>{host.openPorts}</code></td><td>{host.confidence}%</td><td><span className={`status-badge discovery-state-${host.state}`}>{stateLabel[host.state]}</span></td><td><div className="table-actions">{host.state==='new'&&<><button className="btn btn-secondary btn-sm" onClick={()=>ignore(host)}>Ignorar</button><button className="btn btn-primary btn-sm" onClick={()=>setImportHost({...host,name:host.hostname||`${host.manufacturer||'Equipamento'}-${host.ipAddress}`,type:host.detectedType||'linux',username:'',password:'',port:22,group:''})}><Plus size={14}/> Importar</button></>}</div></td></tr>)}</tbody></table></div>}
+      </div>}
+    </section>)}</div>}
+    {scan&&<div className="modal-overlay" onClick={()=>setScan(null)}><div className="modal discovery-scan-modal" onClick={e=>e.stopPropagation()}><div className="modal-header"><div><h3>Nova descoberta de rede</h3><p>Somente faixas privadas, até 256 endereços</p></div><button className="btn btn-ghost" onClick={()=>setScan(null)}><X size={18}/></button></div><div className="modal-body"><div className="form-group"><label className="form-label">Faixa CIDR</label><input className="form-input" value={scan.cidr} onChange={e=>setScan({...scan,cidr:e.target.value})} placeholder="192.168.10.0/24"/></div><div className="form-group"><label className="form-label">Portas TCP autorizadas</label><input className="form-input" value={scan.ports} onChange={e=>setScan({...scan,ports:e.target.value})}/><small className="knowledge-muted">Padrão: SSH, HTTP/HTTPS, Winbox e APIs RouterOS.</small></div><div className="form-group"><label className="form-label">Timeout por porta — milissegundos</label><input className="form-input" type="number" min="250" max="3000" value={scan.timeoutMs} onChange={e=>setScan({...scan,timeoutMs:Number(e.target.value)})}/></div></div><div className="modal-footer"><button className="btn btn-secondary" onClick={()=>setScan(null)}>Cancelar</button><button className="btn btn-primary" disabled={busy} onClick={start}>{busy?<span className="spinner"/>:<Radar size={15}/>} Iniciar descoberta</button></div></div></div>}
+    {importHost&&<div className="modal-overlay" onClick={()=>setImportHost(null)}><div className="modal discovery-import-modal" onClick={e=>e.stopPropagation()}><div className="modal-header"><div><h3>Importar {importHost.ipAddress}</h3><p>Confirme a identificação e informe credenciais de gerenciamento</p></div><button className="btn btn-ghost" onClick={()=>setImportHost(null)}><X size={18}/></button></div><div className="modal-body"><div className="form-row"><div className="form-group"><label className="form-label">Nome</label><input className="form-input" value={importHost.name} onChange={e=>setImportHost({...importHost,name:e.target.value})}/></div><div className="form-group"><label className="form-label">Tipo</label><select className="form-select" value={importHost.type} onChange={e=>setImportHost({...importHost,type:e.target.value})}><option value="mikrotik">MikroTik</option><option value="huawei_vrp">Huawei VRP</option><option value="linux">Linux</option></select></div></div><div className="form-row"><div className="form-group"><label className="form-label">Usuário SSH</label><input className="form-input" value={importHost.username} onChange={e=>setImportHost({...importHost,username:e.target.value})}/></div><div className="form-group"><label className="form-label">Senha</label><input className="form-input" type="password" value={importHost.password} onChange={e=>setImportHost({...importHost,password:e.target.value})}/></div></div><div className="form-row"><div className="form-group"><label className="form-label">Porta SSH</label><input className="form-input" type="number" value={importHost.port} onChange={e=>setImportHost({...importHost,port:Number(e.target.value)})}/></div><div className="form-group"><label className="form-label">Grupo/cliente</label><input className="form-input" value={importHost.group} onChange={e=>setImportHost({...importHost,group:e.target.value})}/></div></div></div><div className="modal-footer"><button className="btn btn-secondary" onClick={()=>setImportHost(null)}>Cancelar</button><button className="btn btn-primary" disabled={busy} onClick={importDevice}>{busy?<span className="spinner"/>:<Plus size={15}/>} Importar equipamento</button></div></div></div>}
+  </div>;
+}

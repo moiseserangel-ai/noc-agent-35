@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import prisma from '../database/client.js';
+import { verifyAuditChain } from '../services/audit.service.js';
 
 const router = Router();
+router.get('/integrity', async (_req, res, next) => { try {
+  res.json({ success:true, data:await verifyAuditChain() });
+} catch (e) { next(e); } });
 router.get('/', async (req, res, next) => { try {
   const where = {};
   if (req.query.username) where.username = { contains: String(req.query.username).slice(0, 80) };

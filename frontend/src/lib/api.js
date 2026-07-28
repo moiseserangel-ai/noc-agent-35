@@ -65,6 +65,48 @@ export const api = {
     if (!res.ok) { let data={}; try{data=await res.json();}catch{} throw new Error(data.error || 'Falha ao baixar configuração'); }
     return { blob: await res.blob(), filename: res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] || 'configuracao.txt' };
   },
+  getCompliance: () => request('/compliance'),
+  getComplianceProfiles: deviceType => request(`/compliance/profiles${deviceType ? `?deviceType=${encodeURIComponent(deviceType)}` : ''}`),
+  createComplianceProfile: data => request('/compliance/profiles', { method:'POST', body:JSON.stringify(data) }),
+  updateComplianceProfile: (id, data) => request(`/compliance/profiles/${id}`, { method:'PUT', body:JSON.stringify(data) }),
+  deleteComplianceProfile: id => request(`/compliance/profiles/${id}`, { method:'DELETE' }),
+  getComplianceExceptions: deviceId => request(`/compliance/exceptions${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ''}`),
+  createComplianceException: data => request('/compliance/exceptions', { method:'POST', body:JSON.stringify(data) }),
+  revokeComplianceException: id => request(`/compliance/exceptions/${id}`, { method:'DELETE' }),
+  getComplianceReport: params => request(`/compliance/reports?${new URLSearchParams(params)}`),
+  getComplianceDashboard: () => request('/compliance/dashboard'),
+  getComplianceGovernance: () => request('/compliance/governance'),
+  saveComplianceEscalation: data => request('/compliance/governance/escalation', {method:'PUT',body:JSON.stringify(data)}),
+  createComplianceScope: data => request('/compliance/scopes', {method:'POST',body:JSON.stringify(data)}),
+  updateComplianceScope: (id,data) => request(`/compliance/scopes/${id}`, {method:'PUT',body:JSON.stringify(data)}),
+  deleteComplianceScope: id => request(`/compliance/scopes/${id}`, {method:'DELETE'}),
+  createComplianceRemediationTask: findingId => request(`/compliance/findings/${findingId}/remediation-task`, { method:'POST' }),
+  downloadComplianceReport: async (format, params = {}) => {
+    const res = await fetch(`${BASE}/compliance/reports/${format}?${new URLSearchParams(params)}`, { headers:{Authorization:`Bearer ${getToken()}`} });
+    if (!res.ok) { let data={}; try{data=await res.json();}catch{} throw new Error(data.error||'Falha ao gerar relatório'); }
+    return {blob:await res.blob(),filename:res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||`compliance.${format}`};
+  },
+  saveCompliancePolicy: (deviceId, data) => request(`/compliance/policies/${deviceId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  runComplianceScan: deviceId => request(`/compliance/scan/${deviceId}`, { method: 'POST' }),
+  getComplianceScans: (deviceId, limit = 100) => request(`/compliance/scans?${new URLSearchParams({ ...(deviceId && { deviceId }), limit })}`),
+  getComplianceScan: id => request(`/compliance/scans/${id}`),
+  deleteComplianceScan: id => request(`/compliance/scans/${id}`, { method: 'DELETE' }),
+  getChanges: (params={}) => request(`/changes?${new URLSearchParams(params)}`),
+  getChange: id => request(`/changes/${id}`),
+  createChange: data => request('/changes',{method:'POST',body:JSON.stringify(data)}),
+  updateChange: (id,data) => request(`/changes/${id}`,{method:'PUT',body:JSON.stringify(data)}),
+  submitChange: id => request(`/changes/${id}/submit`,{method:'POST'}),
+  approveChange: (id,approved,reason='') => request(`/changes/${id}/approval`,{method:'POST',body:JSON.stringify({approved,reason})}),
+  startChange: id => request(`/changes/${id}/start`,{method:'POST'}),
+  validateChange: id => request(`/changes/${id}/validate`,{method:'POST'}),
+  rollbackChange: id => request(`/changes/${id}/rollback`,{method:'POST'}),
+  cancelChange: (id,reason='') => request(`/changes/${id}/cancel`,{method:'POST',body:JSON.stringify({reason})}),
+  getDiscovery: () => request('/discovery'),
+  startDiscovery: data => request('/discovery',{method:'POST',body:JSON.stringify(data)}),
+  cancelDiscovery: id => request(`/discovery/${id}/cancel`,{method:'POST'}),
+  deleteDiscovery: id => request(`/discovery/${id}`,{method:'DELETE'}),
+  importDiscoveredHost: (id,data) => request(`/discovery/hosts/${id}/import`,{method:'POST',body:JSON.stringify(data)}),
+  ignoreDiscoveredHost: id => request(`/discovery/hosts/${id}/ignore`,{method:'POST'}),
 
   // Devices
   getDevices: () => request('/devices'),
@@ -86,6 +128,7 @@ export const api = {
   reprocessTask: (id, deviceId) => request(`/tasks/${id}/reprocess`, { method: 'POST', body: JSON.stringify({ deviceId }) }),
   completeTask: (id, note) => request(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({ note }) }),
   updateTaskWorkflow: (id, data) => request(`/tasks/${id}/workflow`, { method: 'POST', body: JSON.stringify(data) }),
+  approveTask: (id, approved) => request(`/tasks/${id}/approval`, { method:'POST', body:JSON.stringify({approved}) }),
 
   // Settings
   getSettings: () => request('/settings'),

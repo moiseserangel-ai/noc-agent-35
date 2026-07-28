@@ -27,6 +27,9 @@ import brandingRoutes from './routes/branding.routes.js';
 import cliRoutes from './routes/cli.routes.js';
 import knowledgeRoutes from './routes/knowledge.routes.js';
 import deviceBackupRoutes from './routes/device-backup.routes.js';
+import complianceRoutes from './routes/compliance.routes.js';
+import changeRequestRoutes from './routes/change-request.routes.js';
+import discoveryRoutes from './routes/discovery.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -34,6 +37,7 @@ import { registerInteractiveCli } from './services/interactive-cli.service.js';
 import { configurationPlanningInstruction, specialistResultNeedsApproval } from './services/agent-approval-policy.service.js';
 import { resumeKnowledgeImportJobs } from './services/knowledge.service.js';
 import { runDeviceBackupScheduler } from './services/device-backup.service.js';
+import { runComplianceEscalations, runComplianceExceptionReminders, runComplianceScheduler } from './services/compliance.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -80,6 +84,9 @@ app.use('/api/ai-usage', authMiddleware, requireRoles('admin'), auditMutation, a
 app.use('/api/cli', authMiddleware, auditMutation, cliRoutes);
 app.use('/api/knowledge', authMiddleware, requireRoles('admin'), auditMutation, knowledgeRoutes);
 app.use('/api/device-backups', authMiddleware, requireRoles('admin'), auditMutation, deviceBackupRoutes);
+app.use('/api/compliance', authMiddleware, requireRoles('admin'), auditMutation, complianceRoutes);
+app.use('/api/changes', authMiddleware, requireRoles('admin', 'operator'), auditMutation, changeRequestRoutes);
+app.use('/api/discovery', authMiddleware, requireRoles('admin'), auditMutation, discoveryRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -389,12 +396,33 @@ const deviceBackupMonitor = setInterval(() => {
 deviceBackupMonitor.unref();
 runDeviceBackupScheduler().catch(err => logger.error(`Initial device backup scheduler error: ${err.message}`));
 
+const complianceMonitor = setInterval(() => {
+  runComplianceScheduler().catch(err => logger.error(`Compliance scheduler error: ${err.message}`));
+}, 60_000);
+complianceMonitor.unref();
+runComplianceScheduler().catch(err => logger.error(`Initial compliance scheduler error: ${err.message}`));
+
+const complianceExceptionMonitor = setInterval(() => {
+  runComplianceExceptionReminders(io).catch(err => logger.error(`Compliance exception reminder error: ${err.message}`));
+}, 60 * 60_000);
+complianceExceptionMonitor.unref();
+runComplianceExceptionReminders(io).catch(err => logger.error(`Initial compliance exception reminder error: ${err.message}`));
+
+const complianceEscalationMonitor = setInterval(() => {
+  runComplianceEscalations(io).catch(err => logger.error(`Compliance escalation error: ${err.message}`));
+}, 15 * 60_000);
+complianceEscalationMonitor.unref();
+runComplianceEscalations(io).catch(err => logger.error(`Initial compliance escalation error: ${err.message}`));
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   clearInterval(slaMonitor);
   clearInterval(criticalReminderMonitor);
   clearInterval(backupMonitor);
   clearInterval(deviceBackupMonitor);
+  clearInterval(complianceMonitor);
+  clearInterval(complianceExceptionMonitor);
+  clearInterval(complianceEscalationMonitor);
   logger.info('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();
@@ -406,6 +434,9 @@ process.on('SIGINT', async () => {
   clearInterval(criticalReminderMonitor);
   clearInterval(backupMonitor);
   clearInterval(deviceBackupMonitor);
+  clearInterval(complianceMonitor);
+  clearInterval(complianceExceptionMonitor);
+  clearInterval(complianceEscalationMonitor);
   logger.info('SIGINT received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();

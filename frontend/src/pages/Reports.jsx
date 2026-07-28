@@ -10,7 +10,7 @@ const duration = seconds => {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}min`;
   return `${Math.floor(seconds / 86400)}d ${Math.floor(seconds % 86400 / 3600)}h`;
 };
-const labels = { low:'Baixa', medium:'Média', high:'Alta', critical:'Crítica', incident:'Incidente', consultation:'Consulta', configuration:'Configuração', pending:'Novo', in_progress:'Em atendimento', diagnosing:'Em análise', awaiting_approval:'Aguardando aprovação', resolved:'Resolvido', validated:'Validado', closed:'Encerrado', failed:'Falhou', zabbix:'Zabbix', dashboard:'Dashboard', whatsapp:'WhatsApp' };
+const labels = { low:'Baixa', medium:'Média', high:'Alta', critical:'Crítica', incident:'Incidente', consultation:'Consulta', configuration:'Configuração', pending:'Novo', in_progress:'Em atendimento', diagnosing:'Em análise', awaiting_approval:'Aguardando aprovação', resolved:'Resolvido', validated:'Validado', closed:'Encerrado', failed:'Falhou', zabbix:'Zabbix', dashboard:'Dashboard', whatsapp:'WhatsApp', compliance:'Compliance' };
 const csvCell = value => `"${String(value ?? '').replaceAll('"','""')}"`;
 
 function Bars({ title, data }) {

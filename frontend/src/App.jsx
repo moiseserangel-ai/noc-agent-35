@@ -18,6 +18,9 @@ import Security from './pages/Security.jsx';
 import AiUsage from './pages/AiUsage.jsx';
 import Knowledge from './pages/Knowledge.jsx';
 import DeviceBackups from './pages/DeviceBackups.jsx';
+import Compliance from './pages/Compliance.jsx';
+import Changes from './pages/Changes.jsx';
+import Discovery from './pages/Discovery.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
 
@@ -156,7 +159,7 @@ export default function App() {
             <Route element={<Layout branding={branding} user={user} theme={theme} onTheme={setTheme} onLogout={async () => { try { await api.logout(); } catch {} localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
               <Route index element={<Dashboard showBackup={user?.role === 'admin'} />} />
               <Route path="devices" element={<Devices canManage={user?.role === 'admin'} />} />
-              <Route path="tasks" element={<Tasks canOperate={['admin', 'operator'].includes(user?.role)} />} />
+              <Route path="tasks" element={<Tasks canOperate={['admin', 'operator'].includes(user?.role)} isAdmin={user?.role === 'admin'} />} />
               <Route path="chat" element={['admin', 'operator'].includes(user?.role) ? <Chat /> : <Navigate to="/" replace />} />
               <Route path="terminal" element={<React.Suspense fallback={<div className="loading-screen"><div className="spinner" /> Carregando terminal...</div>}><Terminal user={user} /></React.Suspense>} />
               <Route path="settings" element={user?.role === 'admin' ? <Settings /> : <Navigate to="/" replace />} />
@@ -168,6 +171,9 @@ export default function App() {
               <Route path="knowledge" element={user?.role === 'admin' ? <Knowledge /> : <Navigate to="/" replace />} />
               <Route path="backups" element={user?.role === 'admin' ? <Backups /> : <Navigate to="/" replace />} />
               <Route path="device-backups" element={user?.role === 'admin' ? <DeviceBackups /> : <Navigate to="/" replace />} />
+              <Route path="compliance" element={user?.role === 'admin' ? <Compliance /> : <Navigate to="/" replace />} />
+              <Route path="changes" element={['admin','operator'].includes(user?.role) ? <Changes isAdmin={user?.role==='admin'} /> : <Navigate to="/" replace />} />
+              <Route path="discovery" element={user?.role==='admin' ? <Discovery /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />

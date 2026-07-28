@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare } from 'lucide-react';
+import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -21,7 +21,7 @@ const slaState = task => {
 const sourceLabel = source => String(source).startsWith('dashboard:') ? 'dashboard' : source;
 const workTypeLabel = value => ({ incident: 'Incidente', consultation: 'Consulta', configuration: 'Configuração' }[value] || value);
 
-export default function Tasks({ canOperate = false }) {
+export default function Tasks({ canOperate = false, isAdmin = false }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: '', source: '', priority: '', sla: '' });
@@ -80,6 +80,15 @@ export default function Tasks({ canOperate = false }) {
     finally { setProcessing(null); }
   };
 
+  const approve = async (task, approved) => {
+    const question=approved?'Aprovar e executar esta configuração no equipamento?':'Rejeitar esta configuração sem executar comandos?';
+    if(!window.confirm(question))return;
+    setProcessing(task.id);
+    try{const result=await api.approveTask(task.id,approved);toast(result.message,approved?'success':'info');const detail=await api.getTask(task.id);setTasks(items=>items.map(item=>item.id===task.id?detail.data:item));}
+    catch(error){toast(error.message,'error');}
+    finally{setProcessing(null);}
+  };
+
   useEffect(() => {
     let active = true;
     const load = (showLoading = false) => {
@@ -118,7 +127,7 @@ export default function Tasks({ canOperate = false }) {
           </select>
           <select className="form-select" style={{ width: 130 }} value={filter.source} onChange={e => setFilter(f => ({ ...f, source: e.target.value }))}>
             <option value="">Todas Fontes</option><option value="whatsapp">WhatsApp</option>
-            <option value="zabbix">Zabbix</option><option value="dashboard">Dashboard</option>
+            <option value="zabbix">Zabbix</option><option value="dashboard">Dashboard</option><option value="compliance">Compliance</option>
           </select>
           <select className="form-select" style={{ width: 150 }} value={filter.sla} onChange={e => setFilter(f => ({ ...f, sla: e.target.value }))}>
             <option value="">Todos SLA</option><option value="breached">SLA violado</option>
@@ -169,6 +178,10 @@ export default function Tasks({ canOperate = false }) {
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>DIAGNÓSTICO</div>
                   <div style={{ fontSize: '0.8rem', background: 'var(--bg-primary)', padding: 12, borderRadius: 8 }}><AgentResponse content={t.diagnosis} /></div>
                 </div>}
+                {t.proposedSolution && <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--warning)', fontWeight: 600, marginBottom: 4 }}>PLANO PROPOSTO — REVISE ANTES DE APROVAR</div>
+                  <div style={{ fontSize: '0.8rem', background: 'var(--warning-dim)', border:'1px solid color-mix(in srgb,var(--warning) 35%,transparent)', padding: 12, borderRadius: 8 }}><AgentResponse content={t.proposedSolution} /></div>
+                </div>}
                 {t.executionResult && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 600, marginBottom: 4 }}>RESULTADO</div>
                   <div style={{ fontSize: '0.8rem', background: 'var(--bg-primary)', padding: 12, borderRadius: 8 }}><AgentResponse content={t.executionResult} /></div>
@@ -196,6 +209,7 @@ export default function Tasks({ canOperate = false }) {
                   </div>
                 </div>}
                 {canOperate && ['pending', 'in_progress', 'failed', 'awaiting_approval'].includes(t.status) && <div onClick={e => e.stopPropagation()} style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  {isAdmin&&t.status==='awaiting_approval'&&<><button className="btn btn-success" disabled={processing===t.id} onClick={()=>approve(t,true)}><ShieldCheck size={15}/> Aprovar e executar</button><button className="btn btn-secondary" disabled={processing===t.id} onClick={()=>approve(t,false)}><XCircle size={15}/> Rejeitar</button></>}
                   <select className="form-select" style={{ maxWidth: 300 }} value={selectedDevices[t.id] || t.deviceId || ''} onChange={e => setSelectedDevices(v => ({ ...v, [t.id]: e.target.value }))}>
                     <option value="">Selecione o equipamento</option>
                     {devices.map(d => <option key={d.id} value={d.id}>{d.name} — {d.hostname}</option>)}

@@ -39,7 +39,7 @@ async function captureMikrotik(deviceId) {
   return result;
 }
 
-async function captureConfiguration(device) {
+export async function captureDeviceConfiguration(device) {
   if (device.type === 'mikrotik') return captureMikrotik(device.id);
   if (device.type === 'huawei_vrp') return sshHuaweiVrpExec({ deviceId: device.id, command: 'display current-configuration' });
   throw new Error('Backup disponível somente para MikroTik e Huawei VRP');
@@ -73,7 +73,7 @@ export async function runDeviceBackup(deviceId, { type = 'manual', username = 's
     device = await prisma.device.findUnique({ where: { id: deviceId } });
     if (!device || !device.isActive) throw Object.assign(new Error('Equipamento não encontrado ou inativo'), { statusCode: 404 });
     if (!SUPPORTED_BACKUP_TYPES.includes(device.type)) throw Object.assign(new Error('Backup disponível somente para MikroTik e Huawei VRP'), { statusCode: 400 });
-    const result = await captureConfiguration(device);
+    const result = await captureDeviceConfiguration(device);
     if (!result.success) throw new Error(result.output || 'Falha ao capturar configuração');
     const content = String(result.output || '').trim();
     if (content.length < 40) throw new Error('A configuração retornada está vazia ou incompleta');

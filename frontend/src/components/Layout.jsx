@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar
 } from 'lucide-react';
 import ThemeSelector from './ThemeSelector.jsx';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/devices', label: 'Equipamentos', icon: Server },
+  { path: '/discovery', label: 'Descoberta de rede', icon: Radar, roles: ['admin'] },
   { path: '/tasks', label: 'Tasks', icon: ListTodo },
   { path: '/chat', label: 'Chat IA', icon: MessageSquare, roles: ['admin', 'operator'] },
   { path: '/terminal', label: 'Terminal CLI', icon: TerminalSquare },
@@ -21,6 +22,8 @@ const NAV_ITEMS = [
   { path: '/knowledge', label: 'Base de conhecimento', icon: Library, roles: ['admin'] },
   { path: '/backups', label: 'Backup e restauração', icon: DatabaseBackup, roles: ['admin'] },
   { path: '/device-backups', label: 'Backup de equipamentos', icon: ArchiveRestore, roles: ['admin'] },
+  { path: '/compliance', label: 'Compliance', icon: ClipboardCheck, roles: ['admin'] },
+  { path: '/changes', label: 'Mudanças', icon: ClipboardList, roles: ['admin','operator'] },
   { path: '/security', label: 'Minha segurança', icon: Shield },
 ];
 

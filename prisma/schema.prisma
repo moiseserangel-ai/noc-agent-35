@@ -43,19 +43,21 @@ model AuthSession {
 }
 
 model AuditLog {
-  id          String   @id @default(uuid())
-  userId      String?
-  username    String
-  displayName String?
-  role        String?
-  action      String
-  resource    String
-  resourceId  String?
-  status      String   @default("success")
-  ipAddress   String?
-  userAgent   String?
-  details     String?
-  createdAt   DateTime @default(now())
+  id           String   @id @default(uuid())
+  userId       String?
+  username     String
+  displayName  String?
+  role         String?
+  action       String
+  resource     String
+  resourceId   String?
+  status       String   @default("success")
+  ipAddress    String?
+  userAgent    String?
+  details      String?
+  previousHash String?
+  recordHash   String?
+  createdAt    DateTime @default(now())
 
   @@index([createdAt])
   @@index([username, createdAt])
@@ -79,28 +81,35 @@ model NotificationLog {
 }
 
 model Device {
-  id            String               @id @default(uuid())
-  name          String
-  hostname      String
-  port          Int                  @default(22)
-  type          String // mikrotik|linux|huawei_vrp (extensível via plugins)
-  manufacturer  String?
-  platform      String?
-  model         String?
-  osVersion     String?
-  capabilities  String? // Lista separada por vírgulas: bgp,mpls,isis...
-  username      String
-  password      String // Encrypted (AES-256-GCM)
-  group         String?
-  zabbixHostId  String?
-  isActive      Boolean              @default(true)
-  notes         String?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  tasks         Task[]
-  changes       DeviceChange[]
-  backupPolicy  DeviceBackupPolicy?
-  configBackups DeviceConfigBackup[]
+  id                   String                 @id @default(uuid())
+  name                 String
+  hostname             String
+  port                 Int                    @default(22)
+  type                 String // mikrotik|linux|huawei_vrp (extensível via plugins)
+  manufacturer         String?
+  platform             String?
+  model                String?
+  osVersion            String?
+  capabilities         String? // Lista separada por vírgulas: bgp,mpls,isis...
+  username             String
+  password             String // Encrypted (AES-256-GCM)
+  group                String?
+  zabbixHostId         String?
+  isActive             Boolean                @default(true)
+  notes                String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  tasks                Task[]
+  changes              DeviceChange[]
+  backupPolicy         DeviceBackupPolicy?
+  configBackups        DeviceConfigBackup[]
+  compliancePolicy     CompliancePolicy?
+  complianceScans      ComplianceScan[]
+  complianceExceptions ComplianceException[]
+  complianceScopeId    String?
+  complianceScope      ComplianceScopePolicy? @relation("DeviceScopePolicy", fields: [complianceScopeId], references: [id], onDelete: SetNull)
+  changeRequestDevices ChangeRequestDevice[]
+  discoveryReferences  DiscoveryHost[]
 }
 
 model DeviceChange {
@@ -160,22 +169,186 @@ model DeviceConfigBackup {
   @@index([status, createdAt])
 }
 
+model CompliancePolicy {
+  id                String             @id @default(uuid())
+  deviceId          String             @unique
+  device            Device             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  enabled           Boolean            @default(false)
+  frequency         String             @default("daily") // daily|weekly
+  hour              Int                @default(3)
+  weekday           Int                @default(1)
+  profile           String             @default("noc_baseline_v1")
+  profileId         String?
+  complianceProfile ComplianceProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  alertEnabled      Boolean            @default(true)
+  minimumScore      Int                @default(80)
+  lastRunAt         DateTime?
+  lastStatus        String?
+  lastScore         Int?
+  lastError         String?
+  nextRunAt         DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([enabled, nextRunAt])
+  @@index([profileId])
+}
+
+model ComplianceProfile {
+  id            String                  @id @default(uuid())
+  name          String
+  description   String?
+  deviceType    String // mikrotik|huawei_vrp
+  isSystem      Boolean                 @default(false)
+  isActive      Boolean                 @default(true)
+  minimumScore  Int                     @default(80)
+  createdBy     String
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  rules         ComplianceRule[]
+  policies      CompliancePolicy[]
+  scopePolicies ComplianceScopePolicy[]
+
+  @@unique([name, deviceType])
+  @@index([deviceType, isActive])
+}
+
+model ComplianceRule {
+  id                 String            @id @default(uuid())
+  profileId          String
+  profile            ComplianceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  ruleKey            String
+  title              String
+  category           String
+  severity           String
+  enabled            Boolean           @default(true)
+  expectedValue      String?
+  recommendation     String
+  remediationPreview String?
+  position           Int               @default(0)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([profileId, ruleKey])
+  @@index([profileId, enabled, position])
+}
+
+model ComplianceScan {
+  id                  String              @id @default(uuid())
+  deviceId            String
+  device              Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  type                String // manual|automatic
+  profile             String              @default("noc_baseline_v1")
+  status              String              @default("running") // running|completed|failed
+  score               Int?
+  previousScore       Int?
+  passed              Int                 @default(0)
+  failed              Int                 @default(0)
+  regressions         Int                 @default(0)
+  recoveries          Int                 @default(0)
+  alertTaskId         String?
+  validationTaskId    String?
+  configurationSha256 String?
+  error               String?
+  createdBy           String
+  startedAt           DateTime            @default(now())
+  completedAt         DateTime?
+  findings            ComplianceFinding[]
+
+  @@index([deviceId, startedAt])
+  @@index([status, startedAt])
+  @@index([validationTaskId])
+}
+
+model ComplianceScopePolicy {
+  id           String            @id @default(uuid())
+  name         String
+  description  String?
+  deviceGroup  String?
+  deviceRole   String?
+  profileId    String
+  profile      ComplianceProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  minimumScore Int               @default(80)
+  priority     Int               @default(100)
+  isActive     Boolean           @default(true)
+  createdBy    String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  devices      Device[]          @relation("DeviceScopePolicy")
+
+  @@index([deviceGroup, deviceRole, isActive])
+  @@index([profileId])
+}
+
+model ComplianceAuditPackage {
+  id          String   @id @default(uuid())
+  filename    String
+  format      String   @default("json")
+  sha256      String   @unique
+  manifest    String
+  fromDate    DateTime
+  toDate      DateTime
+  deviceId    String?
+  generatedBy String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model ComplianceFinding {
+  id                 String         @id @default(uuid())
+  scanId             String
+  scan               ComplianceScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  ruleKey            String
+  title              String
+  category           String
+  severity           String
+  status             String // compliant|non_compliant
+  change             String         @default("unchanged") // unchanged|regressed|recovered|new_non_compliant
+  exceptionId        String?
+  evidence           String?
+  recommendation     String
+  remediationPreview String?
+  createdAt          DateTime       @default(now())
+
+  @@index([scanId, status])
+  @@index([ruleKey, status])
+}
+
+model ComplianceException {
+  id         String    @id @default(uuid())
+  deviceId   String
+  device     Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  ruleKey    String
+  reason     String
+  approvedBy String
+  startsAt   DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  revokedBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([deviceId, ruleKey, expiresAt])
+  @@index([revokedAt, expiresAt])
+}
+
 model Task {
-  id                   String        @id @default(uuid())
-  taskNumber           Int           @unique
+  id                   String          @id @default(uuid())
+  taskNumber           Int             @unique
   deviceId             String?
-  device               Device?       @relation(fields: [deviceId], references: [id])
+  device               Device?         @relation(fields: [deviceId], references: [id])
   source               String // "whatsapp" | "zabbix" | "dashboard"
-  workType             String        @default("incident") // incident|consultation|configuration
-  status               String        @default("pending") // pending|diagnosing|awaiting_approval|executing|completed|failed|cancelled
+  workType             String          @default("incident") // incident|consultation|configuration
+  status               String          @default("pending") // pending|diagnosing|awaiting_approval|executing|completed|failed|cancelled
   originalMessage      String
   diagnosis            String?
   proposedSolution     String?
   adminResponse        String? // "yes" | "no" | null
   executionResult      String?
   agentUsed            String? // "support" | "mikrotik" | "linux"
-  priority             String        @default("medium") // low|medium|high|critical
-  zabbixEventId        String?       @unique
+  priority             String          @default("medium") // low|medium|high|critical
+  zabbixEventId        String?         @unique
   zabbixRecoveryId     String?
   zabbixStatus         String?
   incidentKey          String?
@@ -183,8 +356,8 @@ model Task {
   lastSeenAt           DateTime?
   resolvedAt           DateTime?
   durationSeconds      Int?
-  occurrenceCount      Int           @default(1)
-  duplicateCount       Int           @default(0)
+  occurrenceCount      Int             @default(1)
+  duplicateCount       Int             @default(0)
   assignedTo           String?
   acknowledgedAt       DateTime?
   dueAt                DateTime?
@@ -197,12 +370,124 @@ model Task {
   slaWarningSentAt     DateTime?
   slaAckBreachedAt     DateTime?
   slaResolveBreachedAt DateTime?
-  escalationLevel      Int           @default(0)
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  escalationLevel      Int             @default(0)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
   messages             TaskMessage[]
+  changeRequests       ChangeRequest[]
 
   @@index([incidentKey, status])
+}
+
+model ChangeRequest {
+  id                String                @id @default(uuid())
+  number            Int                   @unique
+  title             String
+  description       String
+  reason            String
+  changeType        String                @default("normal")
+  status            String                @default("draft")
+  riskLevel         String                @default("medium")
+  riskScore         Int                   @default(0)
+  impact            String
+  executionPlan     String
+  validationPlan    String
+  rollbackPlan      String
+  windowStart       DateTime?
+  windowEnd         DateTime?
+  requestedBy       String
+  assignedTo        String?
+  taskId            String?
+  task              Task?                 @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  approvedBy        String?
+  approvedAt        DateTime?
+  rejectedBy        String?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  validationSummary String?
+  rollbackTaskId    String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  devices           ChangeRequestDevice[]
+  events            ChangeRequestEvent[]
+
+  @@index([status, windowStart])
+  @@index([taskId])
+}
+
+model ChangeRequestDevice {
+  id               String        @id @default(uuid())
+  changeRequestId  String
+  changeRequest    ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  deviceId         String
+  device           Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  beforeBackupId   String?
+  afterBackupId    String?
+  complianceScanId String?
+  validationStatus String?
+  validationDetail String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([changeRequestId, deviceId])
+  @@index([deviceId, createdAt])
+}
+
+model ChangeRequestEvent {
+  id              String        @id @default(uuid())
+  changeRequestId String
+  changeRequest   ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  action          String
+  actor           String
+  details         String?
+  createdAt       DateTime      @default(now())
+
+  @@index([changeRequestId, createdAt])
+}
+
+model DiscoveryJob {
+  id          String          @id @default(uuid())
+  cidr        String
+  ports       String
+  timeoutMs   Int             @default(900)
+  status      String          @default("queued") // queued|running|completed|failed|cancelled
+  totalHosts  Int
+  scanned     Int             @default(0)
+  found       Int             @default(0)
+  error       String?
+  createdBy   String
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  hosts       DiscoveryHost[]
+
+  @@index([status, createdAt])
+}
+
+model DiscoveryHost {
+  id               String       @id @default(uuid())
+  jobId            String
+  job              DiscoveryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  ipAddress        String
+  hostname         String?
+  latencyMs        Int?
+  openPorts        String
+  sshBanner        String?
+  detectedType     String?
+  manufacturer     String?
+  confidence       Int          @default(0)
+  state            String       @default("new") // new|known|imported|ignored
+  existingDeviceId String?
+  existingDevice   Device?      @relation(fields: [existingDeviceId], references: [id], onDelete: SetNull)
+  importedAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([jobId, ipAddress])
+  @@index([ipAddress, createdAt])
+  @@index([state, createdAt])
 }
 
 model TaskMessage {

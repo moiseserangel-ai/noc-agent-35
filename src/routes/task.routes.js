@@ -5,9 +5,29 @@ import { createSpecialistAgents } from '../vendors/registry.js';
 import { buildSlaFields } from '../services/sla.service.js';
 import { notifyTask } from '../services/notification.service.js';
 import { configurationPlanningInstruction, specialistResultNeedsApproval } from '../services/agent-approval-policy.service.js';
+import { logAudit } from '../services/audit.service.js';
+import { runComplianceScan } from '../services/compliance.service.js';
 
 const router = Router();
 const specialistAgents = createSpecialistAgents();
+
+async function validateComplianceRemediation(task, actor, io) {
+  if (!task.deviceId || !String(task.incidentKey || '').startsWith('compliance-remediation:')) return null;
+  const ruleKey = String(task.incidentKey).split(':').slice(2).join(':');
+  const scan = await runComplianceScan(task.deviceId,{type:'post_remediation',username:actor,validationTaskId:task.id});
+  const finding = scan.findings.find(item=>item.ruleKey===ruleKey);
+  const passed = finding && ['compliant','excepted'].includes(finding.status);
+  const note = passed
+    ? `Validação automática aprovada. O controle ${ruleKey} está conforme na verificação ${scan.id}; configuração SHA-256 ${scan.configurationSha256}.`
+    : `Validação automática não confirmou a correção do controle ${ruleKey}. A Task permanece em atendimento. Verificação ${scan.id}; evidência: ${finding?.evidence || 'controle não localizado'}.`;
+  const updated = await taskService.updateTask(task.id,passed
+    ? {status:'validated',validatedAt:new Date(),resolutionSummary:note}
+    : {status:'in_progress',resolvedAt:null,validatedAt:null,resolutionSummary:note});
+  await taskService.addTaskMessage(task.id,'system',note);
+  await notifyTask(updated,passed?'validated':'reopened',{message:note,io});
+  await logAudit({username:actor,displayName:actor,role:'admin',action:'validate_remediation',resource:'task',resourceId:task.id,status:passed?'success':'failure',details:{taskNumber:task.taskNumber,scanId:scan.id,ruleKey,passed,configurationSha256:scan.configurationSha256}});
+  return updated;
+}
 
 const TRANSITIONS = {
   acknowledge: { from: ['pending', 'failed'], to: 'in_progress' },
@@ -91,6 +111,40 @@ router.get('/stats', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.post('/:id/approval', async(req,res,next)=>{
+  let task;
+  try{
+    if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem aprovar configurações'});
+    task=await taskService.getTaskById(req.params.id);
+    if(!task)return res.status(404).json({success:false,error:'Task não encontrada'});
+    if(task.status!=='awaiting_approval')return res.status(409).json({success:false,error:'A Task não está aguardando aprovação'});
+    const approved=req.body.approved===true;
+    const actor=req.user.name||req.user.username;
+    if(!approved){
+      const updated=await taskService.updateTask(task.id,{status:'cancelled',adminResponse:'no'});
+      await taskService.addTaskMessage(task.id,'user',`${actor} rejeitou a correção. Nenhum comando foi executado.`);
+      await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'reject',resource:'task',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber}});
+      return res.json({success:true,data:updated,message:'Correção rejeitada'});
+    }
+    if(!task.deviceId||!task.agentUsed||!task.proposedSolution)return res.status(400).json({success:false,error:'A Task não possui equipamento, especialista ou plano completo'});
+    const agent=specialistAgents[task.agentUsed];
+    if(!agent)return res.status(400).json({success:false,error:'Especialista indisponível para este equipamento'});
+    await taskService.updateTask(task.id,{status:'executing',adminResponse:'yes'});
+    await taskService.addTaskMessage(task.id,'user',`${actor} aprovou explicitamente a correção.`);
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'approve',resource:'task',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber,agent:task.agentUsed}});
+    const execution=await agent.executeSolution(task.deviceId,task.device?.name||'Dispositivo',task.proposedSolution,task.taskNumber);
+    let updated=await taskService.updateTask(task.id,{status:'resolved',executionResult:execution.text,resolutionSummary:execution.text,resolutionType:'agent',resolvedAt:new Date()});
+    await taskService.addTaskMessage(task.id,'agent',execution.text,task.agentUsed);
+    await notifyTask(updated,'resolved',{message:'Correção de compliance executada após aprovação administrativa.',io:req.app.get('io')});
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'agent_execute',resource:'task',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber,agent:task.agentUsed}});
+    updated = await validateComplianceRemediation({...task,...updated},actor,req.app.get('io')) || updated;
+    res.json({success:true,data:updated,message:updated.status==='validated'?'Correção executada e validada no equipamento':'Correção executada; validação requer nova análise'});
+  }catch(error){
+    if(task)await taskService.updateTask(task.id,{status:'failed',executionResult:`Falha na execução aprovada: ${error.message}`}).catch(()=>{});
+    next(error);
+  }
+});
+
 router.post('/:id/reprocess', async (req, res, next) => {
   try {
     const task = await taskService.getTaskById(req.params.id);
@@ -133,9 +187,10 @@ router.post('/:id/complete', async (req, res, next) => {
     if (!task) return res.status(404).json({ success: false, error: 'Task não encontrada' });
     if (['executing', 'diagnosing'].includes(task.status)) return res.status(409).json({ success: false, error: 'A Task está em processamento' });
     const note = String(req.body.note || 'Concluída manualmente pelo administrador').slice(0, 1000);
-    const updated = await taskService.updateTask(task.id, { status: 'resolved', executionResult: note, resolutionSummary: note, resolutionType: 'manual', resolvedAt: new Date(), adminResponse: 'manual' });
+    let updated = await taskService.updateTask(task.id, { status: 'resolved', executionResult: note, resolutionSummary: note, resolutionType: 'manual', resolvedAt: new Date(), adminResponse: 'manual' });
     await taskService.addTaskMessage(task.id, 'user', note);
     await notifyTask(updated, 'resolved', { message: note, io: req.app.get('io') });
+    updated = await validateComplianceRemediation({...task,...updated},req.user?.username || 'admin',req.app.get('io')) || updated;
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 });
