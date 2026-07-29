@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import ThemeSelector from './ThemeSelector.jsx';
 
@@ -31,6 +31,7 @@ const NAV_ITEMS = [
 
 export default function Layout({ onLogout, user, branding, theme, onTheme }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('noc_sidebar_collapsed') === 'true');
   const location = useLocation();
   const visibleItems = NAV_ITEMS.filter(item => !item.roles || item.roles.includes(user?.role));
   const currentItem = visibleItems.find(item => item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path));
@@ -42,8 +43,16 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
     document.body.scrollTop = 0;
   }, [location.pathname]);
 
+  const toggleSidebar = () => {
+    setSidebarCollapsed(value => {
+      const next = !value;
+      localStorage.setItem('noc_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
+
   return (
-    <div className="app-layout">
+    <div className={`app-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -69,21 +78,22 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
               end={item.path === '/'}
               className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
               onClick={() => setSidebarOpen(false)}
+              title={sidebarCollapsed ? item.label : undefined}
             >
               <item.icon size={20} />
-              {item.label}
+              <span className="sidebar-link-label">{item.label}</span>
             </NavLink>
           ))}
         </nav>
 
         <div className="sidebar-footer">
-          <div style={{ padding: '8px 12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          <div className="sidebar-user">
             <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{user?.name}</div>
             {user?.role === 'admin' ? 'Administrador' : user?.role === 'operator' ? 'Operador NOC' : 'Visualização'}
           </div>
-          <button className="sidebar-link" onClick={onLogout} style={{ color: 'var(--danger)' }}>
+          <button className="sidebar-link" onClick={onLogout} style={{ color: 'var(--danger)' }} title={sidebarCollapsed ? 'Sair' : undefined}>
             <LogOut size={20} />
-            Sair
+            <span className="sidebar-link-label">Sair</span>
           </button>
         </div>
       </aside>
@@ -91,6 +101,9 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
       <div className="content-shell">
         <header className="topbar">
           <button className="mobile-menu-btn" aria-label="Abrir menu" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
+          <button className="desktop-sidebar-toggle" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} title={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={toggleSidebar}>
+            {sidebarCollapsed ? <PanelLeftOpen size={19}/> : <PanelLeftClose size={19}/>}
+          </button>
           <div className="topbar-title"><span>Área atual</span><strong>{currentItem?.label || 'NOC Agent'}</strong></div>
           <ThemeSelector value={theme} onChange={onTheme}/>
           <div className="topbar-status"><span className="status-pulse" /> Sistema online</div>

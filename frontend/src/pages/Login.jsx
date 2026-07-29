@@ -1,21 +1,24 @@
 import { useState } from 'react';
 import {
-  Activity, ArrowRight, BarChart3, CheckCircle, Eye, EyeOff, Lock,
-  MessageSquare, Server, Shield, TerminalSquare, User,
+  Activity, ArrowRight, CheckCircle, DatabaseBackup, Eye, EyeOff, Lock,
+  MessageSquare, Network, Server, Shield, TerminalSquare, User,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import ThemeSelector from '../components/ThemeSelector.jsx';
 
 const FEATURES = [
-  { icon: Activity, title: 'Monitoramento inteligente', text: 'Alertas do Zabbix, incidentes, SLA e acompanhamento operacional em tempo real.' },
-  { icon: Server, title: 'Agentes especialistas', text: 'Diagnóstico assistido para MikroTik RouterOS, Huawei VRP e servidores Linux.' },
-  { icon: TerminalSquare, title: 'Terminal CLI seguro', text: 'Console auditada e sessões SSH interativas com múltiplos equipamentos.' },
-  { icon: MessageSquare, title: 'Operação multicanal', text: 'Integração com WhatsApp e Telegram para solicitações e notificações.' },
-  { icon: BarChart3, title: 'Tasks e relatórios', text: 'Fluxo completo de incidentes, responsáveis, histórico e indicadores.' },
-  { icon: Shield, title: 'Segurança e auditoria', text: 'Perfis de acesso, autenticação em dois fatores e rastreabilidade das ações.' },
+  { icon: Activity, title: 'Incidentes e capacidade', text: 'Alertas Zabbix, SLA, escalonamento, tendências e acompanhamento operacional.' },
+  { icon: Server, title: 'Operação multi-vendor', text: 'Agentes especialistas para nove plataformas de rede, segurança e servidores.' },
+  { icon: TerminalSquare, title: 'Terminal CLI seguro', text: 'Console auditado, autocomplete e múltiplas sessões SSH com controle de mudanças.' },
+  { icon: Network, title: 'Topologia automática', text: 'Mapa operacional com descoberta LLDP/CDP, correlação de vizinhos e impactos.' },
+  { icon: DatabaseBackup, title: 'Backup e compliance', text: 'Snapshots agendados, comparação de versões e baselines por fabricante.' },
+  { icon: MessageSquare, title: 'Automação multicanal', text: 'Tasks, relatórios e agentes via painel, WhatsApp e Telegram com IA multi-modelo.' },
 ];
 
-const INTEGRATIONS = ['Zabbix', 'MikroTik', 'Huawei', 'Linux', 'WhatsApp', 'Telegram', 'Claude', 'OpenAI', 'Gemini'];
+const INTEGRATIONS = [
+  'Zabbix', 'MikroTik', 'Huawei', 'Cisco', 'Juniper', 'FortiGate',
+  'Ubiquiti', 'Datacom', 'Nokia', 'Linux', 'WhatsApp', 'Telegram', 'Multi-IA',
+];
 
 export default function Login({ onLogin, branding, theme, onTheme }) {
   const [username, setUsername] = useState('');
@@ -69,13 +72,13 @@ export default function Login({ onLogin, branding, theme, onTheme }) {
         </header>
 
         <div className="login-hero">
-          <div className="login-eyebrow"><span /> Plataforma de operações NOC</div>
+          <div className="login-eyebrow"><span /> Plataforma multi-vendor para operações NOC</div>
           <h1>Operações de rede mais <em>rápidas, seguras e inteligentes.</em></h1>
-          <p>Centralize monitoramento, incidentes, diagnósticos, automações e acesso aos equipamentos em uma única plataforma.</p>
+          <p>Centralize monitoramento, incidentes, topologia, capacidade, compliance, backups e automações em uma única plataforma.</p>
           <div className="login-proof">
-            <span><CheckCircle size={15} /> Monitoramento contínuo</span>
-            <span><CheckCircle size={15} /> Operações auditadas</span>
-            <span><CheckCircle size={15} /> Agentes especializados</span>
+            <span><CheckCircle size={15} /> 9 plataformas suportadas</span>
+            <span><CheckCircle size={15} /> Mudanças auditadas</span>
+            <span><CheckCircle size={15} /> IA com múltiplos provedores</span>
           </div>
         </div>
 
