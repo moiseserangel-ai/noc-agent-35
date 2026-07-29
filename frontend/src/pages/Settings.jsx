@@ -82,6 +82,7 @@ const SECTIONS = [
     fields: [
       { key: 'system_webhook_url', label: 'Webhook URL do Sistema (Copie para o Zabbix)', type: 'text', readOnly: true },
       { key: 'zabbix_url', label: 'URL do Zabbix', type: 'text', placeholder: 'http://zabbix.example.com' },
+      { key: 'zabbix_api_token', label: 'Token da API do Zabbix', type: 'password', placeholder: 'Token somente leitura', helperText: 'Usado pela página Capacidade para consultar hosts e itens. Recomendado: usuário com permissão somente leitura.' },
       { key: 'zabbix_webhook_token', label: 'Token do Webhook (Opcional)', type: 'password', placeholder: 'Crie um token ou deixe em branco', helperText: 'Invente qualquer token/senha para adicionar segurança. Se deixar em branco, não exigiremos token.' },
     ],
   },

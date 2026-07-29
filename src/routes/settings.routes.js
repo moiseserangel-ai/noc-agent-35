@@ -11,7 +11,7 @@ import { listAnthropicModels } from '../services/anthropic-model.service.js';
 
 const router = Router();
 
-const SENSITIVE_KEYS = ['claude_api_key', 'openai_api_key', 'gemini_api_key', 'evolution_api_key', 'telegram_bot_token', 'zabbix_webhook_token', 'dashboard_password', 'encryption_key'];
+const SENSITIVE_KEYS = ['claude_api_key', 'openai_api_key', 'gemini_api_key', 'evolution_api_key', 'telegram_bot_token', 'zabbix_webhook_token', 'zabbix_api_token', 'dashboard_password', 'encryption_key'];
 
 router.post('/test-telegram', async (req, res) => {
   try {

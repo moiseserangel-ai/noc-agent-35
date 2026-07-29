@@ -81,35 +81,41 @@ model NotificationLog {
 }
 
 model Device {
-  id                   String                 @id @default(uuid())
-  name                 String
-  hostname             String
-  port                 Int                    @default(22)
-  type                 String // mikrotik|linux|huawei_vrp (extensível via plugins)
-  manufacturer         String?
-  platform             String?
-  model                String?
-  osVersion            String?
-  capabilities         String? // Lista separada por vírgulas: bgp,mpls,isis...
-  username             String
-  password             String // Encrypted (AES-256-GCM)
-  group                String?
-  zabbixHostId         String?
-  isActive             Boolean                @default(true)
-  notes                String?
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  tasks                Task[]
-  changes              DeviceChange[]
-  backupPolicy         DeviceBackupPolicy?
-  configBackups        DeviceConfigBackup[]
-  compliancePolicy     CompliancePolicy?
-  complianceScans      ComplianceScan[]
-  complianceExceptions ComplianceException[]
-  complianceScopeId    String?
-  complianceScope      ComplianceScopePolicy? @relation("DeviceScopePolicy", fields: [complianceScopeId], references: [id], onDelete: SetNull)
-  changeRequestDevices ChangeRequestDevice[]
-  discoveryReferences  DiscoveryHost[]
+  id                       String                 @id @default(uuid())
+  name                     String
+  hostname                 String
+  port                     Int                    @default(22)
+  type                     String // mikrotik|linux|huawei_vrp (extensível via plugins)
+  manufacturer             String?
+  platform                 String?
+  model                    String?
+  osVersion                String?
+  capabilities             String? // Lista separada por vírgulas: bgp,mpls,isis...
+  username                 String
+  password                 String // Encrypted (AES-256-GCM)
+  group                    String?
+  zabbixHostId             String?
+  isActive                 Boolean                @default(true)
+  notes                    String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  tasks                    Task[]
+  changes                  DeviceChange[]
+  backupPolicy             DeviceBackupPolicy?
+  configBackups            DeviceConfigBackup[]
+  compliancePolicy         CompliancePolicy?
+  complianceScans          ComplianceScan[]
+  complianceExceptions     ComplianceException[]
+  complianceScopeId        String?
+  complianceScope          ComplianceScopePolicy? @relation("DeviceScopePolicy", fields: [complianceScopeId], references: [id], onDelete: SetNull)
+  changeRequestDevices     ChangeRequestDevice[]
+  discoveryReferences      DiscoveryHost[]
+  capacitySnapshots        CapacitySnapshot[]
+  topologyNode             TopologyNode?
+  topologyLinksFrom        TopologyLink[]         @relation("TopologyLinkSource")
+  topologyLinksTo          TopologyLink[]         @relation("TopologyLinkTarget")
+  topologyNeighborsLocal   TopologyNeighbor[]     @relation("TopologyNeighborLocal")
+  topologyNeighborsMatched TopologyNeighbor[]     @relation("TopologyNeighborMatched")
 }
 
 model DeviceChange {
@@ -488,6 +494,103 @@ model DiscoveryHost {
   @@unique([jobId, ipAddress])
   @@index([ipAddress, createdAt])
   @@index([state, createdAt])
+}
+
+model CapacitySnapshot {
+  id           String   @id @default(uuid())
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  zabbixHostId String
+  availability Float?
+  cpu          Float?
+  memory       Float?
+  storage      Float?
+  trafficIn    Float?
+  trafficOut   Float?
+  uptime       Float?
+  metrics      String?
+  collectedAt  DateTime @default(now())
+
+  @@index([deviceId, collectedAt])
+  @@index([collectedAt])
+}
+
+model TopologyNode {
+  id        String   @id @default(uuid())
+  deviceId  String   @unique
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  x         Float
+  y         Float
+  updatedBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model TopologyLink {
+  id             String   @id @default(uuid())
+  sourceDeviceId String
+  sourceDevice   Device   @relation("TopologyLinkSource", fields: [sourceDeviceId], references: [id], onDelete: Cascade)
+  targetDeviceId String
+  targetDevice   Device   @relation("TopologyLinkTarget", fields: [targetDeviceId], references: [id], onDelete: Cascade)
+  label          String?
+  linkType       String   @default("ethernet") // ethernet|fiber|wireless|vpn|logical
+  source         String   @default("manual") // manual|lldp|cdp
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([sourceDeviceId, targetDeviceId])
+  @@index([targetDeviceId])
+  @@index([source, updatedAt])
+}
+
+model TopologyDiscoveryRun {
+  id          String             @id @default(uuid())
+  status      String             @default("queued") // queued|running|completed|completed_with_errors|failed
+  total       Int                @default(0)
+  scanned     Int                @default(0)
+  found       Int                @default(0)
+  matched     Int                @default(0)
+  errors      String?
+  createdBy   String
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime           @default(now())
+  neighbors   TopologyNeighbor[]
+
+  @@index([status, createdAt])
+}
+
+model TopologyNeighbor {
+  id              String               @id @default(uuid())
+  runId           String
+  run             TopologyDiscoveryRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  localDeviceId   String
+  localDevice     Device               @relation("TopologyNeighborLocal", fields: [localDeviceId], references: [id], onDelete: Cascade)
+  matchedDeviceId String?
+  matchedDevice   Device?              @relation("TopologyNeighborMatched", fields: [matchedDeviceId], references: [id], onDelete: SetNull)
+  protocol        String // mndp|lldp|cdp
+  localInterface  String?
+  remoteInterface String?
+  remoteName      String?
+  remoteIp        String?
+  remoteChassisId String?
+  remotePlatform  String?
+  confidence      Int                  @default(0)
+  status          String               @default("suggested") // suggested|confirmed|unmatched|conflict|approved|ignored|stale
+  topologyLinkId  String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  ignoredBy       String?
+  ignoredAt       DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([runId, status])
+  @@index([localDeviceId, createdAt])
+  @@index([matchedDeviceId, status])
 }
 
 model TaskMessage {

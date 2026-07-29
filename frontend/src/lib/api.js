@@ -107,6 +107,21 @@ export const api = {
   deleteDiscovery: id => request(`/discovery/${id}`,{method:'DELETE'}),
   importDiscoveredHost: (id,data) => request(`/discovery/hosts/${id}/import`,{method:'POST',body:JSON.stringify(data)}),
   ignoreDiscoveredHost: id => request(`/discovery/hosts/${id}/ignore`,{method:'POST'}),
+  getCapacity: (days=30) => request(`/capacity?days=${encodeURIComponent(days)}`),
+  collectCapacity: () => request('/capacity/collect',{method:'POST'}),
+  downloadCapacityCsv: async(days=30)=>{
+    const res=await fetch(`${BASE}/capacity/export.csv?days=${encodeURIComponent(days)}`,{headers:{Authorization:`Bearer ${getToken()}`}});
+    if(!res.ok){let data={};try{data=await res.json();}catch{}throw new Error(data.error||'Falha ao exportar capacidade');}
+    return {blob:await res.blob(),filename:res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||'capacidade.csv'};
+  },
+  getTopology: () => request('/topology'),
+  saveTopologyPositions: positions => request('/topology/positions',{method:'PUT',body:JSON.stringify({positions})}),
+  createTopologyLink: data => request('/topology/links',{method:'POST',body:JSON.stringify(data)}),
+  deleteTopologyLink: id => request(`/topology/links/${id}`,{method:'DELETE'}),
+  getTopologyDiscovery: () => request('/topology/discovery'),
+  startTopologyDiscovery: () => request('/topology/discovery',{method:'POST'}),
+  approveTopologyNeighbor: id => request(`/topology/discovery/${id}/approve`,{method:'POST'}),
+  ignoreTopologyNeighbor: id => request(`/topology/discovery/${id}/ignore`,{method:'POST'}),
 
   // Devices
   getDevices: () => request('/devices'),

@@ -30,6 +30,8 @@ import deviceBackupRoutes from './routes/device-backup.routes.js';
 import complianceRoutes from './routes/compliance.routes.js';
 import changeRequestRoutes from './routes/change-request.routes.js';
 import discoveryRoutes from './routes/discovery.routes.js';
+import capacityRoutes from './routes/capacity.routes.js';
+import topologyRoutes from './routes/topology.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -38,6 +40,7 @@ import { configurationPlanningInstruction, specialistResultNeedsApproval } from 
 import { resumeKnowledgeImportJobs } from './services/knowledge.service.js';
 import { runDeviceBackupScheduler } from './services/device-backup.service.js';
 import { runComplianceEscalations, runComplianceExceptionReminders, runComplianceScheduler } from './services/compliance.service.js';
+import { runCapacityScheduler } from './services/capacity.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -87,6 +90,8 @@ app.use('/api/device-backups', authMiddleware, requireRoles('admin'), auditMutat
 app.use('/api/compliance', authMiddleware, requireRoles('admin'), auditMutation, complianceRoutes);
 app.use('/api/changes', authMiddleware, requireRoles('admin', 'operator'), auditMutation, changeRequestRoutes);
 app.use('/api/discovery', authMiddleware, requireRoles('admin'), auditMutation, discoveryRoutes);
+app.use('/api/capacity', authMiddleware, auditMutation, capacityRoutes);
+app.use('/api/topology', authMiddleware, auditMutation, topologyRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -414,6 +419,12 @@ const complianceEscalationMonitor = setInterval(() => {
 complianceEscalationMonitor.unref();
 runComplianceEscalations(io).catch(err => logger.error(`Initial compliance escalation error: ${err.message}`));
 
+const capacityMonitor = setInterval(() => {
+  runCapacityScheduler().catch(err => logger.error(`Capacity scheduler error: ${err.message}`));
+}, 15 * 60_000);
+capacityMonitor.unref();
+runCapacityScheduler().catch(err => logger.error(`Initial capacity scheduler error: ${err.message}`));
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   clearInterval(slaMonitor);
@@ -423,6 +434,7 @@ process.on('SIGTERM', async () => {
   clearInterval(complianceMonitor);
   clearInterval(complianceExceptionMonitor);
   clearInterval(complianceEscalationMonitor);
+  clearInterval(capacityMonitor);
   logger.info('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();
@@ -437,6 +449,7 @@ process.on('SIGINT', async () => {
   clearInterval(complianceMonitor);
   clearInterval(complianceExceptionMonitor);
   clearInterval(complianceEscalationMonitor);
+  clearInterval(capacityMonitor);
   logger.info('SIGINT received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();

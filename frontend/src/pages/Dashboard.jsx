@@ -57,7 +57,10 @@ export default function Dashboard({ showBackup=false }) {
     return next;
   });
   const openTasks=(stats?.pending||0)+(stats?.inProgress||0)+(stats?.diagnosing||0)+(stats?.awaiting||0);
-  const systemTone=(stats?.slaBreached||0)>0||((compliance?.summary.criticalFindings||0)>0)?'danger':openTasks>0?'warning':'success';
+  const slaBreached=stats?.slaBreached||0;
+  const criticalFindings=compliance?.summary.criticalFindings||0;
+  const systemTone=slaBreached>0||criticalFindings>0?'danger':openTasks>0?'warning':'success';
+  const systemDetail=slaBreached>0?`${slaBreached} SLA(s) violado(s)`:criticalFindings>0?`${criticalFindings} desvio(s) crítico(s) de compliance`:openTasks>0?`${openTasks} Task(s) em aberto`:'Serviço do NOC online';
   const quickLinks=useMemo(()=>[
     {to:'/tasks',label:'Tasks',icon:ListTodo,detail:'Gerenciar atividades'},
     {to:'/devices',label:'Equipamentos',icon:Server,detail:'Inventário e acesso'},
@@ -73,7 +76,7 @@ export default function Dashboard({ showBackup=false }) {
     <div className="page-header dashboard-titlebar"><div><div className="dashboard-eyebrow"><span className={`dashboard-health-dot ${systemTone}`}/> Central de operações</div><h2>Dashboard executivo</h2><p>Saúde do NOC, riscos e atividades em uma única visão</p></div><div className="dashboard-refresh"><span>Atualizado em<br/><strong>{updatedAt?updatedAt.toLocaleTimeString('pt-BR'):'—'}</strong></span><button className="btn btn-secondary" onClick={()=>load(false)} disabled={refreshing}><RefreshCw size={15} className={refreshing?'dashboard-spinning':''}/> Atualizar</button></div></div>
 
     <div className="executive-health-grid">
-      <HealthCard icon={Activity} label="Saúde geral" value={systemTone==='success'?'Normal':systemTone==='warning'?'Atenção':'Crítica'} detail="Serviço do NOC online" tone={systemTone}/>
+      <HealthCard icon={Activity} label="Saúde geral" value={systemTone==='success'?'Normal':systemTone==='warning'?'Atenção':'Crítica'} detail={systemDetail} tone={systemTone}/>
       <HealthCard icon={ListTodo} label="Tasks abertas" value={openTasks} detail={`${stats?.awaiting||0} aguardando aprovação`} tone={openTasks?'warning':'success'} to="/tasks"/>
       <HealthCard icon={AlertTriangle} label="SLA violado" value={stats?.slaBreached||0} detail={`${stats?.completedToday||0} resolvidas hoje`} tone={stats?.slaBreached?'danger':'success'} to="/reports"/>
       {showBackup&&<HealthCard icon={ShieldCheck} label="Compliance" value={`${compliance?.summary.averageScore||0}%`} detail={`${compliance?.summary.belowTarget||0} abaixo da meta`} tone={(compliance?.summary.criticalFindings||0)?'danger':(compliance?.summary.belowTarget||0)?'warning':'success'} to="/compliance"/>}
