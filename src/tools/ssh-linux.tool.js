@@ -23,10 +23,10 @@ function isBlockedCommand(command) {
   return false;
 }
 
-const READ_ONLY_LINUX = /^(uptime|free\b|df\b|du\b|top\b|ps\b|ss\b|netstat\b|ip\s+(addr|address|route|link|neigh)\b|ping\b|traceroute\b|journalctl\b|dmesg\b|cat\s+\/((var\/log)|(proc)|(sys))\/|tail\b|head\b|grep\b|systemctl\s+(status|list-units|is-active|is-enabled|show)\b|ls\b|findmnt\b|mount\s*$|hostname\b|uname\b|who\b|w\b)/i;
+const READ_ONLY_LINUX = /^(uptime|free\b|df\b|du\b|top\b|ps\b|ss\b|netstat\b|ip\s+(addr|address|route|link|neigh)\b|ping\b|traceroute\b|journalctl\b|dmesg\b|cat\s+(?:\/etc\/os-release|\/((var\/log)|(proc)|(sys))\/)|tail\b|head\b|grep\b|systemctl\s+(status|list-units|list-unit-files|is-active|is-enabled|show)\b|ls\b|findmnt\b|mount\s*$|hostname\b|uname\b|who\b|w\b)/i;
 
 export async function sshLinuxExec({ deviceId, command, changeComment }) {
-  const readOnly = READ_ONLY_LINUX.test(String(command).trim());
+  const readOnly = String(command).split(/\r?\n/).map(line=>line.trim()).filter(Boolean).every(line=>READ_ONLY_LINUX.test(line));
   if (!isRemediationApproved() && !readOnly) {
     return { success: false, output: 'Comando de alteração bloqueado: diagnóstico permite somente leitura.' };
   }

@@ -35,7 +35,7 @@ export function PriorityBadge({ priority }) {
 }
 
 export function TypeBadge({ type }) {
-  const types = { mikrotik: ['MikroTik','badge-cyan'], linux: ['Linux','badge-success'], huawei_vrp: ['Huawei VRP','badge-warning'] };
+  const types = { mikrotik: ['MikroTik','badge-cyan'], linux: ['Linux','badge-success'], huawei_vrp: ['Huawei VRP','badge-warning'], cisco_ios:['Cisco IOS','badge-info'], juniper_junos:['Juniper Junos','badge-purple'], fortigate_fortios:['FortiGate','badge-danger'], ubiquiti_edgeos:['EdgeOS','badge-info'], unifi_controller:['UniFi','badge-cyan'], datacom_dmos:['Datacom','badge-warning'], nokia_sros:['Nokia SR OS','badge-purple'] };
   const [label, className] = types[type] || [type, 'badge-muted'];
   return (
     <span className={`badge ${className}`}>{label}</span>

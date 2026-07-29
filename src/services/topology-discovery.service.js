@@ -2,6 +2,11 @@ import prisma from '../database/client.js';
 import logger from '../utils/logger.js';
 import { sshMikrotikExec } from '../tools/ssh-mikrotik.tool.js';
 import { sshHuaweiVrpExec } from '../tools/ssh-huawei-vrp.tool.js';
+import { sshCiscoIosExec } from '../tools/ssh-cisco-ios.tool.js';
+import { sshJuniperJunosExec } from '../tools/ssh-juniper-junos.tool.js';
+import { sshFortiGateExec } from '../tools/ssh-fortigate-fortios.tool.js';
+import { sshEdgeOsExec } from '../tools/ssh-ubiquiti-edgeos.tool.js';
+import { sshDatacomDmosExec, sshNokiaSrosExec } from '../tools/ssh-profiled-network.tool.js';
 
 let running = false;
 const clean = value => String(value || '').trim().replace(/^"|"$/g, '');
@@ -45,6 +50,107 @@ export function parseHuaweiLldpBrief(output) {
   return rows;
 }
 
+export function parseCiscoNeighbors(output) {
+  const text=String(output||'').replace(/\r/g,'');
+  const sections=text.split(/(?=Device ID:|System Name:)/i).filter(block=>/^(?:Device ID|System Name):/i.test(block.trim()));
+  return sections.map(block=>{
+    const cdp=/^Device ID:/i.test(block.trim());
+    const value=pattern=>(block.match(pattern)||[])[1]?.trim()||null;
+    return {
+      protocol:cdp?'cdp':'lldp',
+      localInterface:value(/Interface:\s*([^,\n]+)/i)||value(/Local (?:Intf|Interface):\s*([^\n]+)/i),
+      remoteInterface:value(/Port ID \(outgoing port\):\s*([^\n]+)/i)||value(/Port id:\s*([^\n]+)/i),
+      remoteName:value(/(?:Device ID|System Name):\s*([^\n]+)/i),
+      remoteIp:value(/(?:IP address|Management Address):\s*([0-9a-f:.]+)/i),
+      remoteChassisId:value(/Chassis id:\s*([^\n]+)/i),
+      remotePlatform:value(/Platform:\s*([^,\n]+)/i)||value(/System Description:\s*([^\n]+)/i),
+    };
+  }).filter(item=>item.remoteName||item.remoteIp||item.remoteChassisId);
+}
+
+export function parseJuniperNeighbors(output) {
+  const rows = [];
+  for (const raw of String(output || '').replace(/\r/g, '').split('\n')) {
+    const line = raw.trim();
+    if (!line || /^[$>@]/.test(line) || /^(?:Local Interface|Parent Interface|Interface|[-=]+|Total entries)/i.test(line)) continue;
+    const parts = line.split(/\s+/);
+    if (parts.length < 4 || !/^(?:ge-|xe-|et-|ae|reth|em|fxp)\S+/i.test(parts[0])) continue;
+    rows.push({
+      protocol:'lldp',
+      localInterface:parts[0],
+      remoteInterface:parts.at(-2),
+      remoteName:parts.at(-1),
+      remoteIp:null,
+      remoteChassisId:parts.length >= 5 ? parts.slice(2, -2).join(' ') : null,
+      remotePlatform:null,
+    });
+  }
+  return rows;
+}
+
+export function parseFortiGateNeighbors(output) {
+  const rows=[];
+  let current=null;
+  for(const raw of String(output||'').replace(/\r/g,'').split('\n')){
+    const line=raw.trim();
+    const local=line.match(/^(?:Interface|Local Port)\s*[:=]\s*(\S+)/i);
+    if(local){if(current?.localInterface)rows.push(current);current={protocol:'lldp',localInterface:local[1],remoteInterface:null,remoteName:null,remoteIp:null,remoteChassisId:null,remotePlatform:null};continue;}
+    if(!current)continue;
+    const value=pattern=>(line.match(pattern)||[])[1]?.trim();
+    current.remoteName ||= value(/^(?:System Name|Hostname)\s*[:=]\s*(.+)$/i);
+    current.remoteInterface ||= value(/^(?:Port ID|Port Description)\s*[:=]\s*(.+)$/i);
+    current.remoteChassisId ||= value(/^Chassis ID\s*[:=]\s*(.+)$/i);
+    current.remoteIp ||= value(/^(?:Management Address|Management IP)\s*[:=]\s*([0-9a-f:.]+)$/i);
+  }
+  if(current?.localInterface)rows.push(current);
+  return rows.filter(item=>item.remoteName||item.remoteInterface||item.remoteChassisId);
+}
+
+export function parseEdgeOsNeighbors(output){
+  const rows=[];let current=null;
+  for(const raw of String(output||'').replace(/\r/g,'').split('\n')){
+    const line=raw.trim();const local=line.match(/^Local (?:Port|Interface)\s*[:=]\s*(\S+)/i);
+    if(local){if(current?.localInterface)rows.push(current);current={protocol:'lldp',localInterface:local[1],remoteInterface:null,remoteName:null,remoteIp:null,remoteChassisId:null,remotePlatform:null};continue;}
+    if(!current)continue;const value=pattern=>(line.match(pattern)||[])[1]?.trim();
+    current.remoteName||=value(/^System Name\s*[:=]\s*(.+)$/i);current.remoteInterface||=value(/^Port (?:ID|Description)\s*[:=]\s*(.+)$/i);current.remoteChassisId||=value(/^Chassis ID\s*[:=]\s*(.+)$/i);current.remoteIp||=value(/^Management Address\s*[:=]\s*([0-9a-f:.]+)$/i);
+  }
+  if(current?.localInterface)rows.push(current);return rows.filter(item=>item.remoteName||item.remoteInterface);
+}
+
+function parseLldpDetailBlocks(output, localPatterns) {
+  const rows=[];let current=null;
+  for(const raw of String(output||'').replace(/\r/g,'').split('\n')){
+    const line=raw.trim();
+    const local=localPatterns.map(pattern=>line.match(pattern)).find(Boolean);
+    if(local){if(current?.localInterface)rows.push(current);current={protocol:'lldp',localInterface:local[1],remoteInterface:null,remoteName:null,remoteIp:null,remoteChassisId:null,remotePlatform:null};continue;}
+    if(!current)continue;
+    const value=pattern=>(line.match(pattern)||[])[1]?.trim()||null;
+    current.remoteName ||= value(/^(?:System Name|Neighbor Name|System-Name)\s*[:=]\s*(.+)$/i);
+    current.remoteInterface ||= value(/^(?:Port ID|Port Description|Remote Port|Port-Id)\s*[:=]\s*(.+)$/i);
+    current.remoteChassisId ||= value(/^(?:Chassis ID|Chassis-Id)\s*[:=]\s*(.+)$/i);
+    current.remoteIp ||= value(/^(?:Management Address|Management IP|Mgmt Address)\s*[:=]\s*([0-9a-f:.]+)$/i);
+    current.remotePlatform ||= value(/^(?:System Description|Platform)\s*[:=]\s*(.+)$/i);
+  }
+  if(current?.localInterface)rows.push(current);
+  return rows.filter(item=>item.remoteName||item.remoteInterface||item.remoteChassisId);
+}
+
+export function parseDatacomNeighbors(output){
+  const detailed=parseLldpDetailBlocks(output,[/^(?:Local Interface|Local Port|Interface)\s*[:=]\s*(\S+)/i]);
+  if(detailed.length)return detailed;
+  const rows=[];
+  for(const raw of String(output||'').replace(/\r/g,'').split('\n')){
+    const line=raw.trim();if(!line||/local|neighbor|chassis|^-+$/i.test(line))continue;
+    const parts=line.split(/\s+/);if(parts.length<3||!/^(?:eth|ethernet|gigabit|ten|hundred|1\/|0\/)\S*/i.test(parts[0]))continue;
+    rows.push({protocol:'lldp',localInterface:parts[0],remoteName:parts[1],remoteInterface:parts[2],remoteIp:null,remoteChassisId:null,remotePlatform:null});
+  }
+  return rows;
+}
+
+export function parseNokiaNeighbors(output){
+  return parseLldpDetailBlocks(output,[/^(?:Local Port|Local Interface|Port)\s*[:=]\s*(\S+)/i]);
+}
+
 export function correlateNeighbor(neighbor, devices, localDeviceId) {
   const candidates = devices.filter(device => device.id !== localDeviceId);
   const ip = clean(neighbor.remoteIp);
@@ -76,6 +182,36 @@ async function collectDevice(device) {
     if (!result.success) throw new Error(result.output);
     return parseHuaweiLldpBrief(result.output);
   }
+  if(device.type==='cisco_ios'){
+    const result=await sshCiscoIosExec({deviceId:device.id,command:'show lldp neighbors detail\nshow cdp neighbors detail'});
+    if(!result.success)throw new Error(result.output);
+    return parseCiscoNeighbors(result.output);
+  }
+  if(device.type==='juniper_junos'){
+    const result=await sshJuniperJunosExec({deviceId:device.id,command:'show lldp neighbors'});
+    if(!result.success)throw new Error(result.output);
+    return parseJuniperNeighbors(result.output);
+  }
+  if(device.type==='fortigate_fortios'){
+    const result=await sshFortiGateExec({deviceId:device.id,command:'diagnose lldprx neighbor summary'});
+    if(!result.success)throw new Error(result.output);
+    return parseFortiGateNeighbors(result.output);
+  }
+  if(device.type==='ubiquiti_edgeos'){
+    const result=await sshEdgeOsExec({deviceId:device.id,command:'show lldp neighbors detail'});
+    if(!result.success)throw new Error(result.output);
+    return parseEdgeOsNeighbors(result.output);
+  }
+  if(device.type==='datacom_dmos'){
+    const result=await sshDatacomDmosExec({deviceId:device.id,command:'show lldp neighbors detail'});
+    if(!result.success)throw new Error(result.output);
+    return parseDatacomNeighbors(result.output);
+  }
+  if(device.type==='nokia_sros'){
+    const result=await sshNokiaSrosExec({deviceId:device.id,command:'show system lldp neighbor'});
+    if(!result.success)throw new Error(result.output);
+    return parseNokiaNeighbors(result.output);
+  }
   return [];
 }
 
@@ -83,7 +219,7 @@ async function worker(runId) {
   running = true;
   const errors = [];
   try {
-    const devices = await prisma.device.findMany({ where:{isActive:true,type:{in:['mikrotik','huawei_vrp']}}, select:{id:true,name:true,hostname:true,type:true} });
+    const devices = await prisma.device.findMany({ where:{isActive:true,type:{in:['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros']}}, select:{id:true,name:true,hostname:true,type:true} });
     await prisma.topologyDiscoveryRun.update({ where:{id:runId}, data:{status:'running',total:devices.length,startedAt:new Date()} });
     await prisma.topologyNeighbor.updateMany({ where:{status:{in:['suggested','confirmed','unmatched','conflict']}}, data:{status:'stale'} });
     for (const device of devices) {

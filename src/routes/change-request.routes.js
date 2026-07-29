@@ -30,8 +30,8 @@ router.get('/:id',async(req,res,next)=>{
 router.post('/',async(req,res,next)=>{
   try{
     const deviceIds=[...new Set((Array.isArray(req.body.deviceIds)?req.body.deviceIds:[]).map(String))];
-    const devices=await prisma.device.findMany({where:{id:{in:deviceIds},isActive:true,type:{in:['mikrotik','huawei_vrp']}}});
-    if(!devices.length||devices.length!==deviceIds.length)return res.status(400).json({success:false,error:'Selecione equipamentos MikroTik ou Huawei ativos'});
+    const devices=await prisma.device.findMany({where:{id:{in:deviceIds},isActive:true,type:{in:['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros']}}});
+    if(!devices.length||devices.length!==deviceIds.length)return res.status(400).json({success:false,error:'Selecione equipamentos de rede compatíveis e ativos'});
     const input={
       title:clean(req.body.title,140),description:clean(req.body.description),reason:clean(req.body.reason,2000),
       impact:clean(req.body.impact,2000),executionPlan:clean(req.body.executionPlan,6000),

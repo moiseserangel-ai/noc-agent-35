@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyComplianceExceptions, applyComplianceProfile, compareComplianceFindings, complianceReminderThreshold, complianceScore, evaluateHuaweiCompliance, evaluateMikrotikCompliance, nextComplianceAt, remediationNeedsPlanning } from '../src/services/compliance.service.js';
+import { applyComplianceExceptions, applyComplianceProfile, compareComplianceFindings, complianceReminderThreshold, complianceScore, evaluateDatacomCompliance, evaluateHuaweiCompliance, evaluateLinuxCompliance, evaluateMikrotikCompliance, evaluateNokiaCompliance, nextComplianceAt, remediationNeedsPlanning } from '../src/services/compliance.service.js';
 
 test('avalia controles essenciais do RouterOS exportado por seções', () => {
   const findings = evaluateMikrotikCompliance(`
@@ -57,6 +57,15 @@ interface LoopBack0
   assert.equal(findings.length, 11);
   assert.equal(findings.every(item => item.status === 'compliant'), true);
   assert.equal(complianceScore(findings), 100);
+});
+
+test('avalia baselines Datacom, Nokia e Linux',()=>{
+  const datacom=evaluateDatacomCompliance('hostname DC-SW01\nip ssh server enable\nntp server 10.0.0.1\nlogging host 10.0.0.2\nusername noc privilege 15\naccess-class MGMT in');
+  assert.equal(datacom.find(item=>item.ruleKey==='dc_ssh').status,'compliant');
+  const nokia=evaluateNokiaCompliance('system name SR-01\nssh-server\nntp server 10.0.0.1\ncpm-filter\nuser noc');
+  assert.equal(nokia.find(item=>item.ruleKey==='nk_mgmt_filter').status,'compliant');
+  const linux=evaluateLinuxCompliance('PRETTY_NAME=\"Debian GNU/Linux\"\ndefault via 10.0.0.1 dev eth0\nsshd.service enabled\nnftables.service enabled\nchrony.service enabled\nrsyslog.service enabled');
+  assert.equal(linux.find(item=>item.ruleKey==='lx_firewall').status,'compliant');
 });
 
 test('calcula próxima execução diária e semanal', () => {

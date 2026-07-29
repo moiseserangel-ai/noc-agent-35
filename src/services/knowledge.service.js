@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
 setDefaultResultOrder('ipv4first');
 
-export const KNOWLEDGE_SCOPES = ['global', 'support', 'mikrotik', 'linux', 'huawei_vrp'];
+export const KNOWLEDGE_SCOPES = ['global', 'support', 'mikrotik', 'linux', 'huawei_vrp', 'cisco_ios', 'juniper_junos', 'fortigate_fortios', 'ubiquiti_edgeos', 'unifi_controller', 'datacom_dmos', 'nokia_sros'];
 export const KNOWLEDGE_SOURCE_TYPES = ['markdown', 'text', 'pdf', 'url'];
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_PDF_BYTES = 5 * 1024 * 1024;

@@ -3,7 +3,7 @@ import { ArchiveRestore, CalendarClock, CheckCircle, Clock, Download, FileDiff, 
 import { api } from '../lib/api.js';
 import { useToast } from '../App.jsx';
 
-const typeLabel = { mikrotik: 'MikroTik RouterOS', huawei_vrp: 'Huawei VRP' };
+const typeLabel = { mikrotik: 'MikroTik RouterOS', huawei_vrp: 'Huawei VRP', cisco_ios:'Cisco IOS / IOS-XE', juniper_junos:'Juniper Junos', fortigate_fortios:'Fortinet FortiGate / FortiOS', ubiquiti_edgeos:'Ubiquiti EdgeOS', datacom_dmos:'Datacom DMOS', nokia_sros:'Nokia SR OS', linux:'Linux' };
 const week = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
 const date = value => value ? new Date(value).toLocaleString('pt-BR') : 'Nunca';
 const size = bytes => !bytes ? '—' : bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${(bytes/1024).toFixed(1)} KB` : `${(bytes/1048576).toFixed(2)} MB`;

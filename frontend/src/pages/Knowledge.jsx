@@ -9,6 +9,13 @@ const scopeLabel = {
   mikrotik: 'MikroTik RouterOS',
   linux: 'Linux',
   huawei_vrp: 'Huawei VRP / NetEngine',
+  cisco_ios: 'Cisco IOS / IOS-XE',
+  juniper_junos: 'Juniper Junos',
+  fortigate_fortios: 'Fortinet FortiGate / FortiOS',
+  ubiquiti_edgeos: 'Ubiquiti EdgeRouter / EdgeOS',
+  unifi_controller: 'Ubiquiti UniFi Controller',
+  datacom_dmos: 'Datacom DMOS',
+  nokia_sros: 'Nokia SR OS',
 };
 const sourceLabel = { markdown: 'Markdown', text: 'Texto', pdf: 'PDF', url: 'Link HTTPS' };
 const emptyForm = { id: null, title: '', filename: '', content: '', fileData: '', sourceType: 'markdown', sourceUrl: '', refreshUrl: false, crawlMode: false, agentScope: 'global', tags: '' };

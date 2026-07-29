@@ -74,6 +74,12 @@ export async function deleteDevice(id) {
 export async function testDeviceConnection(id) {
   const device = await getDeviceDecrypted(id);
   if (!device) throw new Error('Device not found');
+  if (device.type === 'unifi_controller') {
+    const { unifiControllerQuery } = await import('../tools/unifi-controller.tool.js');
+    const result = await unifiControllerQuery({ deviceId:id, operation:'status' });
+    if (!result.success) throw new Error(result.output);
+    return { success:true, message:`Conexão com UniFi Controller ${device.hostname} realizada com sucesso` };
+  }
 
   const { Client } = await import('ssh2');
   return new Promise((resolve, reject) => {

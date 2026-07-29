@@ -9,7 +9,7 @@ const publicDevice = { id: true, name: true, hostname: true, port: true, type: t
 router.get('/devices', async (_req, res, next) => {
   try {
     const devices = await prisma.device.findMany({
-      where: { isActive: true, type: { in: ['mikrotik', 'linux', 'huawei_vrp'] } },
+      where: { isActive: true, type: { in: ['mikrotik', 'linux', 'huawei_vrp', 'cisco_ios', 'juniper_junos', 'fortigate_fortios', 'ubiquiti_edgeos','datacom_dmos','nokia_sros'] } },
       select: publicDevice,
       orderBy: { name: 'asc' },
     });
@@ -33,7 +33,8 @@ router.post('/sessions', async (req, res, next) => {
   try {
     const device = await prisma.device.findFirst({ where: { id: req.body.deviceId, isActive: true }, select: publicDevice });
     if (!device) return res.status(404).json({ success: false, error: 'Equipamento não encontrado ou inativo.' });
-    if (!classifyCliCommand(device.type, 'display version').valid && device.type !== 'mikrotik' && device.type !== 'linux') {
+    const probe = device.type === 'fortigate_fortios' ? 'get system status' : ['cisco_ios', 'juniper_junos', 'ubiquiti_edgeos','datacom_dmos','nokia_sros'].includes(device.type) ? 'show version' : device.type === 'mikrotik' ? '/system resource print' : device.type === 'linux' ? 'uptime' : 'display version';
+    if (!classifyCliCommand(device.type, probe).valid) {
       return res.status(400).json({ success: false, error: 'Tipo de equipamento sem suporte ao Terminal CLI.' });
     }
     const session = await createCliSession({ user: req.user, device, ipAddress: req.ip, userAgent: req.get('user-agent') });

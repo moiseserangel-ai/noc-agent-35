@@ -4,12 +4,18 @@ import logger from '../utils/logger.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import { sshMikrotikExec } from '../tools/ssh-mikrotik.tool.js';
 import { sshHuaweiVrpExec } from '../tools/ssh-huawei-vrp.tool.js';
+import { sshCiscoIosExec } from '../tools/ssh-cisco-ios.tool.js';
+import { sshJuniperJunosExec } from '../tools/ssh-juniper-junos.tool.js';
+import { sshFortiGateExec } from '../tools/ssh-fortigate-fortios.tool.js';
+import { sshEdgeOsExec } from '../tools/ssh-ubiquiti-edgeos.tool.js';
+import { sshDatacomDmosExec, sshNokiaSrosExec } from '../tools/ssh-profiled-network.tool.js';
+import { sshLinuxExec } from '../tools/ssh-linux.tool.js';
 import { getNotificationConfig, sendTelegramMessage } from './notification.service.js';
 import { sendToAdmin } from './evolution.service.js';
 import { logAudit } from './audit.service.js';
 
 const running = new Set();
-export const SUPPORTED_BACKUP_TYPES = ['mikrotik', 'huawei_vrp'];
+export const SUPPORTED_BACKUP_TYPES = ['mikrotik', 'huawei_vrp', 'cisco_ios', 'juniper_junos', 'fortigate_fortios', 'ubiquiti_edgeos', 'datacom_dmos', 'nokia_sros', 'linux'];
 
 const clamp = (value, minimum, maximum, fallback) => {
   const numeric = Number(value);
@@ -42,7 +48,14 @@ async function captureMikrotik(deviceId) {
 export async function captureDeviceConfiguration(device) {
   if (device.type === 'mikrotik') return captureMikrotik(device.id);
   if (device.type === 'huawei_vrp') return sshHuaweiVrpExec({ deviceId: device.id, command: 'display current-configuration' });
-  throw new Error('Backup disponível somente para MikroTik e Huawei VRP');
+  if (device.type === 'cisco_ios') return sshCiscoIosExec({ deviceId: device.id, command: 'show running-config' });
+  if (device.type === 'juniper_junos') return sshJuniperJunosExec({ deviceId: device.id, command: 'show configuration | display set' });
+  if (device.type === 'fortigate_fortios') return sshFortiGateExec({ deviceId: device.id, command: 'show full-configuration' });
+  if (device.type === 'ubiquiti_edgeos') return sshEdgeOsExec({ deviceId: device.id, command: 'show configuration commands' });
+  if (device.type === 'datacom_dmos') return sshDatacomDmosExec({ deviceId: device.id, command: 'show running-config' });
+  if (device.type === 'nokia_sros') return sshNokiaSrosExec({ deviceId: device.id, command: 'show configuration' });
+  if (device.type === 'linux') return sshLinuxExec({ deviceId: device.id, command: 'cat /etc/os-release\nip addr show\nip route show\nsystemctl list-unit-files --state=enabled' });
+  throw new Error('Tipo de equipamento sem suporte a backup de configuração');
 }
 
 async function enforceDeviceRetention(deviceId, retention) {
@@ -72,7 +85,7 @@ export async function runDeviceBackup(deviceId, { type = 'manual', username = 's
   try {
     device = await prisma.device.findUnique({ where: { id: deviceId } });
     if (!device || !device.isActive) throw Object.assign(new Error('Equipamento não encontrado ou inativo'), { statusCode: 404 });
-    if (!SUPPORTED_BACKUP_TYPES.includes(device.type)) throw Object.assign(new Error('Backup disponível somente para MikroTik e Huawei VRP'), { statusCode: 400 });
+    if (!SUPPORTED_BACKUP_TYPES.includes(device.type)) throw Object.assign(new Error('Tipo de equipamento sem suporte a backup de configuração'), { statusCode: 400 });
     const result = await captureDeviceConfiguration(device);
     if (!result.success) throw new Error(result.output || 'Falha ao capturar configuração');
     const content = String(result.output || '').trim();
@@ -125,7 +138,7 @@ export async function runDeviceBackup(deviceId, { type = 'manual', username = 's
 
 export async function saveDeviceBackupPolicy(deviceId, input) {
   const device = await prisma.device.findUnique({ where: { id: deviceId } });
-  if (!device || !SUPPORTED_BACKUP_TYPES.includes(device.type)) throw Object.assign(new Error('Equipamento MikroTik ou Huawei não encontrado'), { statusCode: 404 });
+  if (!device || !SUPPORTED_BACKUP_TYPES.includes(device.type)) throw Object.assign(new Error('Equipamento compatível com backup não encontrado'), { statusCode: 404 });
   const data = {
     enabled: input.enabled === true || input.enabled === 'true',
     frequency: input.frequency === 'weekly' ? 'weekly' : 'daily',

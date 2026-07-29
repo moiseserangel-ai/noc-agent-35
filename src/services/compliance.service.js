@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 const running = new Set();
 export const COMPLIANCE_PROFILE = 'noc_baseline_v1';
 const weights = { critical: 20, high: 12, medium: 7, low: 3 };
-const defaultProfileNames = { mikrotik:'MikroTik - Baseline NOC', huawei_vrp:'Huawei VRP - Baseline NOC' };
+const defaultProfileNames = { mikrotik:'MikroTik - Baseline NOC', huawei_vrp:'Huawei VRP - Baseline NOC', cisco_ios:'Cisco IOS-XE - Baseline NOC', juniper_junos:'Juniper Junos - Baseline NOC', fortigate_fortios:'FortiGate FortiOS - Baseline NOC', ubiquiti_edgeos:'Ubiquiti EdgeOS - Baseline NOC', datacom_dmos:'Datacom DMOS - Baseline NOC', nokia_sros:'Nokia SR OS - Baseline NOC', linux:'Linux - Baseline NOC' };
 
 const result = (rule, compliant, evidence) => ({ ...rule, status: compliant ? 'compliant' : 'non_compliant', evidence: String(evidence || '').slice(0, 1200) });
 const contains = (text, pattern) => pattern.test(text);
@@ -62,6 +62,105 @@ export function evaluateHuaweiCompliance(configuration) {
   ];
 }
 
+export function evaluateCiscoCompliance(configuration){
+  const text=String(configuration);
+  return[
+    result({ruleKey:'cs_hostname',title:'Hostname configurado',category:'Identidade',severity:'medium',recommendation:'Configure hostname único conforme o inventário.',remediationPreview:'configure terminal\nhostname <NOME-PADRAO>\nend'},contains(text,/^\s*hostname\s+(?!Router\b)\S+/mi),(text.match(/^\s*hostname\s+.*$/mi)||['Hostname padrão ou ausente'])[0]),
+    result({ruleKey:'cs_ssh_v2',title:'SSH versão 2 habilitado',category:'Acesso',severity:'critical',recommendation:'Utilize SSHv2 para administração segura.',remediationPreview:'configure terminal\nip ssh version 2\nend'},contains(text,/^\s*ip ssh version 2/mi),(text.match(/^\s*ip ssh version.*$/mi)||['SSHv2 não confirmado'])[0]),
+    result({ruleKey:'cs_no_http',title:'Servidor HTTP desabilitado',category:'Serviços',severity:'high',recommendation:'Desabilite HTTP sem TLS quando não for necessário.',remediationPreview:'configure terminal\nno ip http server\nend'},contains(text,/^\s*no ip http server/mi),(text.match(/^\s*(?:no )?ip http server.*$/mi)||['Estado do HTTP não confirmado'])[0]),
+    result({ruleKey:'cs_ntp',title:'NTP configurado',category:'Tempo',severity:'high',recommendation:'Configure servidores NTP confiáveis.',remediationPreview:'configure terminal\nntp server <SERVIDOR-NTP>\nend'},contains(text,/^\s*ntp server\s+\S+/mi),(text.match(/^\s*ntp server.*$/mi)||['Servidor NTP não localizado'])[0]),
+    result({ruleKey:'cs_logging',title:'Syslog remoto configurado',category:'Logs',severity:'medium',recommendation:'Envie logs a um coletor central.',remediationPreview:'configure terminal\nlogging host <SERVIDOR-SYSLOG>\nend'},contains(text,/^\s*logging (?:host\s+)?\d{1,3}(?:\.\d{1,3}){3}/mi),(text.match(/^\s*logging (?:host\s+)?.*$/mi)||['Syslog remoto não localizado'])[0]),
+    result({ruleKey:'cs_vty_acl',title:'VTY protegida por ACL',category:'Acesso',severity:'critical',recommendation:'Restrinja as linhas VTY à rede de gestão.',remediationPreview:'configure terminal\nline vty 0 15\naccess-class <ACL-GESTAO> in\nend'},contains(text,/^\s*access-class\s+\S+\s+in/mi),(text.match(/^\s*access-class.*$/mi)||['ACL inbound nas VTY não localizada'])[0]),
+    result({ruleKey:'cs_transport_ssh',title:'VTY aceita somente SSH',category:'Acesso',severity:'critical',recommendation:'Remova Telnet das linhas VTY.',remediationPreview:'configure terminal\nline vty 0 15\ntransport input ssh\nend'},contains(text,/^\s*transport input ssh\s*$/mi),(text.match(/^\s*transport input.*$/mi)||['Transporte SSH exclusivo não confirmado'])[0]),
+    result({ruleKey:'cs_aaa',title:'AAA habilitado',category:'Identidade',severity:'high',recommendation:'Habilite AAA com método de contingência aprovado.',remediationPreview:'Revisar servidores TACACS/RADIUS e acesso local antes da aplicação.'},contains(text,/^\s*aaa new-model/mi),(text.match(/^\s*aaa new-model.*$/mi)||['AAA new-model não localizado'])[0]),
+    result({ruleKey:'cs_snmp_secure',title:'SNMP comunitário público ausente',category:'Monitoramento',severity:'high',recommendation:'Prefira SNMPv3 e remova comunidades padrão public/private.',remediationPreview:'Revisar integração Zabbix e migrar para SNMPv3 antes da remoção.'},!contains(text,/^\s*snmp-server community\s+(?:public|private)\b/mi),(text.match(/^\s*snmp-server community\s+(?:public|private).*$/mi)||['Comunidades padrão não localizadas'])[0]),
+  ];
+}
+
+export function evaluateJuniperCompliance(configuration) {
+  const text = String(configuration);
+  return [
+    result({ruleKey:'jn_host_name',title:'Host-name configurado',category:'Identidade',severity:'medium',recommendation:'Configure host-name único conforme o inventário.',remediationPreview:'set system host-name <NOME-PADRAO>'},contains(text,/^set system host-name\s+\S+/mi),(text.match(/^set system host-name.*$/mi)||['Host-name não localizado'])[0]),
+    result({ruleKey:'jn_ssh',title:'SSH habilitado',category:'Acesso',severity:'critical',recommendation:'Habilite SSH para administração segura.',remediationPreview:'set system services ssh'},contains(text,/^set system services ssh\b/mi),(text.match(/^set system services ssh.*$/mi)||['SSH não localizado'])[0]),
+    result({ruleKey:'jn_no_telnet',title:'Telnet desabilitado',category:'Acesso',severity:'critical',recommendation:'Remova o serviço Telnet.',remediationPreview:'delete system services telnet'},!contains(text,/^set system services telnet\b/mi),(text.match(/^set system services telnet.*$/mi)||['Telnet não configurado'])[0]),
+    result({ruleKey:'jn_ntp',title:'NTP configurado',category:'Tempo',severity:'high',recommendation:'Configure servidores NTP confiáveis.',remediationPreview:'set system ntp server <SERVIDOR-NTP>'},contains(text,/^set system ntp server\s+\S+/mi),(text.match(/^set system ntp server.*$/mi)||['NTP não localizado'])[0]),
+    result({ruleKey:'jn_syslog',title:'Syslog remoto configurado',category:'Logs',severity:'medium',recommendation:'Envie eventos a um coletor central.',remediationPreview:'set system syslog host <SERVIDOR-SYSLOG> any notice'},contains(text,/^set system syslog host\s+\S+/mi),(text.match(/^set system syslog host.*$/mi)||['Syslog remoto não localizado'])[0]),
+    result({ruleKey:'jn_root_auth',title:'Autenticação root configurada',category:'Identidade',severity:'high',recommendation:'Configure chave SSH ou hash seguro para recuperação administrativa.',remediationPreview:'Revisar procedimento de recuperação antes de alterar root-authentication.'},contains(text,/^set system root-authentication (?:ssh-|encrypted-password)/mi),(text.match(/^set system root-authentication.*$/mi)||['Root authentication não confirmada'])[0]),
+    result({ruleKey:'jn_login_class',title:'Classes de login configuradas',category:'Identidade',severity:'high',recommendation:'Use classes com privilégios mínimos para contas administrativas.',remediationPreview:'Revisar classes e usuários antes da aplicação.'},contains(text,/^set system login class\s+\S+/mi),(text.match(/^set system login class.*$/mi)||['Classes personalizadas não localizadas'])[0]),
+    result({ruleKey:'jn_snmp_secure',title:'Comunidades SNMP padrão ausentes',category:'Monitoramento',severity:'high',recommendation:'Prefira SNMPv3 e remova public/private.',remediationPreview:'Revisar integração Zabbix e migrar para SNMPv3.'},!contains(text,/^set snmp community (?:public|private)\b/mi),(text.match(/^set snmp community (?:public|private).*$/mi)||['Comunidades padrão não localizadas'])[0]),
+    result({ruleKey:'jn_mgmt_filter',title:'Filtro de proteção aplicado à gestão',category:'Firewall',severity:'critical',recommendation:'Proteja acesso ao Routing Engine com firewall filter.',remediationPreview:'set interfaces lo0 unit 0 family inet filter input <FILTRO-GESTAO>'},contains(text,/^set interfaces lo0 unit \S+ family inet filter input\s+\S+/mi),(text.match(/^set interfaces lo0.*filter input.*$/mi)||['Filtro de gestão em lo0 não localizado'])[0]),
+  ];
+}
+
+export function evaluateFortiGateCompliance(configuration) {
+  const text=String(configuration);
+  return[
+    result({ruleKey:'fg_hostname',title:'Hostname configurado',category:'Identidade',severity:'medium',recommendation:'Configure hostname único conforme o inventário.',remediationPreview:'config system global\nset hostname <NOME-PADRAO>\nend'},contains(text,/^\s*set hostname\s+(?!"?FortiGate"?\s*$)\S+/mi),(text.match(/^\s*set hostname.*$/mi)||['Hostname padrão ou ausente'])[0]),
+    result({ruleKey:'fg_admin_https_ssh',title:'Gestão segura por HTTPS/SSH',category:'Acesso',severity:'critical',recommendation:'Permita apenas protocolos administrativos seguros nas interfaces de gestão.',remediationPreview:'Revisar allowaccess por interface antes da aplicação.'},contains(text,/^\s*set allowaccess\b[^\n]*(?:https|ssh)/mi)&&!contains(text,/^\s*set allowaccess\b[^\n]*\bhttp\b/mi),(text.match(/^\s*set allowaccess.*$/mi)||['allowaccess seguro não confirmado'])[0]),
+    result({ruleKey:'fg_admin_trusted',title:'Administradores com trusted hosts',category:'Acesso',severity:'critical',recommendation:'Restrinja contas administrativas a redes confiáveis.',remediationPreview:'config system admin\nedit <ADMIN>\nset trusthost1 <REDE> <MASCARA>\nnext\nend'},contains(text,/^\s*set trusthost1\s+(?!0\.0\.0\.0\s+0\.0\.0\.0)/mi),(text.match(/^\s*set trusthost1.*$/mi)||['Trusted hosts não localizados'])[0]),
+    result({ruleKey:'fg_ntp',title:'NTP habilitado',category:'Tempo',severity:'high',recommendation:'Habilite NTP com servidores confiáveis.',remediationPreview:'config system ntp\nset ntpsync enable\nend'},contains(text,/^\s*set ntpsync enable/mi),(text.match(/^\s*set ntpsync.*$/mi)||['NTP não confirmado'])[0]),
+    result({ruleKey:'fg_syslog',title:'Log remoto configurado',category:'Logs',severity:'high',recommendation:'Envie logs a FortiAnalyzer ou syslog central.',remediationPreview:'Revisar destino, origem e TLS antes da configuração.'},contains(text,/^\s*set status enable/mi)&&contains(text,/config log (?:syslogd|fortianalyzer)/mi),'Verificação de destino remoto de logs'),
+    result({ruleKey:'fg_snmp_secure',title:'SNMP seguro',category:'Monitoramento',severity:'high',recommendation:'Prefira SNMPv3 e restrinja origens.',remediationPreview:'Revisar integração Zabbix e criar usuário SNMPv3.'},contains(text,/config system snmp user/mi)||!contains(text,/^\s*set name "(?:public|private)"/mi),'Verificação SNMPv3/comunidades padrão'),
+    result({ruleKey:'fg_ha',title:'Alta disponibilidade revisada',category:'Disponibilidade',severity:'medium',recommendation:'Para firewalls críticos, configure e monitore HA.',remediationPreview:'Planejar HA conforme modelo, licenças e topologia.'},contains(text,/config system ha[\s\S]*?\bset mode (?:a-p|a-a)/mi),'Configuração de HA'),
+    result({ruleKey:'fg_password_policy',title:'Política de senha administrativa',category:'Identidade',severity:'high',recommendation:'Habilite política de senha forte para administradores.',remediationPreview:'config system password-policy\nset status enable\nend'},contains(text,/config system password-policy[\s\S]*?\bset status enable/mi),'Política de senha'),
+    result({ruleKey:'fg_idle_timeout',title:'Timeout administrativo configurado',category:'Acesso',severity:'medium',recommendation:'Defina timeout administrativo compatível com a política do NOC.',remediationPreview:'config system global\nset admintimeout 10\nend'},contains(text,/^\s*set admintimeout\s+(?:[1-9]|[1-9]\d)\b/mi),(text.match(/^\s*set admintimeout.*$/mi)||['Timeout administrativo não localizado'])[0]),
+  ];
+}
+
+export function evaluateEdgeOsCompliance(configuration){
+  const text=String(configuration);
+  return[
+    result({ruleKey:'eo_host_name',title:'Host-name configurado',category:'Identidade',severity:'medium',recommendation:'Defina nome único conforme inventário.',remediationPreview:'set system host-name <NOME>'},contains(text,/^set system host-name\s+\S+/mi),(text.match(/^set system host-name.*$/mi)||['Host-name ausente'])[0]),
+    result({ruleKey:'eo_ssh',title:'SSH habilitado',category:'Acesso',severity:'critical',recommendation:'Utilize SSH para gestão segura.',remediationPreview:'set service ssh port 22'},contains(text,/^set service ssh\b/mi),(text.match(/^set service ssh.*$/mi)||['SSH ausente'])[0]),
+    result({ruleKey:'eo_no_telnet',title:'Telnet desabilitado',category:'Acesso',severity:'critical',recommendation:'Remova Telnet.',remediationPreview:'delete service telnet'},!contains(text,/^set service telnet\b/mi),'Verificação de Telnet'),
+    result({ruleKey:'eo_ntp',title:'NTP configurado',category:'Tempo',severity:'high',recommendation:'Configure NTP confiável.',remediationPreview:'set system ntp server <SERVIDOR>'},contains(text,/^set system ntp server\s+\S+/mi),(text.match(/^set system ntp server.*$/mi)||['NTP ausente'])[0]),
+    result({ruleKey:'eo_syslog',title:'Syslog remoto configurado',category:'Logs',severity:'medium',recommendation:'Envie logs ao coletor central.',remediationPreview:'set system syslog host <SERVIDOR> facility all level notice'},contains(text,/^set system syslog host\s+\S+/mi),(text.match(/^set system syslog host.*$/mi)||['Syslog remoto ausente'])[0]),
+    result({ruleKey:'eo_firewall_local',title:'Firewall local aplicado',category:'Firewall',severity:'critical',recommendation:'Proteja o roteador com política local.',remediationPreview:'Revisar firewall local e interface de gestão.'},contains(text,/^set interfaces \S+ \S+ firewall local name\s+\S+/mi),'Filtro local em interface'),
+    result({ruleKey:'eo_snmp_secure',title:'SNMP sem comunidade padrão',category:'Monitoramento',severity:'high',recommendation:'Restrinja SNMP e evite public/private.',remediationPreview:'Revisar integração Zabbix e origens permitidas.'},!contains(text,/^set service snmp community (?:public|private)\b/mi),'Comunidades padrão'),
+    result({ruleKey:'eo_user',title:'Usuário administrativo individual',category:'Identidade',severity:'high',recommendation:'Use conta individual com chave SSH.',remediationPreview:'set system login user <USUARIO> authentication public-keys ...'},contains(text,/^set system login user\s+\S+/mi),(text.match(/^set system login user.*$/mi)||['Usuário não localizado'])[0]),
+  ];
+}
+
+export function evaluateDatacomCompliance(configuration){
+  const text=String(configuration);
+  return[
+    result({ruleKey:'dc_hostname',title:'Hostname configurado',category:'Identidade',severity:'medium',recommendation:'Defina hostname único conforme inventário.',remediationPreview:'hostname <NOME-PADRAO>'},contains(text,/^\s*hostname\s+(?!switch\b)\S+/mi),(text.match(/^\s*hostname.*$/mi)||['Hostname ausente ou padrão'])[0]),
+    result({ruleKey:'dc_ssh',title:'SSH habilitado',category:'Acesso',severity:'critical',recommendation:'Utilize SSH para administração segura.',remediationPreview:'Revisar sintaxe SSH conforme versão DMOS.'},contains(text,/^\s*(?:ip )?ssh (?:server )?(?:enable|version 2)/mi),(text.match(/^\s*(?:ip )?ssh.*$/mi)||['SSH não confirmado'])[0]),
+    result({ruleKey:'dc_no_telnet',title:'Telnet desabilitado',category:'Acesso',severity:'critical',recommendation:'Desabilite Telnet.',remediationPreview:'Revisar serviço Telnet conforme versão DMOS.'},!contains(text,/^\s*(?:ip )?telnet (?:server )?enable/mi),'Estado do Telnet'),
+    result({ruleKey:'dc_ntp',title:'NTP configurado',category:'Tempo',severity:'high',recommendation:'Configure NTP confiável.',remediationPreview:'ntp server <SERVIDOR>'},contains(text,/^\s*ntp (?:server|peer)\s+\S+/mi),(text.match(/^\s*ntp .*$/mi)||['NTP ausente'])[0]),
+    result({ruleKey:'dc_syslog',title:'Syslog remoto configurado',category:'Logs',severity:'medium',recommendation:'Envie logs ao coletor central.',remediationPreview:'logging host <SERVIDOR>'},contains(text,/^\s*(?:logging|syslog) (?:host|server)\s+\S+/mi),(text.match(/^\s*(?:logging|syslog).*$/mi)||['Syslog remoto ausente'])[0]),
+    result({ruleKey:'dc_snmp_secure',title:'SNMP sem comunidades padrão',category:'Monitoramento',severity:'high',recommendation:'Prefira SNMPv3 e remova public/private.',remediationPreview:'Revisar integração Zabbix antes da alteração.'},!contains(text,/^\s*snmp-server community\s+(?:public|private)\b/mi),'Comunidades padrão'),
+    result({ruleKey:'dc_vty_acl',title:'Acesso de gestão restrito',category:'Acesso',severity:'critical',recommendation:'Restrinja VTY/SSH à rede de gestão.',remediationPreview:'Aplicar ACL de gestão conforme versão DMOS.'},contains(text,/^\s*(?:access-class|access-group)\s+\S+\s+in/mi),(text.match(/^\s*(?:access-class|access-group).*$/mi)||['ACL de gestão ausente'])[0]),
+    result({ruleKey:'dc_user',title:'Usuário administrativo individual',category:'Identidade',severity:'high',recommendation:'Utilize contas individualizadas.',remediationPreview:'Revisar usuários e contingência antes da aplicação.'},contains(text,/^\s*username\s+\S+/mi),(text.match(/^\s*username.*$/mi)||['Usuário não localizado'])[0]),
+  ];
+}
+
+export function evaluateNokiaCompliance(configuration){
+  const text=String(configuration);
+  return[
+    result({ruleKey:'nk_name',title:'System name configurado',category:'Identidade',severity:'medium',recommendation:'Defina nome único conforme inventário.',remediationPreview:'/configure system name <NOME>'},contains(text,/(?:^|\n)\s*(?:\/configure\s+)?system\s+(?:name|name\s*=)\s*"?\S+/mi),(text.match(/^\s*(?:\/configure\s+)?system\s+name.*$/mi)||['System name ausente'])[0]),
+    result({ruleKey:'nk_ssh',title:'SSH habilitado',category:'Acesso',severity:'critical',recommendation:'Mantenha SSH habilitado e restrito.',remediationPreview:'Revisar SSH no contexto system security.'},contains(text,/\bssh\b[\s\S]{0,100}\b(?:server|administrative-state)\b/mi)||contains(text,/\bssh-server\b/mi),'Configuração SSH'),
+    result({ruleKey:'nk_no_telnet',title:'Telnet desabilitado',category:'Acesso',severity:'critical',recommendation:'Desabilite Telnet.',remediationPreview:'Revisar Telnet no contexto system security.'},!contains(text,/\btelnet\b[\s\S]{0,80}\b(?:enable|administrative-state enable)\b/mi),'Estado do Telnet'),
+    result({ruleKey:'nk_ntp',title:'NTP configurado',category:'Tempo',severity:'high',recommendation:'Configure servidores NTP confiáveis.',remediationPreview:'/configure system time ntp server <IP>'},contains(text,/\bntp\b[\s\S]{0,120}\bserver\b/mi),'Configuração NTP'),
+    result({ruleKey:'nk_syslog',title:'Syslog remoto configurado',category:'Logs',severity:'medium',recommendation:'Envie eventos ao coletor central.',remediationPreview:'Revisar log-id e syslog destination.'},contains(text,/\bsyslog\b[\s\S]{0,120}\b(?:address|destination)\b/mi),'Destino syslog'),
+    result({ruleKey:'nk_snmp_secure',title:'SNMP sem comunidades padrão',category:'Monitoramento',severity:'high',recommendation:'Prefira SNMPv3.',remediationPreview:'Revisar integração Zabbix.'},!contains(text,/\bcommunity\b\s+"?(?:public|private)"?/mi),'Comunidades padrão'),
+    result({ruleKey:'nk_mgmt_filter',title:'Filtro de gestão configurado',category:'Acesso',severity:'critical',recommendation:'Restrinja serviços de gestão por filtro CPM.',remediationPreview:'Planejar CPM filter conforme versão SR OS.'},contains(text,/\bcpm-filter\b|\bmanagement-access-filter\b/mi),'Filtro CPM/gestão'),
+    result({ruleKey:'nk_user',title:'Usuário administrativo individual',category:'Identidade',severity:'high',recommendation:'Utilize contas individualizadas ou AAA.',remediationPreview:'Revisar usuários, TACACS/RADIUS e contingência.'},contains(text,/\buser\b\s+"?\S+/mi)||contains(text,/\b(?:tacplus|radius)\b/mi),'Usuário/AAA'),
+  ];
+}
+
+export function evaluateLinuxCompliance(configuration){
+  const text=String(configuration);
+  return[
+    result({ruleKey:'lx_os',title:'Sistema operacional identificado',category:'Inventário',severity:'medium',recommendation:'Mantenha /etc/os-release disponível.',remediationPreview:'Revisar imagem e inventário do servidor.'},contains(text,/^(?:PRETTY_NAME|NAME|ID)=/mi),(text.match(/^PRETTY_NAME=.*$/mi)||['Distribuição não identificada'])[0]),
+    result({ruleKey:'lx_ssh',title:'Serviço SSH habilitado',category:'Acesso',severity:'critical',recommendation:'Mantenha SSH gerenciado e restrito.',remediationPreview:'Revisar sshd e firewall antes de alterar.'},contains(text,/(?:ssh|sshd)\.service\s+enabled/mi),'Estado do serviço SSH'),
+    result({ruleKey:'lx_firewall',title:'Firewall de host habilitado',category:'Firewall',severity:'critical',recommendation:'Habilite nftables, firewalld ou ufw.',remediationPreview:'Planejar regras e contingência antes de habilitar.'},contains(text,/(?:nftables|firewalld|ufw)\.service\s+enabled/mi),'Serviço de firewall'),
+    result({ruleKey:'lx_time',title:'Sincronização de horário habilitada',category:'Tempo',severity:'high',recommendation:'Habilite chrony, ntpd ou systemd-timesyncd.',remediationPreview:'Configurar fontes de tempo confiáveis.'},contains(text,/(?:chrony|chronyd|ntp|ntpd|systemd-timesyncd)\.service\s+enabled/mi),'Serviço de horário'),
+    result({ruleKey:'lx_logging',title:'Serviço de logs habilitado',category:'Logs',severity:'high',recommendation:'Mantenha journald/rsyslog e envio remoto conforme política.',remediationPreview:'Revisar retenção e destino remoto.'},contains(text,/(?:rsyslog|systemd-journald)\.service\s+(?:enabled|static)/mi),'Serviço de logs'),
+    result({ruleKey:'lx_default_route',title:'Rota padrão configurada',category:'Rede',severity:'medium',recommendation:'Confirme gateway e redundância de gestão.',remediationPreview:'Revisar conectividade antes de alterar rotas.'},contains(text,/^default via\s+\S+/mi),(text.match(/^default via.*$/mi)||['Rota padrão ausente'])[0]),
+  ];
+}
+
 export function complianceScore(findings) {
   const total = findings.reduce((sum, item) => sum + weights[item.severity], 0);
   const passed = findings.filter(item => ['compliant','excepted'].includes(item.status)).reduce((sum, item) => sum + weights[item.severity], 0);
@@ -91,10 +190,10 @@ export function applyComplianceExceptions(findings, exceptions = [], now = new D
   });
 }
 
-const baselineFor = type => type === 'huawei_vrp' ? evaluateHuaweiCompliance('') : evaluateMikrotikCompliance('');
+const baselineFor = type => type === 'huawei_vrp' ? evaluateHuaweiCompliance('') : type === 'cisco_ios' ? evaluateCiscoCompliance('') : type === 'juniper_junos' ? evaluateJuniperCompliance('') : type === 'fortigate_fortios' ? evaluateFortiGateCompliance('') : type === 'ubiquiti_edgeos' ? evaluateEdgeOsCompliance('') : type === 'datacom_dmos' ? evaluateDatacomCompliance('') : type === 'nokia_sros' ? evaluateNokiaCompliance('') : type === 'linux' ? evaluateLinuxCompliance('') : evaluateMikrotikCompliance('');
 
 export async function ensureComplianceProfiles() {
-  for (const deviceType of ['mikrotik','huawei_vrp']) {
+  for (const deviceType of ['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux']) {
     let profile = await prisma.complianceProfile.findUnique({where:{name_deviceType:{name:defaultProfileNames[deviceType],deviceType}}});
     if (!profile) profile = await prisma.complianceProfile.create({data:{name:defaultProfileNames[deviceType],description:'Perfil padrão de segurança fornecido pelo NOC Agent.',deviceType,isSystem:true,minimumScore:80,createdBy:'system'}});
     const defaults = baselineFor(deviceType);
@@ -162,7 +261,7 @@ export function nextComplianceAt(policy, from = new Date()) {
 
 export async function saveCompliancePolicy(deviceId, input) {
   const device = await prisma.device.findUnique({ where: { id: deviceId } });
-  if (!device || !['mikrotik','huawei_vrp'].includes(device.type)) throw Object.assign(new Error('Equipamento MikroTik ou Huawei não encontrado'), { statusCode: 404 });
+  if (!device || !['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux'].includes(device.type)) throw Object.assign(new Error('Equipamento compatível com compliance não encontrado'), { statusCode: 404 });
   await ensureComplianceProfiles();
   const selected = input.profileId ? await prisma.complianceProfile.findFirst({where:{id:String(input.profileId),deviceType:device.type,isActive:true}}) : await prisma.complianceProfile.findFirst({where:{deviceType:device.type,isSystem:true,isActive:true},orderBy:{createdAt:'asc'}});
   if (!selected) throw Object.assign(new Error('Perfil de compliance compatível não encontrado'), {statusCode:400});
@@ -220,7 +319,7 @@ export async function runComplianceScan(deviceId, { type='manual', username='sys
   let previousScan;
   try {
     device = await prisma.device.findUnique({ where:{id:deviceId} });
-    if (!device || !device.isActive || !['mikrotik','huawei_vrp'].includes(device.type)) throw Object.assign(new Error('Equipamento compatível não encontrado ou inativo'), { statusCode:404 });
+    if (!device || !device.isActive || !['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux'].includes(device.type)) throw Object.assign(new Error('Equipamento compatível não encontrado ou inativo'), { statusCode:404 });
     previousScan = await prisma.complianceScan.findFirst({where:{deviceId,status:'completed'},orderBy:{startedAt:'desc'},include:{findings:true}});
     await ensureComplianceProfiles();
     const policy = await prisma.compliancePolicy.findUnique({where:{deviceId},include:{complianceProfile:{include:{rules:{orderBy:{position:'asc'}}}}}});
@@ -234,7 +333,7 @@ export async function runComplianceScan(deviceId, { type='manual', username='sys
     const capture = await captureDeviceConfiguration(device);
     if (!capture.success) throw new Error(capture.output || 'Falha ao consultar configuração');
     const configurationSha256 = crypto.createHash('sha256').update(String(capture.output)).digest('hex');
-    const baseline = device.type === 'mikrotik' ? evaluateMikrotikCompliance(capture.output) : evaluateHuaweiCompliance(capture.output);
+    const baseline = device.type === 'mikrotik' ? evaluateMikrotikCompliance(capture.output) : device.type === 'cisco_ios' ? evaluateCiscoCompliance(capture.output) : device.type === 'juniper_junos' ? evaluateJuniperCompliance(capture.output) : device.type === 'fortigate_fortios' ? evaluateFortiGateCompliance(capture.output) : device.type === 'ubiquiti_edgeos' ? evaluateEdgeOsCompliance(capture.output) : device.type === 'datacom_dmos' ? evaluateDatacomCompliance(capture.output) : device.type === 'nokia_sros' ? evaluateNokiaCompliance(capture.output) : device.type === 'linux' ? evaluateLinuxCompliance(capture.output) : evaluateHuaweiCompliance(capture.output);
     const evaluated = applyComplianceProfile(baseline,profile?.rules,capture.output);
     const exceptions = await prisma.complianceException.findMany({where:{deviceId,revokedAt:null,startsAt:{lte:new Date()},expiresAt:{gt:new Date()}}});
     const findings = compareComplianceFindings(applyComplianceExceptions(evaluated,exceptions), previousScan?.findings);
@@ -272,7 +371,7 @@ export async function runComplianceScan(deviceId, { type='manual', username='sys
 }
 
 export async function runComplianceScheduler() {
-  const due = await prisma.compliancePolicy.findMany({where:{enabled:true,nextRunAt:{lte:new Date()},device:{isActive:true,type:{in:['mikrotik','huawei_vrp']}}},select:{deviceId:true}});
+  const due = await prisma.compliancePolicy.findMany({where:{enabled:true,nextRunAt:{lte:new Date()},device:{isActive:true,type:{in:['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux']}}},select:{deviceId:true}});
   for (const item of due) {
     if (running.has(item.deviceId)) continue;
     await runComplianceScan(item.deviceId,{type:'automatic',username:'system'}).catch(error=>logger.error(`Compliance ${item.deviceId}: ${error.message}`));

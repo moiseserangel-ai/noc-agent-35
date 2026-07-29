@@ -23,7 +23,7 @@ export default function Changes({isAdmin=false}){
     setLoading(true);
     try{
       const [changes,deviceRows]=await Promise.all([api.getChanges(filter?{status:filter}:{}),api.getDevices()]);
-      setData(changes.data);setDevices(deviceRows.data.filter(item=>item.isActive&&['mikrotik','huawei_vrp'].includes(item.type)));
+      setData(changes.data);setDevices(deviceRows.data.filter(item=>item.isActive&&['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros'].includes(item.type)));
     }catch(error){toast(error.message,'error');}
     finally{setLoading(false);}
   };

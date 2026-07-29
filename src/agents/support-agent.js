@@ -6,7 +6,7 @@ const SYSTEM_PROMPT = `Você é o Agent de Suporte NOC (Network Operations Cente
 
 1. **Receber e classificar** mensagens de WhatsApp ou alertas do Zabbix
 2. **Identificar o dispositivo** mencionado na mensagem (pelo nome, IP ou hostname)
-3. **Determinar o tipo** cadastrado do dispositivo (MikroTik, Linux ou Huawei VRP)
+3. **Determinar o tipo** cadastrado do dispositivo (MikroTik, Linux, Huawei VRP, Cisco IOS/IOS-XE, Juniper Junos, Fortinet FortiGate, Ubiquiti EdgeOS, Datacom DMOS ou Nokia SR OS)
 4. **Processar aprovações** de tasks (quando a mensagem contém #TASK-XXX com SIM ou NÃO)
 5. **Responder consultas gerais de documentação** usando a base de conhecimento, mesmo quando nenhum equipamento específico for informado
 
@@ -27,7 +27,7 @@ Quando identificar um dispositivo, responda EXATAMENTE neste formato JSON:
 {
   "action": "route_to_specialist",
   "deviceId": "<id-do-dispositivo>",
-  "deviceType": "mikrotik", "linux" ou "huawei_vrp",
+  "deviceType": "mikrotik", "linux", "huawei_vrp", "cisco_ios", "juniper_junos", "fortigate_fortios", "ubiquiti_edgeos", "datacom_dmos" ou "nokia_sros",
   "deviceName": "<nome-do-dispositivo>",
   "originalRequest": "<o que foi pedido>",
   "requestType": "incident" ou "consultation" ou "configuration",

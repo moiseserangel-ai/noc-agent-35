@@ -54,7 +54,7 @@ router.post('/hosts/:id/import',async(req,res,next)=>{
     const name=String(req.body.name||'').trim().slice(0,100);
     const username=String(req.body.username||'').trim().slice(0,100);
     const password=String(req.body.password||'');
-    const type=['mikrotik','huawei_vrp','linux'].includes(req.body.type)?req.body.type:host.detectedType;
+    const type=['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux'].includes(req.body.type)?req.body.type:host.detectedType;
     if(name.length<2||!username||password.length<1||!type)return res.status(400).json({success:false,error:'Informe nome, tipo e credenciais do equipamento'});
     const duplicate=await prisma.device.findFirst({where:{OR:[{hostname:host.ipAddress},{name}]}});
     if(duplicate)return res.status(409).json({success:false,error:`Equipamento já cadastrado como ${duplicate.name}`});

@@ -3,18 +3,35 @@ import { withApprovedRemediation } from '../security/execution-context.js';
 import { sshMikrotikExec } from '../tools/ssh-mikrotik.tool.js';
 import { sshLinuxExec } from '../tools/ssh-linux.tool.js';
 import { sshHuaweiVrpExec } from '../tools/ssh-huawei-vrp.tool.js';
+import { sshCiscoIosExec } from '../tools/ssh-cisco-ios.tool.js';
+import { sshJuniperJunosExec } from '../tools/ssh-juniper-junos.tool.js';
+import { sshFortiGateExec } from '../tools/ssh-fortigate-fortios.tool.js';
+import { sshEdgeOsExec } from '../tools/ssh-ubiquiti-edgeos.tool.js';
+import { sshDatacomDmosExec, sshNokiaSrosExec } from '../tools/ssh-profiled-network.tool.js';
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const MAX_COMMAND_LENGTH = 8000;
 const READ_ONLY = {
   mikrotik: line => /^\/?(?:ping\b|tool\s+traceroute\b)/i.test(line) || /\b(?:print|monitor|export)\b/i.test(line),
   huawei_vrp: line => /^(?:display\b|ping\b|tracert\b|screen-length\s+0\s+temporary\b)/i.test(line),
-  linux: line => /^(?:uptime|free\b|df\b|du\b|top\b|ps\b|ss\b|netstat\b|ip\s+(?:addr|address|route|link|neigh)\b|ping\b|traceroute\b|journalctl\b|dmesg\b|cat\s+\/(?:(?:var\/log)|proc|sys)\/|tail\b|head\b|grep\b|systemctl\s+(?:status|list-units|is-active|is-enabled|show)\b|ls\b|findmnt\b|mount\s*$|hostname\b|uname\b|who\b|w\b)/i.test(line),
+  cisco_ios: line => /^(?:show\b|ping\b|traceroute\b|terminal length\s+0\b)/i.test(line),
+  juniper_junos: line => /^(?:show\b|ping\b|traceroute\b|monitor\b|set cli screen-length 0\b)/i.test(line),
+  fortigate_fortios: line => /^(?:get\b|show\b|diagnose\b|execute\s+(?:ping|ping-options|traceroute)\b)/i.test(line),
+  ubiquiti_edgeos: line => /^(?:show\b|ping\b|traceroute\b|mtr\b|ubnt-device-info\b)/i.test(line),
+  datacom_dmos: line => /^(?:show\b|ping\b|traceroute\b)/i.test(line),
+  nokia_sros: line => /^(?:show\b|ping\b|traceroute\b|tools perform (?:ping|traceroute)\b|environment more false\b)/i.test(line),
+  linux: line => /^(?:uptime|free\b|df\b|du\b|top\b|ps\b|ss\b|netstat\b|ip\s+(?:addr|address|route|link|neigh)\b|ping\b|traceroute\b|journalctl\b|dmesg\b|cat\s+(?:\/etc\/os-release|\/(?:(?:var\/log)|proc|sys)\/)|tail\b|head\b|grep\b|systemctl\s+(?:status|list-units|list-unit-files|is-active|is-enabled|show)\b|ls\b|findmnt\b|mount\s*$|hostname\b|uname\b|who\b|w\b)/i.test(line),
 };
 
 const EXECUTORS = {
   mikrotik: sshMikrotikExec,
   huawei_vrp: sshHuaweiVrpExec,
+  cisco_ios: sshCiscoIosExec,
+  juniper_junos: sshJuniperJunosExec,
+  fortigate_fortios: sshFortiGateExec,
+  ubiquiti_edgeos: sshEdgeOsExec,
+  datacom_dmos: sshDatacomDmosExec,
+  nokia_sros: sshNokiaSrosExec,
   linux: sshLinuxExec,
 };
 

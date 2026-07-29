@@ -80,7 +80,7 @@ router.get('/', async (_req,res,next) => {
   try {
     await ensureComplianceProfiles();
     const devices = await prisma.device.findMany({
-      where:{isActive:true,type:{in:['mikrotik','huawei_vrp']}},
+      where:{isActive:true,type:{in:['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux']}},
       orderBy:{name:'asc'},
       select:{id:true,name:true,hostname:true,type:true,manufacturer:true,model:true,osVersion:true,compliancePolicy:true,complianceScans:{take:2,orderBy:{startedAt:'desc'},select:{id:true,profile:true,status:true,score:true,previousScore:true,passed:true,failed:true,regressions:true,recoveries:true,alertTaskId:true,error:true,type:true,startedAt:true,completedAt:true}},_count:{select:{complianceScans:true}}},
     });
@@ -116,7 +116,7 @@ router.get('/profiles', async(req,res,next)=>{
 router.post('/profiles', async(req,res,next)=>{
   try {
     await ensureComplianceProfiles();
-    const deviceType=['mikrotik','huawei_vrp'].includes(req.body.deviceType)?req.body.deviceType:null;
+    const deviceType=['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux'].includes(req.body.deviceType)?req.body.deviceType:null;
     const name=String(req.body.name||'').trim().slice(0,100);
     if(!deviceType||name.length<3)return res.status(400).json({success:false,error:'Informe nome e fabricante válidos'});
     const template=await prisma.complianceProfile.findFirst({where:{deviceType,isSystem:true},include:{rules:{orderBy:{position:'asc'}}}});
@@ -228,7 +228,7 @@ router.post('/exceptions', async(req,res,next)=>{
   try {
     await ensureComplianceProfiles();
     const device=await prisma.device.findUnique({where:{id:String(req.body.deviceId||'')}});
-    if(!device||!['mikrotik','huawei_vrp'].includes(device.type))return res.status(404).json({success:false,error:'Equipamento compatível não encontrado'});
+    if(!device||!['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux'].includes(device.type))return res.status(404).json({success:false,error:'Equipamento compatível não encontrado'});
     const ruleKey=String(req.body.ruleKey||'').trim();
     const validRule=await prisma.complianceRule.findFirst({where:{ruleKey,profile:{deviceType:device.type}}});
     if(!validRule)return res.status(400).json({success:false,error:'Controle inválido para este equipamento'});

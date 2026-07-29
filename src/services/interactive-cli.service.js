@@ -90,7 +90,7 @@ export function registerInteractiveCli(socket) {
     try {
       await closeSession(socket, 'replaced');
       const device = await getDeviceDecrypted(payload.deviceId);
-      if (!device?.isActive || !['mikrotik', 'huawei_vrp', 'linux'].includes(device.type)) {
+      if (!device?.isActive || !['mikrotik', 'huawei_vrp', 'cisco_ios', 'juniper_junos', 'fortigate_fortios', 'ubiquiti_edgeos', 'datacom_dmos', 'nokia_sros', 'linux'].includes(device.type)) {
         return acknowledge({ success: false, error: 'Equipamento não encontrado, inativo ou sem suporte.' });
       }
       const userSessions = [...sessions.values()].filter(item => item.userId === socket.user.sub);

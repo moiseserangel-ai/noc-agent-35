@@ -7,12 +7,18 @@ import '@xterm/xterm/css/xterm.css';
 import { api } from '../lib/api.js';
 import { useToast } from '../App.jsx';
 
-const typeLabel = value => ({ mikrotik: 'MikroTik RouterOS', huawei_vrp: 'Huawei VRP', linux: 'Linux' }[value] || value);
+const typeLabel = value => ({ mikrotik: 'MikroTik RouterOS', huawei_vrp: 'Huawei VRP', cisco_ios:'Cisco IOS / IOS-XE', juniper_junos:'Juniper Junos', fortigate_fortios:'Fortinet FortiGate / FortiOS', ubiquiti_edgeos:'Ubiquiti EdgeOS', datacom_dmos:'Datacom DMOS', nokia_sros:'Nokia SR OS', linux: 'Linux' }[value] || value);
 const statusLabel = value => ({ active: 'Ativa', closed: 'Encerrada', expired: 'Expirada' }[value] || value);
 const newTerminalId = () => globalThis.crypto?.randomUUID?.() || `cli-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const starterCommands = {
   mikrotik: ['/system resource print', '/interface print', '/ip address print', '/ip route print'],
   huawei_vrp: ['display version', 'display interface brief', 'display ip routing-table', 'display alarm active'],
+  cisco_ios: ['show version','show interfaces status','show ip interface brief','show ip route'],
+  juniper_junos: ['show version','show interfaces terse','show route summary','show system alarms'],
+  fortigate_fortios: ['get system status','get system performance status','get router info routing-table all','show firewall policy'],
+  ubiquiti_edgeos: ['show version','show interfaces','show ip route','show configuration commands'],
+  datacom_dmos: ['show version','show interfaces','show ip route','show lldp neighbors detail'],
+  nokia_sros: ['show version','show chassis','show port','show router route-table'],
   linux: ['uptime', 'free -m', 'df -h', 'systemctl list-units --failed'],
 };
 const commandCatalog = {
@@ -33,6 +39,32 @@ const commandCatalog = {
     'display logbuffer', 'display cpu-usage', 'display memory-usage', 'ping ', 'tracert ',
     'system-view', 'interface ', 'description ', 'undo shutdown', 'shutdown', 'quit', 'return',
   ],
+  cisco_ios: [
+    'show version','show inventory','show running-config','show startup-config','show interfaces status',
+    'show interfaces ','show ip interface brief','show ip route','show ip arp','show mac address-table',
+    'show vlan brief','show spanning-tree','show etherchannel summary','show cdp neighbors detail',
+    'show lldp neighbors detail','show processes cpu sorted','show memory statistics','show logging',
+    'ping ','traceroute ','configure terminal','interface ','description ','shutdown','no shutdown','exit','end',
+  ],
+  juniper_junos: [
+    'show version','show chassis hardware','show configuration | display set','show interfaces terse',
+    'show interfaces ','show route summary','show route','show arp','show ethernet-switching table',
+    'show vlans','show bgp summary','show ospf neighbor','show isis adjacency','show lldp neighbors',
+    'show system alarms','show system uptime','show log messages','ping ','traceroute ',
+    'configure exclusive','set ','delete ','deactivate ','activate ','show | compare',
+    'commit check','commit confirmed 5','commit','rollback 1','exit',
+  ],
+  fortigate_fortios: [
+    'get system status','get system performance status','get system ha status',
+    'get router info routing-table all','get router info bgp summary','show system interface',
+    'show firewall policy','show firewall address','show router static','show vpn ipsec phase1-interface',
+    'diagnose sys session stat','diagnose vpn tunnel list','diagnose lldprx neighbor summary',
+    'execute ping ','execute traceroute ','config system interface','config firewall policy',
+    'edit ','set ','unset ','next','end',
+  ],
+  ubiquiti_edgeos: ['show version','show system hardware','show interfaces','show interfaces ethernet','show ip route','show protocols bgp summary','show vpn ipsec status','show firewall','show configuration commands','show lldp neighbors detail','show log','ping ','traceroute ','configure','set ','delete ','compare','commit','save','exit'],
+  datacom_dmos: ['show version','show inventory','show running-config','show interfaces','show ip interface brief','show ip route','show vlan','show spanning-tree','show lldp neighbors detail','show logging','ping ','traceroute ','configure terminal','interface ','description ','shutdown','no shutdown','exit','end'],
+  nokia_sros: ['show version','show chassis','show port','show router interface','show router route-table','show router bgp summary','show router ospf neighbor','show system lldp neighbor','show system alarms','show log log-id 99','ping ','traceroute ','configure','/configure ','admin save','exit'],
   linux: [
     'uptime', 'free -m', 'df -h', 'du -sh ', 'top -bn1 | head -20', 'ps aux',
     'ss -tlnp', 'ss -s', 'ip addr show', 'ip route show', 'ip link show', 'ip neigh show',

@@ -6,7 +6,7 @@ import { TypeBadge } from '../components/StatusBadge.jsx';
 import Modal from '../components/Modal.jsx';
 
 const EMPTY_DEVICE = { name: '', hostname: '', port: 22, type: 'mikrotik', username: '', password: '', group: '', zabbixHostId: '', notes: '', manufacturer: 'MikroTik', platform: 'RouterOS', model: '', osVersion: '', capabilities: '' };
-const TYPE_DEFAULTS = { mikrotik: { manufacturer:'MikroTik',platform:'RouterOS' }, linux:{manufacturer:'',platform:'Linux'}, huawei_vrp:{manufacturer:'Huawei',platform:'VRP'} };
+const TYPE_DEFAULTS = { mikrotik: { manufacturer:'MikroTik',platform:'RouterOS',port:22 }, linux:{manufacturer:'Comunidade',platform:'Linux',port:22}, huawei_vrp:{manufacturer:'Huawei',platform:'VRP',port:22}, cisco_ios:{manufacturer:'Cisco',platform:'IOS-XE',port:22}, juniper_junos:{manufacturer:'Juniper',platform:'Junos',port:22}, fortigate_fortios:{manufacturer:'Fortinet',platform:'FortiOS',port:22}, ubiquiti_edgeos:{manufacturer:'Ubiquiti',platform:'EdgeOS',port:22}, unifi_controller:{manufacturer:'Ubiquiti',platform:'UniFi OS',port:443}, datacom_dmos:{manufacturer:'Datacom',platform:'DMOS',port:22}, nokia_sros:{manufacturer:'Nokia',platform:'SR OS',port:22} };
 
 export default function Devices({ canManage = false }) {
   const [devices, setDevices] = useState([]);
@@ -66,7 +66,7 @@ export default function Devices({ canManage = false }) {
     setTesting(id);
     try {
       const r = await api.testDevice(id);
-      toast(r.success ? '✅ Conexão SSH OK!' : `❌ ${r.error}`, r.success ? 'success' : 'error');
+      toast(r.success ? `✅ ${r.message || 'Conexão OK!'}` : `❌ ${r.error}`, r.success ? 'success' : 'error');
     } catch (err) { toast(`❌ ${err.message}`, 'error'); }
     finally { setTesting(null); }
   };
@@ -152,14 +152,14 @@ export default function Devices({ canManage = false }) {
             <input className="form-input" value={form.hostname} onChange={e => updateField('hostname', e.target.value)} placeholder="192.168.1.1" />
           </div>
           <div className="form-group">
-            <label className="form-label">Porta SSH</label>
+            <label className="form-label">{form.type==='unifi_controller'?'Porta HTTPS':'Porta SSH'}</label>
             <input className="form-input" type="number" value={form.port} onChange={e => updateField('port', parseInt(e.target.value) || 22)} />
           </div>
         </div>
         <div className="form-group">
           <label className="form-label">Tipo *</label>
           <select className="form-select" value={form.type} onChange={e => { const type=e.target.value; setForm(f=>({...f,type,...TYPE_DEFAULTS[type]})); }}>
-            {(deviceTypes.length ? deviceTypes : [{type:'mikrotik',label:'MikroTik RouterOS'},{type:'linux',label:'Linux'},{type:'huawei_vrp',label:'Huawei VRP / NetEngine'}]).map(item=><option key={item.type} value={item.type}>{item.label}</option>)}
+            {(deviceTypes.length ? deviceTypes : [{type:'mikrotik',label:'MikroTik RouterOS'},{type:'linux',label:'Linux'},{type:'huawei_vrp',label:'Huawei VRP / NetEngine'},{type:'cisco_ios',label:'Cisco IOS / IOS-XE'},{type:'juniper_junos',label:'Juniper Junos'},{type:'fortigate_fortios',label:'Fortinet FortiGate / FortiOS'}]).map(item=><option key={item.type} value={item.type}>{item.label}</option>)}
           </select>
         </div>
         <div className="form-row">

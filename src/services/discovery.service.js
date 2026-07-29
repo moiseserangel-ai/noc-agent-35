@@ -65,6 +65,11 @@ export function identifyDiscoveredHost(openPorts,banner='') {
   const text=String(banner).toLowerCase();
   if(ports.has(8291)||ports.has(8728)||ports.has(8729)||text.includes('routeros'))return {detectedType:'mikrotik',manufacturer:'MikroTik',confidence:ports.has(8291)?95:85};
   if(/huawei|vrp/.test(text))return {detectedType:'huawei_vrp',manufacturer:'Huawei',confidence:90};
+  if(/juniper|junos/.test(text))return {detectedType:'juniper_junos',manufacturer:'Juniper',confidence:90};
+  if(/fortigate|fortios|fortinet/.test(text))return {detectedType:'fortigate_fortios',manufacturer:'Fortinet',confidence:90};
+  if(/ubiquiti|edgeos|edgerouter/.test(text))return {detectedType:'ubiquiti_edgeos',manufacturer:'Ubiquiti',confidence:90};
+  if(/datacom|dmos/.test(text))return {detectedType:'datacom_dmos',manufacturer:'Datacom',confidence:90};
+  if(/nokia|alu|sros|sr os/.test(text))return {detectedType:'nokia_sros',manufacturer:'Nokia',confidence:90};
   if(ports.has(22))return {detectedType:'linux',manufacturer:null,confidence:45};
   return {detectedType:null,manufacturer:null,confidence:20};
 }
