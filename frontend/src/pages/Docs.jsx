@@ -153,7 +153,39 @@ export default function Docs() {
               <li>A execução em lote aceita equipamentos ou grupos, usa três conexões simultâneas e interrompe novas ondas ao atingir 20% de falhas.</li>
             </ol>
             <h4>Variáveis</h4>
-            <p>Use chaves como <code>interface</code>, <code>vlan_id</code> ou <code>ip_rede</code> e referencie-as no comando com <code>{'{{interface}}'}</code>. Uma expressão regular opcional pode limitar o formato aceito. Não use senhas ou tokens como variáveis.</p>
+            <p>Variáveis permitem reutilizar o mesmo Runbook com interfaces, endereços, VLANs ou serviços diferentes. Cadastre a variável e use sua chave entre duas chaves no comando.</p>
+            <div className="docs-variable-grid">
+              <div><strong>Chave</strong><code>interface</code><span>Nome interno, em minúsculas, sem espaços. Aceita letras, números e <code>_</code>.</span></div>
+              <div><strong>Rótulo</strong><code>Interface</code><span>Nome apresentado ao usuário durante a simulação.</span></div>
+              <div><strong>Valor padrão</strong><code>ether1</code><span>Valor inicial sugerido. Pode ser alterado antes de simular.</span></div>
+              <div><strong>Obrigatória</strong><code>Sim</code><span>Impede a simulação quando o valor estiver vazio.</span></div>
+              <div><strong>Expressão regular</strong><code>^[A-Za-z0-9_.-]+$</code><span>Limita os caracteres aceitos antes de qualquer conexão.</span></div>
+            </div>
+            <h4>Como usar no comando</h4>
+            <pre className="docs-code-block"><code>{'/interface print detail where name={{interface}}'}</code></pre>
+            <p>Se o usuário informar <code>vlan400</code>, a simulação exibirá <code>/interface print detail where name=vlan400</code>. A substituição também funciona nos comandos de validação e rollback.</p>
+            <h4>Exemplos por fabricante</h4>
+            <div className="docs-command-examples">
+              <section><strong>MikroTik</strong><code>interface = ether1</code><pre>{'/interface monitor-traffic {{interface}} once'}</pre></section>
+              <section><strong>Huawei VRP</strong><code>interface = GigabitEthernet0/0/1</code><pre>{'display interface {{interface}}'}</pre></section>
+              <section><strong>Cisco IOS</strong><code>interface = GigabitEthernet0/1</code><pre>{'show interfaces {{interface}}'}</pre></section>
+              <section><strong>Linux</strong><code>service = nginx</code><pre>{'systemctl status {{service}}'}</pre></section>
+            </div>
+            <h4>Expressões regulares recomendadas</h4>
+            <ul>
+              <li><strong>Interface:</strong> <code>^[A-Za-z0-9/_.-]+$</code></li>
+              <li><strong>VLAN ID:</strong> <code>^(?:[1-9]|[1-9][0-9]&#123;1,2&#125;|[1-3][0-9]&#123;3&#125;|40[0-8][0-9]|409[0-4])$</code></li>
+              <li><strong>IPv4 simples:</strong> <code>^(?:\d&#123;1,3&#125;\.)&#123;3&#125;\d&#123;1,3&#125;$</code></li>
+              <li><strong>Serviço systemd:</strong> <code>^[A-Za-z0-9@_.-]+$</code></li>
+            </ul>
+            <h4>Uso nos diferentes fluxos</h4>
+            <ul>
+              <li><strong>Execução individual:</strong> informe os valores antes de clicar em Simular.</li>
+              <li><strong>Task de incidente:</strong> os campos aparecem junto ao Runbook sugerido.</li>
+              <li><strong>Execução em lote:</strong> o mesmo conjunto de valores é aplicado a todos os equipamentos selecionados.</li>
+              <li><strong>Agendamento:</strong> os valores ficam fixados e criptografados para as próximas execuções.</li>
+            </ul>
+            <div className="docs-warning"><strong>Segurança</strong><p>Não use variáveis para senhas, tokens, chaves privadas ou outros segredos. Os valores aparecem na prévia e no histórico para usuários autorizados. Sempre simule e confira o comando final antes de executar.</p></div>
             <h4>Permissões</h4>
             <ul><li><strong>Operador:</strong> consulta catálogo e executa simulações.</li><li><strong>Administrador:</strong> cria, edita, publica, arquiva, executa e aciona rollback.</li></ul>
           </div>

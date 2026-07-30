@@ -35,7 +35,56 @@ Os comandos passam pela mesma classificação e pelas mesmas proteções do Term
 
 ## Variáveis
 
-As chaves devem começar com letra minúscula e podem conter letras, números e `_`. Use `{{chave}}` dentro dos comandos. Uma expressão regular pode validar o valor antes da simulação.
+As chaves devem começar com letra minúscula, ter entre 2 e 40 caracteres e podem conter letras, números e `_`. Use `{{chave}}` dentro dos comandos principais, de validação ou rollback.
+
+Cada variável possui:
+
+- **Chave:** identificador interno, como `interface`, `vlan_id`, `ip_rede` ou `service`;
+- **Rótulo:** texto apresentado ao usuário;
+- **Valor padrão:** sugestão preenchida automaticamente;
+- **Obrigatória:** bloqueia a simulação quando estiver vazia;
+- **Expressão regular:** valida o formato antes de qualquer conexão.
+
+Exemplo de variável:
+
+```text
+Chave: interface
+Rótulo: Interface
+Valor padrão: ether1
+Obrigatória: sim
+Expressão: ^[A-Za-z0-9/_.-]+$
+```
+
+Uso no comando:
+
+```routeros
+/interface monitor-traffic {{interface}} once
+```
+
+Se `interface` receber `vlan400`, o comando renderizado será:
+
+```routeros
+/interface monitor-traffic vlan400 once
+```
+
+Outros exemplos:
+
+```text
+Huawei: display interface {{interface}}
+Cisco:  show interfaces {{interface}}
+Linux:  systemctl status {{service}}
+```
+
+Expressões recomendadas:
+
+```text
+Interface:       ^[A-Za-z0-9/_.-]+$
+VLAN ID:         ^(?:[1-9]|[1-9][0-9]{1,2}|[1-3][0-9]{3}|40[0-8][0-9]|409[0-4])$
+IPv4 simples:    ^(?:\d{1,3}\.){3}\d{1,3}$
+Serviço systemd: ^[A-Za-z0-9@_.-]+$
+```
+
+Na execução individual e nas Tasks, os valores são preenchidos antes da simulação. Em lote, o mesmo conjunto é aplicado a todos os equipamentos. Em agendamentos, os valores ficam fixados e criptografados para as execuções futuras.
 
 Não cadastre senhas, tokens ou outras credenciais como variáveis de runbook. Os dados renderizados e os resultados são criptografados no banco, mas ficam visíveis aos usuários autorizados no histórico operacional.
 
