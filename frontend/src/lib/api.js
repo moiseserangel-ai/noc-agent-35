@@ -210,7 +210,7 @@ export const api = {
   updateKnowledgeDocument: (id, data) => request(`/knowledge/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   setKnowledgeDocumentStatus: (id, status) => request(`/knowledge/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   deleteKnowledgeDocument: id => request(`/knowledge/${id}`, { method: 'DELETE' }),
-  testKnowledgeSearch: (query, agentScope) => request('/knowledge/test/search', { method: 'POST', body: JSON.stringify({ query, agentScope }) }),
+  testKnowledgeSearch: (query, agentScope, tenantId = 'all') => request('/knowledge/test/search', { method: 'POST', body: JSON.stringify({ query, agentScope, tenantId }) }),
   discoverKnowledgePages: data => request('/knowledge/crawl/discover', { method: 'POST', body: JSON.stringify(data) }),
   importKnowledgePages: data => request('/knowledge/crawl/import', { method: 'POST', body: JSON.stringify(data) }),
   getKnowledgeImportJob: id => request(`/knowledge/crawl/jobs/${id}`),

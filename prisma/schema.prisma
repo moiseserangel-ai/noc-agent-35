@@ -61,6 +61,8 @@ model Tenant {
   statusServices StatusService[]
   onCallTeams OnCallTeam[]
   notificationRules NotificationRule[]
+  knowledgeDocuments KnowledgeDocument[]
+  knowledgeImportJobs KnowledgeImportJob[]
 
   @@index([isActive, name])
 }
@@ -1054,6 +1056,8 @@ model AiProviderState {
 
 model KnowledgeDocument {
   id                String           @id @default(uuid())
+  tenantId          String?
+  tenant            Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   title             String
   filename          String
   sourceType        String           @default("markdown") // markdown|text|pdf|url
@@ -1070,6 +1074,7 @@ model KnowledgeDocument {
   chunks            KnowledgeChunk[]
 
   @@index([agentScope, status])
+  @@index([tenantId, status])
   @@index([collectionRootUrl])
   @@index([updatedAt])
 }
@@ -1095,14 +1100,18 @@ model KnowledgeRetrievalLog {
   documentIds String
   chunkIds    String
   resultCount Int
+  tenantId    String?
   createdAt   DateTime @default(now())
 
   @@index([createdAt])
   @@index([agentName, createdAt])
+  @@index([tenantId, createdAt])
 }
 
 model KnowledgeImportJob {
   id          String    @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   startUrl    String
   urls        String
   agentScope  String
@@ -1120,6 +1129,7 @@ model KnowledgeImportJob {
   completedAt DateTime?
 
   @@index([status, createdAt])
+  @@index([tenantId, createdAt])
 }
 
 model CliSession {

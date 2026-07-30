@@ -283,12 +283,13 @@ export function validateDocumentInput(input) {
   return { filename: filename.slice(0, 220), sourceType, sourceUrl: input.sourceUrl || null, collectionRootUrl: input.collectionRootUrl || null, title, content, agentScope, tags: String(input.tags || '').trim().slice(0, 500) || null };
 }
 
-export async function createKnowledgeDocument(input, username) {
+export async function createKnowledgeDocument(input, username, tenantId = null) {
   const data = validateDocumentInput(await prepareDocumentInput(input));
   const chunks = chunkMarkdown(data.content);
   return prisma.knowledgeDocument.create({
     data: {
       ...data,
+      tenantId,
       uploadedBy: username,
       chunkCount: chunks.length,
       chunks: {
@@ -304,7 +305,7 @@ export async function createKnowledgeDocument(input, username) {
   });
 }
 
-export async function updateKnowledgeDocument(id, input) {
+export async function updateKnowledgeDocument(id, input, tenantId = undefined) {
   const current = await prisma.knowledgeDocument.findUnique({ where: { id } });
   if (!current) throw new Error('Documento não encontrado');
   const prepared = input.sourceType === 'url' && input.refreshUrl
@@ -318,6 +319,7 @@ export async function updateKnowledgeDocument(id, input) {
       where: { id },
       data: {
         ...merged,
+        ...(tenantId !== undefined && { tenantId }),
         status: input.status === 'disabled' ? 'disabled' : 'active',
         chunkCount: chunks.length,
         chunks: {
@@ -408,7 +410,7 @@ export async function discoverRelatedPages(startUrl, options = {}) {
   return { startUrl: rootUrl, maxDepth, maxPages, pages, errors: errors.slice(0, 20), truncated: queue.length > 0 };
 }
 
-export async function createKnowledgeImportJob(input, username) {
+export async function createKnowledgeImportJob(input, username, tenantId = null) {
   const start = new URL(input.startUrl);
   const policy = crawlPolicy(start.toString());
   const urls = [...new Set((Array.isArray(input.urls) ? input.urls : []).map(raw => crawlUrl(raw, start, policy)).filter(Boolean))];
@@ -420,6 +422,7 @@ export async function createKnowledgeImportJob(input, username) {
       urls: JSON.stringify(urls),
       agentScope: input.agentScope,
       tags: String(input.tags || '').trim().slice(0, 500) || null,
+      tenantId,
       totalPages: urls.length,
       createdBy: username,
     },
@@ -440,11 +443,11 @@ export async function processKnowledgeImportJob(jobId) {
   for (const url of urls.slice(processed)) {
     await prisma.knowledgeImportJob.update({ where: { id: jobId }, data: { currentUrl: url } });
     try {
-      const current = await prisma.knowledgeDocument.findFirst({ where: { sourceType: 'url', sourceUrl: url } });
+      const current = await prisma.knowledgeDocument.findFirst({ where: { sourceType: 'url', sourceUrl: url, tenantId: job.tenantId } });
       if (current) {
-        await updateKnowledgeDocument(current.id, { ...current, sourceType: 'url', sourceUrl: url, collectionRootUrl: job.startUrl, agentScope: job.agentScope, tags: job.tags, refreshUrl: true });
+        await updateKnowledgeDocument(current.id, { ...current, sourceType: 'url', sourceUrl: url, collectionRootUrl: job.startUrl, agentScope: job.agentScope, tags: job.tags, refreshUrl: true }, job.tenantId);
       } else {
-        await createKnowledgeDocument({ sourceType: 'url', sourceUrl: url, collectionRootUrl: job.startUrl, agentScope: job.agentScope, tags: job.tags }, job.createdBy);
+        await createKnowledgeDocument({ sourceType: 'url', sourceUrl: url, collectionRootUrl: job.startUrl, agentScope: job.agentScope, tags: job.tags }, job.createdBy, job.tenantId);
       }
       imported += 1;
     } catch (error) {
@@ -467,12 +470,12 @@ export async function processKnowledgeImportJob(jobId) {
 export async function resumeKnowledgeImportJobs() {
   const completedJobs = await prisma.knowledgeImportJob.findMany({
     where: { status: { in: ['completed', 'completed_with_errors'] } },
-    select: { startUrl: true, urls: true },
+    select: { startUrl: true, urls: true, tenantId: true },
   });
   for (const job of completedJobs) {
     const urls = JSON.parse(job.urls);
     await prisma.knowledgeDocument.updateMany({
-      where: { sourceType: 'url', sourceUrl: { in: urls }, collectionRootUrl: null },
+      where: { sourceType: 'url', sourceUrl: { in: urls }, collectionRootUrl: null, tenantId: job.tenantId },
       data: { collectionRootUrl: job.startUrl },
     });
   }
@@ -481,12 +484,16 @@ export async function resumeKnowledgeImportJobs() {
   jobs.forEach(job => setImmediate(() => processKnowledgeImportJob(job.id).catch(() => {})));
 }
 
-export async function searchKnowledge(query, agentName, limit = 5, log = true) {
+export async function searchKnowledge(query, agentName, limit = 5, log = true, tenantId = undefined) {
   const queryTerms = terms(query);
   if (!queryTerms.length) return [];
   const chunks = await prisma.knowledgeChunk.findMany({
-    where: { document: { status: 'active', agentScope: { in: ['global', agentName] } } },
-    include: { document: { select: { id: true, title: true, filename: true, agentScope: true, updatedAt: true } } },
+    where: { document: {
+      status: 'active',
+      agentScope: { in: ['global', agentName] },
+      ...(tenantId !== undefined && { tenantId: tenantId ? { in: [null, tenantId] } : null }),
+    } },
+    include: { document: { select: { id: true, title: true, filename: true, agentScope: true, tenantId: true, updatedAt: true } } },
   });
   const phrase = normalize(query);
   const ranked = chunks.map(chunk => {
@@ -510,14 +517,15 @@ export async function searchKnowledge(query, agentName, limit = 5, log = true) {
         documentIds: JSON.stringify([...new Set(ranked.map(item => item.document.id))]),
         chunkIds: JSON.stringify(ranked.map(item => item.id)),
         resultCount: ranked.length,
+        tenantId: tenantId || null,
       },
     }).catch(() => {});
   }
   return ranked;
 }
 
-export async function knowledgeContext(query, agentName) {
-  const results = await searchKnowledge(query, agentName, 5, true);
+export async function knowledgeContext(query, agentName, tenantId = undefined) {
+  const results = await searchKnowledge(query, agentName, 5, true, tenantId);
   if (!results.length) return '';
   const excerpts = results.map((item, index) =>
     `[FONTE ${index + 1}: ${item.document.title} > ${item.heading || 'Conteúdo'} | ${item.document.filename}]\n${item.content}`

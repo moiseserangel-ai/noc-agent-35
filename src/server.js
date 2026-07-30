@@ -255,7 +255,7 @@ io.on('connection', (socket) => {
         } else if (chunk.type === 'tool_result') {
           socket.emit('chat:tool', { status: 'result', tool: chunk.tool, output: chunk.output });
         }
-      }, { history });
+      }, { history, tenantId: socket.user.tenantId || undefined });
 
       // Handle automatic routing if Support Agent was used
       if (agentType === 'support') {
@@ -305,7 +305,7 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
                   } else if (chunk.type === 'tool_result') {
                     socket.emit('chat:tool', { status: 'result', tool: chunk.tool, output: chunk.output });
                   }
-                }, { history });
+                }, { history, tenantId: dashboardTask.tenantId || socket.user.tenantId || undefined });
 
                 result.text += `\n\n🔄 **Encaminhando para especialista em ${deviceType}...**\n\n${specialistResult.text}`;
                 result.toolsUsed.push(...specialistResult.toolsUsed);

@@ -30,7 +30,12 @@ export default class BaseAgent {
     try { return JSON.stringify(await handler(input)); } catch (err) { logger.error(`Tool ${name}: ${err.message}`); return JSON.stringify({ error: err.message }); }
   }
   async run(userMessage, _context = {}, onEvent) {
-    const contextualMessage = `${userMessage}${await knowledgeContext(userMessage, this.name)}`;
+    let tenantId = _context.tenantId;
+    if (tenantId === undefined) {
+      const deviceId = String(userMessage).match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0];
+      if (deviceId) tenantId = (await prisma.device.findUnique({ where: { id: deviceId }, select: { tenantId: true } }))?.tenantId ?? null;
+    }
+    const contextualMessage = `${userMessage}${await knowledgeContext(userMessage, this.name, tenantId)}`;
     const cfg = await getAiConfiguration();
     const order = [...new Set([cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
     if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');

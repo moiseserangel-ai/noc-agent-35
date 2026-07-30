@@ -18,15 +18,16 @@ const scopeLabel = {
   nokia_sros: 'Nokia SR OS',
 };
 const sourceLabel = { markdown: 'Markdown', text: 'Texto', pdf: 'PDF', url: 'Link HTTPS' };
-const emptyForm = { id: null, title: '', filename: '', content: '', fileData: '', sourceType: 'markdown', sourceUrl: '', refreshUrl: false, crawlMode: false, agentScope: 'global', tags: '' };
+const emptyForm = { id: null, tenantId: '', title: '', filename: '', content: '', fileData: '', sourceType: 'markdown', sourceUrl: '', refreshUrl: false, crawlMode: false, agentScope: 'global', tags: '' };
 const date = value => new Date(value).toLocaleString('pt-BR');
 
 export default function Knowledge() {
   const [documents, setDocuments] = useState([]);
+  const [tenants, setTenants] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState({ query: '', agentScope: 'mikrotik' });
+  const [search, setSearch] = useState({ query: '', agentScope: 'mikrotik', tenantId: 'all' });
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [discovery, setDiscovery] = useState(null);
@@ -40,7 +41,11 @@ export default function Knowledge() {
 
   const load = async () => {
     setLoading(true);
-    try { setDocuments((await api.getKnowledgeDocuments()).data); }
+    try {
+      const [knowledge, clients] = await Promise.all([api.getKnowledgeDocuments(), api.getTenants()]);
+      setDocuments(knowledge.data);
+      setTenants(clients.data.filter(item => item.isActive));
+    }
     catch (error) { toast(error.message, 'error'); }
     finally { setLoading(false); }
   };
@@ -102,7 +107,7 @@ export default function Knowledge() {
   const edit = async id => {
     try {
       const item = (await api.getKnowledgeDocument(id)).data;
-      setForm({ id: item.id, title: item.title, filename: item.filename, content: item.content, fileData: '', sourceType: item.sourceType || 'markdown', sourceUrl: item.sourceUrl || '', refreshUrl: false, crawlMode: false, agentScope: item.agentScope, tags: item.tags || '' });
+      setForm({ id: item.id, tenantId: item.tenantId || '', title: item.title, filename: item.filename, content: item.content, fileData: '', sourceType: item.sourceType || 'markdown', sourceUrl: item.sourceUrl || '', refreshUrl: false, crawlMode: false, agentScope: item.agentScope, tags: item.tags || '' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) { toast(error.message, 'error'); }
   };
@@ -129,7 +134,7 @@ export default function Knowledge() {
     event.preventDefault();
     if (!search.query.trim()) return;
     setSearching(true);
-    try { setResults((await api.testKnowledgeSearch(search.query, search.agentScope)).data); }
+    try { setResults((await api.testKnowledgeSearch(search.query, search.agentScope, search.tenantId)).data); }
     catch (error) { toast(error.message, 'error'); }
     finally { setSearching(false); }
   };
@@ -152,14 +157,14 @@ export default function Knowledge() {
   const startImport = async () => {
     if (!selectedPages.length) return toast('Selecione ao menos uma página.', 'error');
     try {
-      const job = (await api.importKnowledgePages({ startUrl: discovery.startUrl, urls: selectedPages, agentScope: form.agentScope, tags: form.tags })).data;
+      const job = (await api.importKnowledgePages({ startUrl: discovery.startUrl, urls: selectedPages, agentScope: form.agentScope, tags: form.tags, tenantId: form.tenantId || null })).data;
       setImportJob(job);
       toast('Importação iniciada em segundo plano.', 'success');
     } catch (error) { toast(error.message, 'error'); }
   };
 
   const documentGroups = documents.reduce((groups, item) => {
-    const key = item.collectionRootUrl ? `collection:${item.collectionRootUrl}` : `document:${item.id}`;
+    const key = item.collectionRootUrl ? `collection:${item.tenantId || 'global'}:${item.collectionRootUrl}` : `document:${item.id}`;
     if (!groups.has(key)) groups.set(key, { key, rootUrl: item.collectionRootUrl, documents: [] });
     groups.get(key).documents.push(item);
     return groups;
@@ -197,6 +202,7 @@ export default function Knowledge() {
           </button>
         </>}
         {!form.crawlMode && <div className="form-group"><label className="form-label">Título {form.sourceType==='url'&&'(opcional)'}</label><input className="form-input" required={form.sourceType!=='url'} maxLength="180" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></div>}
+        <div className="form-group"><label className="form-label">Disponibilidade</label><select className="form-select" value={form.tenantId} onChange={e=>setForm({...form,tenantId:e.target.value})}><option value="">Global — compartilhado com todos os clientes</option>{tenants.map(item=><option key={item.id} value={item.id}>Somente {item.name}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Especialista</label><select className="form-select" value={form.agentScope} onChange={e=>setForm({...form,agentScope:e.target.value})}>{Object.entries(scopeLabel).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Tags</label><input className="form-input" placeholder="Ex.: bgp, firewall, ne8000, routeros-v7" maxLength="500" value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})}/></div>
         {(form.content || form.fileData || form.sourceUrl) && <div className="knowledge-file-preview"><FileText size={15}/><span>{form.sourceType==='url' ? 'A página será baixada com proteção de rede' : form.sourceType==='pdf' ? 'PDF pronto para extração de texto' : `${form.content.length.toLocaleString('pt-BR')} caracteres carregados`}</span></div>}
@@ -208,7 +214,7 @@ export default function Knowledge() {
       <div className="card">
         <div className="card-header"><div><h3>Testar recuperação</h3><p>Confira exatamente quais trechos um especialista encontrará</p></div></div>
         <form className="knowledge-search" onSubmit={testSearch}>
-          <select className="form-select" value={search.agentScope} onChange={e=>setSearch({...search,agentScope:e.target.value})}>{Object.entries(scopeLabel).filter(([key])=>key!=='global').map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+          <div><select className="form-select" value={search.agentScope} onChange={e=>setSearch({...search,agentScope:e.target.value})}>{Object.entries(scopeLabel).filter(([key])=>key!=='global').map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><select className="form-select" value={search.tenantId} onChange={e=>setSearch({...search,tenantId:e.target.value})}><option value="all">Todos (administrador)</option><option value="">Somente global</option>{tenants.map(item=><option key={item.id} value={item.id}>{item.name} + global</option>)}</select></div>
           <div><input className="form-input" placeholder="Ex.: como configurar peer BGP no NE8000?" value={search.query} onChange={e=>setSearch({...search,query:e.target.value})}/><button className="btn btn-primary" disabled={searching}><Search size={16}/></button></div>
         </form>
         <div className="knowledge-results">
@@ -245,7 +251,7 @@ export default function Knowledge() {
         {groupedDocuments.map(group => {
           if (!group.rootUrl) {
             const item = group.documents[0];
-            return <tr key={item.id}><td><strong>{item.title}</strong><br/><span className="knowledge-muted">{sourceLabel[item.sourceType] || 'Markdown'} · {item.sourceUrl || item.filename}{item.tags ? ` · ${item.tags}` : ''}</span></td><td>{scopeLabel[item.agentScope] || item.agentScope}</td><td>{item.chunkCount} trechos<br/><span className="knowledge-muted">{date(item.updatedAt)}</span></td><td>{item.uploadedBy}</td><td><span className={`status-badge ${item.status==='active'?'status-completed':'status-pending'}`}>{item.status==='active'?'Ativo':'Desabilitado'}</span></td><td><div className="table-actions"><button className="btn btn-ghost btn-sm" title="Editar" onClick={()=>edit(item.id)}><Pencil size={15}/></button><button className="btn btn-ghost btn-sm" title={item.status==='active'?'Desabilitar':'Habilitar'} onClick={()=>toggle(item)}><Power size={15}/></button><button className="btn btn-ghost btn-sm" title="Excluir" onClick={()=>remove(item)}><Trash2 size={15}/></button></div></td></tr>;
+            return <tr key={item.id}><td><strong>{item.title}</strong><br/><span className="knowledge-muted">{item.tenant?.name || 'Global'} · {sourceLabel[item.sourceType] || 'Markdown'} · {item.sourceUrl || item.filename}{item.tags ? ` · ${item.tags}` : ''}</span></td><td>{scopeLabel[item.agentScope] || item.agentScope}</td><td>{item.chunkCount} trechos<br/><span className="knowledge-muted">{date(item.updatedAt)}</span></td><td>{item.uploadedBy}</td><td><span className={`status-badge ${item.status==='active'?'status-completed':'status-pending'}`}>{item.status==='active'?'Ativo':'Desabilitado'}</span></td><td><div className="table-actions"><button className="btn btn-ghost btn-sm" title="Editar" onClick={()=>edit(item.id)}><Pencil size={15}/></button><button className="btn btn-ghost btn-sm" title={item.status==='active'?'Desabilitar':'Habilitar'} onClick={()=>toggle(item)}><Power size={15}/></button><button className="btn btn-ghost btn-sm" title="Excluir" onClick={()=>remove(item)}><Trash2 size={15}/></button></div></td></tr>;
           }
           const expanded = expandedCollections.includes(group.key);
           const root = group.documents.find(item => item.sourceUrl === group.rootUrl) || group.documents[0];
@@ -253,14 +259,14 @@ export default function Knowledge() {
           const active = group.documents.filter(item => item.status === 'active').length;
           return <Fragment key={group.key}>
             <tr className="knowledge-collection-row" onClick={()=>toggleCollection(group.key)}>
-              <td><div className="knowledge-collection-title">{expanded?<ChevronDown size={17}/>:<ChevronRight size={17}/>}<div><strong>{root.title}</strong><span>{group.rootUrl}</span></div></div></td>
+              <td><div className="knowledge-collection-title">{expanded?<ChevronDown size={17}/>:<ChevronRight size={17}/>}<div><strong>{root.title}</strong><span>{root.tenant?.name || 'Global'} · {group.rootUrl}</span></div></div></td>
               <td>{scopeLabel[root.agentScope] || root.agentScope}</td>
               <td><strong>{group.documents.length} páginas</strong><br/><span className="knowledge-muted">{chunks} trechos</span></td>
               <td>{root.uploadedBy}</td>
               <td><span className={`status-badge ${active?'status-completed':'status-pending'}`}>{active} de {group.documents.length} ativas</span></td>
               <td><button className="btn btn-ghost btn-sm" aria-label={expanded?'Recolher coleção':'Expandir coleção'}>{expanded?<ChevronDown size={16}/>:<ChevronRight size={16}/>}</button></td>
             </tr>
-            {expanded && group.documents.map(item=><tr key={item.id} className="knowledge-collection-child"><td><strong>{item.title}</strong><br/><span className="knowledge-muted">{item.sourceUrl}</span></td><td>{scopeLabel[item.agentScope] || item.agentScope}</td><td>{item.chunkCount} trechos<br/><span className="knowledge-muted">{date(item.updatedAt)}</span></td><td>{item.uploadedBy}</td><td><span className={`status-badge ${item.status==='active'?'status-completed':'status-pending'}`}>{item.status==='active'?'Ativo':'Desabilitado'}</span></td><td><div className="table-actions"><button className="btn btn-ghost btn-sm" title="Editar" onClick={()=>edit(item.id)}><Pencil size={15}/></button><button className="btn btn-ghost btn-sm" title={item.status==='active'?'Desabilitar':'Habilitar'} onClick={()=>toggle(item)}><Power size={15}/></button><button className="btn btn-ghost btn-sm" title="Excluir" onClick={()=>remove(item)}><Trash2 size={15}/></button></div></td></tr>)}
+            {expanded && group.documents.map(item=><tr key={item.id} className="knowledge-collection-child"><td><strong>{item.title}</strong><br/><span className="knowledge-muted">{item.tenant?.name || 'Global'} · {item.sourceUrl}</span></td><td>{scopeLabel[item.agentScope] || item.agentScope}</td><td>{item.chunkCount} trechos<br/><span className="knowledge-muted">{date(item.updatedAt)}</span></td><td>{item.uploadedBy}</td><td><span className={`status-badge ${item.status==='active'?'status-completed':'status-pending'}`}>{item.status==='active'?'Ativo':'Desabilitado'}</span></td><td><div className="table-actions"><button className="btn btn-ghost btn-sm" title="Editar" onClick={()=>edit(item.id)}><Pencil size={15}/></button><button className="btn btn-ghost btn-sm" title={item.status==='active'?'Desabilitar':'Habilitar'} onClick={()=>toggle(item)}><Power size={15}/></button><button className="btn btn-ghost btn-sm" title="Excluir" onClick={()=>remove(item)}><Trash2 size={15}/></button></div></td></tr>)}
           </Fragment>;
         })}
         {!documents.length&&<tr><td colSpan="6"><div className="empty-state"><BookOpen size={30}/><p>Nenhum documento foi adicionado.</p></div></td></tr>}
