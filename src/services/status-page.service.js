@@ -40,14 +40,17 @@ export function availabilityFromEvents(events,now=new Date(),days=30){
   return Math.max(0,Math.min(100,(1-down/(days*86400_000))*100));
 }
 
-export async function getPublicStatusPage(){
+export async function getPublicStatusPage(tenantSlug=null){
   await syncStatusServices();
+  const tenant=tenantSlug?await prisma.tenant.findFirst({where:{slug:tenantSlug,isActive:true}}):null;
+  if(tenantSlug&&!tenant)throw Object.assign(new Error('Status Page não encontrada'),{statusCode:404});
+  const scope={tenantId:tenant?.id||null};
   const [services,incidents,settings]=await Promise.all([
-    prisma.statusService.findMany({where:{enabled:true},orderBy:[{sortOrder:'asc'},{name:'asc'}],include:{events:{where:{startedAt:{gte:new Date(Date.now()-30*86400_000)}},orderBy:{startedAt:'asc'}}}}),
-    prisma.statusIncident.findMany({where:{OR:[{status:{not:'resolved'}},{resolvedAt:{gte:new Date(Date.now()-30*86400_000)}}]},orderBy:{publishedAt:'desc'},include:{service:{select:{name:true}},updates:{orderBy:{createdAt:'desc'}}}}),
+    prisma.statusService.findMany({where:{enabled:true,...scope},orderBy:[{sortOrder:'asc'},{name:'asc'}],include:{events:{where:{startedAt:{gte:new Date(Date.now()-30*86400_000)}},orderBy:{startedAt:'asc'}}}}),
+    prisma.statusIncident.findMany({where:{service:scope,OR:[{status:{not:'resolved'}},{resolvedAt:{gte:new Date(Date.now()-30*86400_000)}}]},orderBy:{publishedAt:'desc'},include:{service:{select:{name:true}},updates:{orderBy:{createdAt:'desc'}}}}),
     prisma.settings.findMany({where:{key:{in:['status_page_title','status_page_description']}}}),
   ]);
   const config=Object.fromEntries(settings.map(item=>[item.key,item.value]));
   const overall=services.reduce((state,item)=>weight[item.currentStatus]>weight[state]?item.currentStatus:state,'operational');
-  return{title:config.status_page_title||'Status dos Serviços',description:config.status_page_description||'Disponibilidade e comunicação de incidentes',overall,updatedAt:new Date(),services:services.map(({events,...item})=>({id:item.id,name:item.name,description:item.description,status:item.currentStatus,availability30d:Number(availabilityFromEvents(events).toFixed(3))})),incidents:incidents.map(item=>({id:item.id,title:item.title,message:item.message,severity:item.severity,status:item.status,publishedAt:item.publishedAt,resolvedAt:item.resolvedAt,scheduledAt:item.scheduledAt,scheduledEndAt:item.scheduledEndAt,service:item.service.name,updates:item.updates.map(update=>({id:update.id,status:update.status,message:update.message,createdAt:update.createdAt}))}))};
+  return{title:tenant?.portalTitle||config.status_page_title||'Status dos Serviços',description:tenant?.portalDescription||config.status_page_description||'Disponibilidade e comunicação de incidentes',primaryColor:tenant?.primaryColor||null,tenant:tenant?{name:tenant.name,slug:tenant.slug}:null,overall,updatedAt:new Date(),services:services.map(({events,...item})=>({id:item.id,name:item.name,description:item.description,status:item.currentStatus,availability30d:Number(availabilityFromEvents(events).toFixed(3))})),incidents:incidents.map(item=>({id:item.id,title:item.title,message:item.message,severity:item.severity,status:item.status,publishedAt:item.publishedAt,resolvedAt:item.resolvedAt,scheduledAt:item.scheduledAt,scheduledEndAt:item.scheduledEndAt,service:item.service.name,updates:item.updates.map(update=>({id:update.id,status:update.status,message:update.message,createdAt:update.createdAt}))}))};
 }

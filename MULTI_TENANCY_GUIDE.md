@@ -20,3 +20,11 @@ Ao vincular um equipamento, as Tasks históricas desse equipamento também receb
 O isolamento é aplicado no backend, não apenas no menu. Tokens carregam o identificador do cliente e a autenticação o reconfirma no banco em cada requisição. Usuários de cliente são bloqueados nos módulos globais, incluindo Configurações, IA, Terminal, Backups, Compliance, Runbooks, Auditoria, Notificações, Plantão e gestão da Status Page.
 
 Registros antigos permanecem no escopo global até que seus equipamentos sejam associados. Usuários existentes também continuam globais para preservar o funcionamento atual.
+
+## SLA contratual
+
+Cada cliente pode definir prazos de reconhecimento e resolução para as prioridades baixa, média, alta e crítica. Campos não preenchidos herdam a política global. Novas Tasks e Tasks reabertas calculam seus vencimentos usando o contrato do cliente vinculado ao equipamento.
+
+## Status Page individual
+
+Serviços vinculados a equipamentos de cliente são publicados separadamente em `/status/identificador-do-cliente`. O título, a descrição e a cor primária pertencem ao cliente. A página global não mistura serviços de clientes, e a página individual nunca retorna serviços ou incidentes de outro cliente.

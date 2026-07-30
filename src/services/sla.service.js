@@ -14,20 +14,24 @@ const numberSetting = (settings, key, fallback) => {
   const parsed = Number(settings.get(key));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
+export const tenantSlaValue=(tenant,key,fallback)=>Number(tenant?.[key])>0?Number(tenant[key]):fallback;
 
-export async function getSlaPolicy(priority = 'medium') {
+export async function getSlaPolicy(priority = 'medium',tenantId=null) {
   const safePriority = DEFAULT_SLA[priority] ? priority : 'medium';
   const rows = await prisma.settings.findMany({ where: { key: { startsWith: 'sla_' } } });
   const settings = new Map(rows.map(row => [row.key, row.value]));
+  const tenant=tenantId?await prisma.tenant.findUnique({where:{id:tenantId},select:{slaLowAck:true,slaLowResolve:true,slaMediumAck:true,slaMediumResolve:true,slaHighAck:true,slaHighResolve:true,slaCriticalAck:true,slaCriticalResolve:true}}):null;
+  const prefix={low:'Low',medium:'Medium',high:'High',critical:'Critical'}[safePriority];
+  const globalAck=numberSetting(settings, `sla_${safePriority}_ack_minutes`, DEFAULT_SLA[safePriority].acknowledge),globalResolve=numberSetting(settings, `sla_${safePriority}_resolve_minutes`, DEFAULT_SLA[safePriority].resolve);
   return {
-    acknowledgeMinutes: numberSetting(settings, `sla_${safePriority}_ack_minutes`, DEFAULT_SLA[safePriority].acknowledge),
-    resolveMinutes: numberSetting(settings, `sla_${safePriority}_resolve_minutes`, DEFAULT_SLA[safePriority].resolve),
+    acknowledgeMinutes:tenantSlaValue(tenant,`sla${prefix}Ack`,globalAck),
+    resolveMinutes:tenantSlaValue(tenant,`sla${prefix}Resolve`,globalResolve),
     warningPercent: Math.min(95, numberSetting(settings, 'sla_warning_percent', 80)),
   };
 }
 
-export async function buildSlaFields(priority, openedAt = new Date()) {
-  const policy = await getSlaPolicy(priority);
+export async function buildSlaFields(priority, openedAt = new Date(),tenantId=null) {
+  const policy = await getSlaPolicy(priority,tenantId);
   return {
     slaAckDueAt: new Date(openedAt.getTime() + policy.acknowledgeMinutes * 60_000),
     slaResolveDueAt: new Date(openedAt.getTime() + policy.resolveMinutes * 60_000),

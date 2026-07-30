@@ -26,7 +26,7 @@ export const api = {
   // Auth
   login: (username, password, otp) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password, otp }) }),
   getBranding: () => request('/branding'),
-  getPublicStatus: () => request('/public/status'),
+  getPublicStatus: slug => request(`/public/status${slug?`/${encodeURIComponent(slug)}`:''}`),
   verify: () => request('/auth/verify'),
   refreshSession: () => request('/auth/refresh', { method: 'POST' }),
   logout: () => request('/auth/logout', { method: 'POST' }),

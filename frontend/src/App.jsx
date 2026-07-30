@@ -29,6 +29,7 @@ import OnCall from './pages/OnCall.jsx';
 import StatusPage from './pages/StatusPage.jsx';
 import PublicStatus from './pages/PublicStatus.jsx';
 import Clients from './pages/Clients.jsx';
+import TenantContracts from './pages/TenantContracts.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
 
@@ -146,8 +147,8 @@ export default function App() {
     };
   }, [authed]);
 
-  if (window.location.pathname === '/status') {
-    return <ToastProvider><BrowserRouter><Routes><Route path="/status" element={<PublicStatus branding={branding}/>} /></Routes></BrowserRouter></ToastProvider>;
+  if (window.location.pathname.startsWith('/status')) {
+    return <ToastProvider><BrowserRouter><Routes><Route path="/status/:slug?" element={<PublicStatus branding={branding}/>} /></Routes></BrowserRouter></ToastProvider>;
   }
 
   if (authed === null) {
@@ -192,6 +193,7 @@ export default function App() {
               <Route path="notifications" element={<Notifications isAdmin={user?.role==='admin'} />} />
               <Route path="on-call" element={user?.role==='admin' ? <OnCall /> : <Navigate to="/" replace />} />
               <Route path="clients" element={user?.role==='admin'&&!user?.tenantId ? <Clients /> : <Navigate to="/" replace />} />
+              <Route path="tenant-contracts" element={user?.role==='admin'&&!user?.tenantId ? <TenantContracts /> : <Navigate to="/" replace />} />
               <Route path="status-page" element={user?.role==='admin' ? <StatusPage /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />

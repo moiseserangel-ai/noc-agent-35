@@ -8,8 +8,8 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
   const taskNumber = (lastTask?.taskNumber || 0) + 1;
 
   const openedAt = incident.incidentOpenedAt || new Date();
-  const sla = await buildSlaFields(priority || 'medium', openedAt);
   const scopedDevice=deviceId?await prisma.device.findUnique({where:{id:deviceId},select:{tenantId:true}}):null;
+  const sla = await buildSlaFields(priority || 'medium', openedAt,scopedDevice?.tenantId);
   const task = await prisma.task.create({
     data: {
       taskNumber,

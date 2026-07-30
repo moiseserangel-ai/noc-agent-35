@@ -55,7 +55,7 @@ router.put('/:id', async (req, res, next) => {
     const input={...req.body};if(req.user.tenantId)input.tenantId=req.user.tenantId;
     if(input.siteId){const site=await prisma.tenantSite.findFirst({where:{id:input.siteId,...(input.tenantId&&{tenantId:input.tenantId})}});if(!site)return res.status(400).json({success:false,error:'Unidade não pertence ao cliente selecionado'});}
     const device = await deviceService.updateDevice(req.params.id, input);
-    if(input.tenantId!==undefined)await prisma.task.updateMany({where:{deviceId:device.id},data:{tenantId:input.tenantId||null}});
+    if(input.tenantId!==undefined)await prisma.$transaction([prisma.task.updateMany({where:{deviceId:device.id},data:{tenantId:input.tenantId||null}}),prisma.statusService.updateMany({where:{deviceId:device.id},data:{tenantId:input.tenantId||null}})]);
     res.json({ success: true, data: device });
   } catch (err) { next(err); }
 });

@@ -86,7 +86,7 @@ router.post('/:id/workflow', async (req, res, next) => {
     }
     if (action === 'validate') data.validatedAt = now;
     if (action === 'close') data.closedAt = now;
-    if (action === 'reopen') Object.assign(data, await buildSlaFields(task.priority, now), { resolvedAt: null, validatedAt: null, closedAt: null, resolutionSummary: null, resolutionType: null, adminResponse: null, acknowledgedAt: null, slaWarningSentAt: null, slaAckBreachedAt: null, slaResolveBreachedAt: null });
+    if (action === 'reopen') Object.assign(data, await buildSlaFields(task.priority, now,task.tenantId), { resolvedAt: null, validatedAt: null, closedAt: null, resolutionSummary: null, resolutionType: null, adminResponse: null, acknowledgedAt: null, slaWarningSentAt: null, slaAckBreachedAt: null, slaResolveBreachedAt: null });
 
     const labels = { acknowledge: 'reconheceu e iniciou o atendimento', resolve: 'marcou como resolvida', validate: 'validou a resolução', close: 'encerrou', reopen: 'reabriu', cancel: 'cancelou' };
     const updated = await taskService.updateTask(task.id, data);

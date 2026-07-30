@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { path: '/on-call', label: 'Plantão NOC', icon: CalendarClock, roles: ['admin'] },
   { path: '/status-page', label: 'Status Page', icon: RadioTower, roles: ['admin'] },
   { path: '/clients', label: 'Clientes', icon: Building2, roles: ['admin'] },
+  { path: '/tenant-contracts', label: 'Contratos e Portais', icon: ClipboardList, roles: ['admin'] },
   { path: '/runbooks', label: 'Runbooks', icon: Workflow, roles: ['admin', 'operator'] },
   { path: '/chat', label: 'Chat IA', icon: MessageSquare, roles: ['admin', 'operator'] },
   { path: '/terminal', label: 'Terminal CLI', icon: TerminalSquare },

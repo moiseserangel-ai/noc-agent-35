@@ -5,9 +5,11 @@ import{api}from'../lib/api.js';
 const labels={operational:'Operacional',degraded:'Desempenho degradado',partial_outage:'Indisponibilidade parcial',major_outage:'Indisponibilidade',maintenance:'Em manutenção',investigating:'Investigando',identified:'Causa identificada',monitoring:'Monitorando',resolved:'Resolvido',scheduled:'Manutenção programada'};
 const fmt=value=>new Date(value).toLocaleString('pt-BR');
 export default function PublicStatus({branding}){
+ const slug=window.location.pathname.split('/')[2]||'';
  const[data,setData]=useState(null),[error,setError]=useState('');
- const load=()=>api.getPublicStatus().then(result=>{setData(result.data);setError('');}).catch(e=>setError(e.message));
+ const load=()=>api.getPublicStatus(slug).then(result=>{setData(result.data);setError('');}).catch(e=>setError(e.message));
  useEffect(()=>{load();const timer=setInterval(load,60000);return()=>clearInterval(timer);},[]);
+ useEffect(()=>{document.documentElement.style.setProperty('--status-color',data?.primaryColor||'#51d6ff');},[data?.primaryColor]);
  if(!data)return <div className="public-status loading-screen">{error||'Carregando situação dos serviços...'}</div>;
  return <div className="public-status"><header><div className="public-status-brand">{branding?.logo?<img src={branding.logo}/>:<RadioTower/>}<strong>{branding?.name||'NOC Agent'}</strong></div><h1>{data.title}</h1><p>{data.description}</p><div className={`public-overall ${data.overall}`}>{data.overall==='operational'?<CheckCircle2/>:<AlertTriangle/>}<strong>{data.overall==='operational'?'Todos os serviços operacionais':labels[data.overall]}</strong></div></header>
  <main><section className="public-services"><h2>Serviços</h2>{data.services.map(service=><article key={service.id}><div><strong>{service.name}</strong><span>{service.description}</span></div><div><b className={service.status}/><span>{labels[service.status]}</span><small>{service.availability30d.toFixed(2)}% em 30 dias</small></div></article>)}</section>

@@ -40,6 +40,17 @@ model Tenant {
   contactName String?
   contactEmail String?
   contactPhone String?
+  portalTitle String?
+  portalDescription String?
+  primaryColor String @default("#00d4ff")
+  slaLowAck Int?
+  slaLowResolve Int?
+  slaMediumAck Int?
+  slaMediumResolve Int?
+  slaHighAck Int?
+  slaHighResolve Int?
+  slaCriticalAck Int?
+  slaCriticalResolve Int?
   isActive    Boolean      @default(true)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
