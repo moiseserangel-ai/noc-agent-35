@@ -122,6 +122,18 @@ export const api = {
   startTopologyDiscovery: () => request('/topology/discovery',{method:'POST'}),
   approveTopologyNeighbor: id => request(`/topology/discovery/${id}/approve`,{method:'POST'}),
   ignoreTopologyNeighbor: id => request(`/topology/discovery/${id}/ignore`,{method:'POST'}),
+  getRunbooks: (params={}) => request(`/runbooks?${new URLSearchParams(params)}`),
+  getRunbookTemplates: () => request('/runbooks/templates'),
+  importRunbookTemplate: key => request(`/runbooks/templates/${encodeURIComponent(key)}/import`,{method:'POST'}),
+  getRunbook: id => request(`/runbooks/${id}`),
+  createRunbook: data => request('/runbooks',{method:'POST',body:JSON.stringify(data)}),
+  updateRunbook: (id,data) => request(`/runbooks/${id}`,{method:'PUT',body:JSON.stringify(data)}),
+  publishRunbook: id => request(`/runbooks/${id}/publish`,{method:'POST'}),
+  archiveRunbook: id => request(`/runbooks/${id}/archive`,{method:'POST'}),
+  simulateRunbook: (id,data) => request(`/runbooks/${id}/simulate`,{method:'POST',body:JSON.stringify(data)}),
+  executeRunbook: (id,data) => request(`/runbooks/${id}/execute`,{method:'POST',body:JSON.stringify({...data,confirmed:true})}),
+  getRunbookExecutions: (params={}) => request(`/runbooks/executions?${new URLSearchParams(params)}`),
+  rollbackRunbook: id => request(`/runbooks/executions/${id}/rollback`,{method:'POST',body:JSON.stringify({confirmed:true})}),
 
   // Devices
   getDevices: () => request('/devices'),

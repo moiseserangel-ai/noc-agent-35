@@ -32,6 +32,7 @@ import changeRequestRoutes from './routes/change-request.routes.js';
 import discoveryRoutes from './routes/discovery.routes.js';
 import capacityRoutes from './routes/capacity.routes.js';
 import topologyRoutes from './routes/topology.routes.js';
+import runbookRoutes from './routes/runbook.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -92,6 +93,7 @@ app.use('/api/changes', authMiddleware, requireRoles('admin', 'operator'), audit
 app.use('/api/discovery', authMiddleware, requireRoles('admin'), auditMutation, discoveryRoutes);
 app.use('/api/capacity', authMiddleware, auditMutation, capacityRoutes);
 app.use('/api/topology', authMiddleware, auditMutation, topologyRoutes);
+app.use('/api/runbooks', authMiddleware, requireRoles('admin', 'operator'), auditMutation, runbookRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

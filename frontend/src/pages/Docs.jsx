@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageSquare, Activity, Cpu } from 'lucide-react';
+import { MessageSquare, Activity, Cpu, Workflow } from 'lucide-react';
 
 export default function Docs() {
   const [activeTab, setActiveTab] = useState('evolution');
@@ -32,6 +32,10 @@ export default function Docs() {
         >
           <Cpu size={16} />
           Arquitetura dos Agentes
+        </button>
+        <button className={`tab-btn ${activeTab === 'runbooks' ? 'active' : ''}`} onClick={() => setActiveTab('runbooks')}>
+          <Workflow size={16} />
+          Runbooks
         </button>
       </div>
 
@@ -129,6 +133,25 @@ export default function Docs() {
             <p>
               O modelo vai pensar sozinho: usar o SSH para dar um print na interface, processar o texto, escrever todos os comandos do PPPoE e pedir sua aprovação (SIM/NÃO) para executar o bloco inteiro.
             </p>
+          </div>
+        )}
+        {activeTab === 'runbooks' && (
+          <div className="doc-content">
+            <h3>⚙️ Catálogo de Runbooks</h3>
+            <p>Runbooks são automações operacionais reutilizáveis, versionadas e auditadas. Eles podem combinar comandos, validações e rollback para um tipo específico de equipamento.</p>
+            <h4>Fluxo seguro</h4>
+            <ol>
+              <li>O administrador cria o runbook como rascunho, define variáveis e etapas.</li>
+              <li>O administrador publica uma versão revisada.</li>
+              <li>Administrador ou operador seleciona o equipamento e executa a simulação.</li>
+              <li>A prévia mostra todos os comandos renderizados e identifica consulta ou alteração.</li>
+              <li>Somente o administrador pode confirmar a execução real. A simulação idêntica vale por 30 minutos.</li>
+              <li>Cada resultado fica registrado no histórico; quando definido, o rollback pode ser executado pelo administrador.</li>
+            </ol>
+            <h4>Variáveis</h4>
+            <p>Use chaves como <code>interface</code>, <code>vlan_id</code> ou <code>ip_rede</code> e referencie-as no comando com <code>{'{{interface}}'}</code>. Uma expressão regular opcional pode limitar o formato aceito. Não use senhas ou tokens como variáveis.</p>
+            <h4>Permissões</h4>
+            <ul><li><strong>Operador:</strong> consulta catálogo e executa simulações.</li><li><strong>Administrador:</strong> cria, edita, publica, arquiva, executa e aciona rollback.</li></ul>
           </div>
         )}
       </div>

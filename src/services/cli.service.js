@@ -44,6 +44,22 @@ export function classifyCliCommand(deviceType, command) {
   return { valid: true, type: lines.every(READ_ONLY[deviceType]) ? 'read' : 'change', lines };
 }
 
+export async function executeManagedDeviceCommand({ device, command, changeComment, approved = false, agentName = 'runbook' }) {
+  const policy = classifyCliCommand(device?.type, command);
+  if (!policy.valid) return { success:false, output:policy.reason, commandType:'invalid' };
+  if (policy.type === 'change' && !approved) return { success:false, output:'Alteração bloqueada: execução não aprovada.', commandType:'change' };
+  const executor = EXECUTORS[device.type];
+  const input = { deviceId:device.id, command:String(command).trim(), changeComment };
+  try {
+    const result = policy.type === 'change'
+      ? await withApprovedRemediation(() => executor(input), { agentName, deviceId:device.id })
+      : await executor(input);
+    return { ...result, commandType:policy.type };
+  } catch (error) {
+    return { success:false, output:`Erro interno ao executar comando: ${error.message}`, commandType:policy.type };
+  }
+}
+
 export async function createCliSession({ user, device, ipAddress, userAgent }) {
   await prisma.cliSession.updateMany({
     where: { userId: user.sub, status: 'active' },

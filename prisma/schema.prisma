@@ -116,6 +116,53 @@ model Device {
   topologyLinksTo          TopologyLink[]         @relation("TopologyLinkTarget")
   topologyNeighborsLocal   TopologyNeighbor[]     @relation("TopologyNeighborLocal")
   topologyNeighborsMatched TopologyNeighbor[]     @relation("TopologyNeighborMatched")
+  runbookExecutions        RunbookExecution[]
+}
+
+model Runbook {
+  id          String             @id @default(uuid())
+  name        String
+  description String
+  category    String
+  deviceType  String             @default("any")
+  version     Int                @default(1)
+  status      String             @default("draft") // draft|published|archived
+  variables   String             @default("[]") // JSON
+  steps       String             @default("[]") // JSON
+  createdBy   String
+  updatedBy   String
+  publishedBy String?
+  publishedAt DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  executions  RunbookExecution[]
+
+  @@index([status, category])
+  @@index([deviceType, status])
+}
+
+model RunbookExecution {
+  id            String    @id @default(uuid())
+  runbookId     String
+  runbook       Runbook   @relation(fields: [runbookId], references: [id], onDelete: Restrict)
+  deviceId      String
+  device        Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  mode          String // simulation|execution|rollback
+  status        String    @default("queued") // queued|running|completed|failed|blocked
+  inputHash     String
+  variables     String    @default("{}") // JSON
+  renderedSteps String    @default("[]") // JSON
+  results       String    @default("[]") // JSON
+  requestedBy   String
+  approvedBy    String?
+  error         String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([runbookId, createdAt])
+  @@index([deviceId, createdAt])
+  @@index([inputHash, mode, status])
 }
 
 model DeviceChange {
