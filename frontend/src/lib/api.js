@@ -26,6 +26,7 @@ export const api = {
   // Auth
   login: (username, password, otp) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password, otp }) }),
   getBranding: () => request('/branding'),
+  getPublicStatus: () => request('/public/status'),
   verify: () => request('/auth/verify'),
   refreshSession: () => request('/auth/refresh', { method: 'POST' }),
   logout: () => request('/auth/logout', { method: 'POST' }),
@@ -236,4 +237,11 @@ export const api = {
   deleteOnCallShift: id => request(`/on-call/shifts/${id}`,{method:'DELETE'}),
   createOnCallOverride: (teamId,data) => request(`/on-call/teams/${teamId}/overrides`,{method:'POST',body:JSON.stringify(data)}),
   deleteOnCallOverride: id => request(`/on-call/overrides/${id}`,{method:'DELETE'}),
+  getStatusPageAdmin: () => request('/status-page'),
+  saveStatusPageConfig: data => request('/status-page/config',{method:'PUT',body:JSON.stringify(data)}),
+  createStatusService: data => request('/status-page/services',{method:'POST',body:JSON.stringify(data)}),
+  updateStatusService: (id,data) => request(`/status-page/services/${id}`,{method:'PUT',body:JSON.stringify(data)}),
+  deleteStatusService: id => request(`/status-page/services/${id}`,{method:'DELETE'}),
+  publishStatusIncident: data => request('/status-page/incidents',{method:'POST',body:JSON.stringify(data)}),
+  updateStatusIncident: (id,data) => request(`/status-page/incidents/${id}/updates`,{method:'POST',body:JSON.stringify(data)}),
 };

@@ -26,6 +26,8 @@ import Topology from './pages/Topology.jsx';
 import Runbooks from './pages/Runbooks.jsx';
 import Notifications from './pages/Notifications.jsx';
 import OnCall from './pages/OnCall.jsx';
+import StatusPage from './pages/StatusPage.jsx';
+import PublicStatus from './pages/PublicStatus.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
 
@@ -143,6 +145,10 @@ export default function App() {
     };
   }, [authed]);
 
+  if (window.location.pathname === '/status') {
+    return <ToastProvider><BrowserRouter><Routes><Route path="/status" element={<PublicStatus branding={branding}/>} /></Routes></BrowserRouter></ToastProvider>;
+  }
+
   if (authed === null) {
     return <div className="loading-screen"><div className="spinner" /> Carregando...</div>;
   }
@@ -184,6 +190,7 @@ export default function App() {
               <Route path="runbooks" element={['admin','operator'].includes(user?.role) ? <Runbooks isAdmin={user?.role==='admin'} user={user} /> : <Navigate to="/" replace />} />
               <Route path="notifications" element={<Notifications isAdmin={user?.role==='admin'} />} />
               <Route path="on-call" element={user?.role==='admin' ? <OnCall /> : <Navigate to="/" replace />} />
+              <Route path="status-page" element={user?.role==='admin' ? <StatusPage /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />

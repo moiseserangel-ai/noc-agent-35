@@ -209,3 +209,18 @@ export async function notifyRunbookEvent({resourceId,event,title,message,critica
   }
   return results;
 }
+
+export async function notifyStatusPageEvent({resourceId,event,title,message,critical=false}){
+  const cfg=await getNotificationConfig(),text=[critical?'🚨 Status Page':'📡 Status Page',title,message,cfg.baseUrl?`Acompanhar: ${cfg.baseUrl}/status`:null].filter(Boolean).join('\n');
+  const meta={title:title||'Atualização da Status Page',message:text,priority:critical?'critical':'medium',resourceType:'status_incident',resourceId};
+  const results=[];
+  if(await recordStandalone(`status:${resourceId}`,event,'panel',null,'sent',null,meta))results.push({channel:'panel',status:'sent'});
+  if(!cfg.enabled)return results;
+  const channels=critical?cfg.criticalChannels:cfg.highChannels;
+  for(const channel of [...new Set(channels)])for(const recipient of channel==='telegram'?cfg.telegramChats:[null]){
+    const key=`status:${resourceId}:${event}:${channel}:${recipient||'default'}`;if(await prisma.notificationLog.findUnique({where:{dedupKey:key}}))continue;
+    try{if(channel==='telegram')await sendTelegramMessage(recipient,text,cfg.telegramToken);else if(channel==='whatsapp'){const sent=await sendToAdmin(text);if(!sent)throw new Error('WhatsApp Admin não configurado');}else continue;await recordStandalone(`status:${resourceId}`,event,channel,recipient,'sent',null,meta);results.push({channel,status:'sent'});}
+    catch(error){await recordStandalone(`status:${resourceId}`,event,channel,recipient,'failed',error.message,meta);results.push({channel,status:'failed'});}
+  }
+  return results;
+}

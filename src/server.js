@@ -35,6 +35,7 @@ import topologyRoutes from './routes/topology.routes.js';
 import runbookRoutes from './routes/runbook.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import onCallRoutes from './routes/on-call.routes.js';
+import statusAdminRoutes,{publicStatusRouter} from './routes/status-page.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -46,6 +47,7 @@ import { runComplianceEscalations, runComplianceExceptionReminders, runComplianc
 import { runCapacityScheduler } from './services/capacity.service.js';
 import { runRunbookScheduleScheduler } from './services/runbook-schedule.service.js';
 import { resumeInterruptedBatches } from './services/runbook-batch.service.js';
+import { syncStatusServices } from './services/status-page.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -77,6 +79,7 @@ app.use(express.static(join(__dirname, '..', 'frontend', 'dist')));
 app.use('/api/auth', authRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/branding', brandingRoutes);
+app.use('/api/public/status', publicStatusRouter);
 
 // Protected routes
 app.use('/api/devices', authMiddleware, auditMutation, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);
@@ -100,6 +103,7 @@ app.use('/api/topology', authMiddleware, auditMutation, topologyRoutes);
 app.use('/api/runbooks', authMiddleware, requireRoles('admin', 'operator'), auditMutation, runbookRoutes);
 app.use('/api/notifications', authMiddleware, auditMutation, notificationRoutes);
 app.use('/api/on-call', authMiddleware, requireRoles('admin'), auditMutation, onCallRoutes);
+app.use('/api/status-page', authMiddleware, requireRoles('admin'), auditMutation, statusAdminRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -400,6 +404,10 @@ const criticalEscalationMonitor = setInterval(() => {
 criticalEscalationMonitor.unref();
 runCriticalEscalations(io).catch(err => logger.error(`Initial critical escalation error: ${err.message}`));
 
+const statusPageMonitor=setInterval(()=>syncStatusServices().catch(err=>logger.error(`Status Page sync error: ${err.message}`)),60_000);
+statusPageMonitor.unref();
+syncStatusServices().catch(err=>logger.error(`Initial Status Page sync error: ${err.message}`));
+
 const backupMonitor = setInterval(() => {
   runAutomaticBackup().catch(err => logger.error(`Automatic backup error: ${err.message}`));
 }, 60_000);
@@ -443,6 +451,7 @@ runRunbookScheduleScheduler();
 process.on('SIGTERM', async () => {
   clearInterval(slaMonitor);
   clearInterval(criticalEscalationMonitor);
+  clearInterval(statusPageMonitor);
   clearInterval(backupMonitor);
   clearInterval(deviceBackupMonitor);
   clearInterval(complianceMonitor);
@@ -459,6 +468,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   clearInterval(slaMonitor);
   clearInterval(criticalEscalationMonitor);
+  clearInterval(statusPageMonitor);
   clearInterval(backupMonitor);
   clearInterval(deviceBackupMonitor);
   clearInterval(complianceMonitor);

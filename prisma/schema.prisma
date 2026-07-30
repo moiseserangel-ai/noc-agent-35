@@ -187,6 +187,7 @@ model Device {
   manufacturer             String?
   platform                 String?
   model                    String?
+  statusServices           StatusService[]
   osVersion                String?
   capabilities             String? // Lista separada por vírgulas: bgp,mpls,isis...
   username                 String
@@ -644,8 +645,74 @@ model Task {
   messages             TaskMessage[]
   changeRequests       ChangeRequest[]
   runbookExecutions    RunbookExecution[]
+  statusIncident       StatusIncident?
 
   @@index([incidentKey, status])
+}
+
+model StatusService {
+  id            String               @id @default(uuid())
+  name          String
+  description   String?
+  deviceId      String?
+  device        Device?              @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  enabled       Boolean              @default(true)
+  automatic     Boolean              @default(true)
+  manualStatus  String               @default("operational")
+  currentStatus String               @default("operational")
+  sortOrder     Int                  @default(100)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  incidents     StatusIncident[]
+  events        StatusServiceEvent[]
+
+  @@index([enabled, sortOrder])
+  @@index([deviceId])
+}
+
+model StatusIncident {
+  id          String                 @id @default(uuid())
+  serviceId   String
+  service     StatusService          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  taskId      String?                @unique
+  task        Task?                  @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  title       String
+  message     String
+  severity    String                 @default("degraded")
+  status      String                 @default("investigating")
+  scheduledAt DateTime?
+  scheduledEndAt DateTime?
+  publishedAt DateTime               @default(now())
+  resolvedAt  DateTime?
+  createdBy   String
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  updates     StatusIncidentUpdate[]
+
+  @@index([serviceId, status, publishedAt])
+  @@index([scheduledAt, scheduledEndAt])
+}
+
+model StatusIncidentUpdate {
+  id         String         @id @default(uuid())
+  incidentId String
+  incident   StatusIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  status     String
+  message    String
+  createdBy  String
+  createdAt  DateTime       @default(now())
+
+  @@index([incidentId, createdAt])
+}
+
+model StatusServiceEvent {
+  id        String        @id @default(uuid())
+  serviceId String
+  service   StatusService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  status    String
+  startedAt DateTime      @default(now())
+
+  @@index([serviceId, startedAt])
 }
 
 model ChangeRequest {
