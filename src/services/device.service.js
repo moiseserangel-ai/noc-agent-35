@@ -2,15 +2,16 @@ import prisma from '../database/client.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import logger from '../utils/logger.js';
 
-export async function getAllDevices() {
+export async function getAllDevices(tenantId=null) {
   const devices = await prisma.device.findMany({
+    where:tenantId?{tenantId}:{},
     orderBy: { createdAt: 'desc' },
   });
   return devices.map(d => ({ ...d, password: '••••••••' }));
 }
 
-export async function getDeviceById(id) {
-  return prisma.device.findUnique({ where: { id } });
+export async function getDeviceById(id,tenantId=null) {
+  return prisma.device.findFirst({ where: { id,...(tenantId&&{tenantId}) } });
 }
 
 export async function getDeviceDecrypted(id) {

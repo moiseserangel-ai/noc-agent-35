@@ -10,7 +10,8 @@ router.put('/:id', async (req, res, next) => { try {
   if (req.body.name !== undefined) data.name = String(req.body.name).trim();
   if (['admin', 'operator', 'viewer'].includes(req.body.role)) data.role = req.body.role;
   if (typeof req.body.isActive === 'boolean') data.isActive = req.body.isActive;
-  const securityChanged = Boolean(req.body.password || req.body.role || typeof req.body.isActive === 'boolean');
+  if (req.body.tenantId !== undefined) data.tenantId = req.body.tenantId || null;
+  const securityChanged = Boolean(req.body.password || req.body.role || req.body.tenantId!==undefined || typeof req.body.isActive === 'boolean');
   if (req.body.password) Object.assign(data, { passwordHash: await hashPassword(req.body.password), mustChangePassword: true, passwordChangedAt: new Date() });
   if (securityChanged) data.sessionVersion = { increment: 1 };
   if (req.params.id === req.user.sub && (data.isActive === false || (data.role && data.role !== 'admin'))) return res.status(400).json({ success: false, error: 'Você não pode remover seu próprio acesso administrativo' });

@@ -14,7 +14,8 @@ export async function authMiddleware(req, res, next) {
     if (!decoded.sub || !decoded.jti) throw new Error('Legacy token');
     const [user, session] = await Promise.all([prisma.user.findUnique({where:{id:decoded.sub}}),prisma.authSession.findUnique({where:{id:decoded.jti}})]);
     if(!user?.isActive||!session||session.userId!==user.id||session.revokedAt||session.expiresAt<=new Date()||decoded.sessionVersion!==user.sessionVersion) throw new Error('Session invalid');
-    req.user = { ...decoded, name:user.name, username:user.username, role:user.role, mustChangePassword:user.mustChangePassword };
+    if(user.tenantId&&!await prisma.tenant.findFirst({where:{id:user.tenantId,isActive:true},select:{id:true}}))throw new Error('Tenant inactive');
+    req.user = { ...decoded, name:user.name, username:user.username, role:user.role, tenantId:user.tenantId, mustChangePassword:user.mustChangePassword };
     req.session=session;
     if(Date.now()-new Date(session.lastSeenAt).getTime()>300000) prisma.authSession.update({where:{id:session.id},data:{lastSeenAt:new Date()}}).catch(()=>{});
     next();
@@ -36,8 +37,12 @@ export function readOnlyForViewer(req, res, next) {
   next();
 }
 
+export function globalOnly(req,res,next){
+  return req.user?.tenantId?res.status(403).json({success:false,error:'Este recurso é restrito à equipe global do NOC'}):next();
+}
+
 export function generateToken(user, sessionId) {
-  return jwt.sign({ sub: user.id, username: user.username, name: user.name, role: user.role, mustChangePassword: user.mustChangePassword, sessionVersion:user.sessionVersion }, config.jwtSecret, { expiresIn: '8h', issuer: 'noc-agent', jwtid:sessionId });
+  return jwt.sign({ sub: user.id, username: user.username, name: user.name, role: user.role, tenantId:user.tenantId||null, mustChangePassword: user.mustChangePassword, sessionVersion:user.sessionVersion }, config.jwtSecret, { expiresIn: '8h', issuer: 'noc-agent', jwtid:sessionId });
 }
 
 export function verifyToken(token) {

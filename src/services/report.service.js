@@ -16,9 +16,9 @@ export function resolveReportPeriod(query = {}) {
   return { from, to };
 }
 
-export async function buildIncidentReport(query = {}) {
+export async function buildIncidentReport(query = {},tenantId=null) {
   const period = resolveReportPeriod(query);
-  const tasks = await prisma.task.findMany({ where: { createdAt: { gte: period.from, lte: period.to } }, include: { device: { select: { id: true, name: true, type: true } } }, orderBy: { createdAt: 'desc' } });
+  const tasks = await prisma.task.findMany({ where: { ...(tenantId&&{tenantId}),createdAt: { gte: period.from, lte: period.to } }, include: { device: { select: { id: true, name: true, type: true } } }, orderBy: { createdAt: 'desc' } });
   const incidentTasks = tasks.filter(task => task.workType === 'incident');
   const resolved = tasks.filter(task => task.resolvedAt || TERMINAL.includes(task.status));
   const resolvedIncidents = incidentTasks.filter(task => task.resolvedAt || TERMINAL.includes(task.status));

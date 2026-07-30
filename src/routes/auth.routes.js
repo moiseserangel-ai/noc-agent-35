@@ -28,6 +28,7 @@ router.post('/login', async (req, res) => {
   const activePassword = stored?.value ? (stored.encrypted ? decrypt(stored.value) : stored.value) : config.dashboardPassword;
   await ensureAdminUser(activePassword);
   const user = await prisma.user.findUnique({ where: { username } });
+  if(user?.tenantId&&!await prisma.tenant.findFirst({where:{id:user.tenantId,isActive:true},select:{id:true}}))return res.status(403).json({success:false,error:'Cliente inativo'});
   if(user?.lockedUntil && user.lockedUntil>new Date()) return res.status(423).json({success:false,error:`Usuário bloqueado até ${user.lockedUntil.toLocaleString('pt-BR')}`});
   if (!user?.isActive || !(await verifyPassword(password, user.passwordHash))) {
     entry.count += 1;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow, Bell, CalendarClock, RadioTower
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow, Bell, CalendarClock, RadioTower, Building2
 } from 'lucide-react';
 import ThemeSelector from './ThemeSelector.jsx';
 
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { path: '/notifications', label: 'Notificações', icon: Bell },
   { path: '/on-call', label: 'Plantão NOC', icon: CalendarClock, roles: ['admin'] },
   { path: '/status-page', label: 'Status Page', icon: RadioTower, roles: ['admin'] },
+  { path: '/clients', label: 'Clientes', icon: Building2, roles: ['admin'] },
   { path: '/runbooks', label: 'Runbooks', icon: Workflow, roles: ['admin', 'operator'] },
   { path: '/chat', label: 'Chat IA', icon: MessageSquare, roles: ['admin', 'operator'] },
   { path: '/terminal', label: 'Terminal CLI', icon: TerminalSquare },
@@ -37,7 +38,8 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('noc_sidebar_collapsed') === 'true');
   const location = useLocation();
-  const visibleItems = NAV_ITEMS.filter(item => !item.roles || item.roles.includes(user?.role));
+  const tenantPaths=['/','/devices','/tasks','/reports','/security','/docs'];
+  const visibleItems = NAV_ITEMS.filter(item => (!user?.tenantId||tenantPaths.includes(item.path))&&(!item.roles || item.roles.includes(user?.role)));
   const currentItem = visibleItems.find(item => item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path));
   const initials = String(user?.name || user?.username || 'U').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 
@@ -93,7 +95,7 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
         <div className="sidebar-footer">
           <div className="sidebar-user">
             <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{user?.name}</div>
-            {user?.role === 'admin' ? 'Administrador' : user?.role === 'operator' ? 'Operador NOC' : 'Visualização'}
+            {user?.tenantId?'Portal do cliente':user?.role === 'admin' ? 'Administrador' : user?.role === 'operator' ? 'Operador NOC' : 'Visualização'}
           </div>
           <button className="sidebar-link" onClick={onLogout} style={{ color: 'var(--danger)' }} title={sidebarCollapsed ? 'Sair' : undefined}>
             <LogOut size={20} />

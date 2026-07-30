@@ -12,6 +12,7 @@ import { createSimulation, executeRunbook, publicExecution, renderRunbook, runbo
 
 const router = Router();
 const specialistAgents = createSpecialistAgents();
+router.param('id',async(req,res,next,id)=>{try{if(!req.user.tenantId)return next();const task=await prisma.task.findFirst({where:{id,tenantId:req.user.tenantId},select:{id:true}});return task?next():res.status(404).json({success:false,error:'Task não encontrada'});}catch(error){next(error);}});
 
 async function validateComplianceRemediation(task, actor, io) {
   if (!task.deviceId || !String(task.incidentKey || '').startsWith('compliance-remediation:')) return null;
@@ -100,7 +101,7 @@ router.get('/', async (req, res, next) => {
   try {
     const { status, source, priority, sla, limit } = req.query;
     const tasks = await taskService.getAllTasks({
-      status, source, priority, sla, limit: limit ? parseInt(limit) : 50,
+      status, source, priority, sla, limit: limit ? parseInt(limit) : 50,tenantId:req.user.tenantId,
     });
     res.json({ success: true, data: tasks });
   } catch (err) { next(err); }
@@ -108,7 +109,7 @@ router.get('/', async (req, res, next) => {
 
 router.get('/stats', async (req, res, next) => {
   try {
-    const stats = await taskService.getTaskStats();
+    const stats = await taskService.getTaskStats(req.user.tenantId);
     res.json({ success: true, data: stats });
   } catch (err) { next(err); }
 });

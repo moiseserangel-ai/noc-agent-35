@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import config from './config/index.js';
 import logger from './utils/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
-import { authMiddleware, verifyToken, requireRoles, readOnlyForViewer } from './middleware/auth.middleware.js';
+import { authMiddleware, verifyToken, globalOnly, requireRoles, readOnlyForViewer } from './middleware/auth.middleware.js';
 
 import authRoutes from './routes/auth.routes.js';
 import deviceRoutes from './routes/device.routes.js';
@@ -36,6 +36,7 @@ import runbookRoutes from './routes/runbook.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import onCallRoutes from './routes/on-call.routes.js';
 import statusAdminRoutes,{publicStatusRouter} from './routes/status-page.routes.js';
+import tenantRoutes from './routes/tenant.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -83,27 +84,28 @@ app.use('/api/public/status', publicStatusRouter);
 
 // Protected routes
 app.use('/api/devices', authMiddleware, auditMutation, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);
-app.use('/api/settings', authMiddleware, requireRoles('admin'), auditMutation, settingsRoutes);
+app.use('/api/settings', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, settingsRoutes);
 app.use('/api/tasks', authMiddleware, readOnlyForViewer, auditMutation, taskRoutes);
-app.use('/api/chat', authMiddleware, requireRoles('admin', 'operator'), auditMutation, chatRoutes);
-app.use('/api/vpn', authMiddleware, requireRoles('admin'), auditMutation, vpnRoutes);
-app.use('/api/users', authMiddleware, requireRoles('admin'), auditMutation, userRoutes);
-app.use('/api/audit', authMiddleware, requireRoles('admin'), auditRoutes);
+app.use('/api/chat', authMiddleware,globalOnly, requireRoles('admin', 'operator'), auditMutation, chatRoutes);
+app.use('/api/vpn', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, vpnRoutes);
+app.use('/api/users', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, userRoutes);
+app.use('/api/tenants',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,tenantRoutes);
+app.use('/api/audit', authMiddleware,globalOnly, requireRoles('admin'), auditRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
-app.use('/api/backups', authMiddleware, requireRoles('admin'), backupRoutes);
-app.use('/api/ai-usage', authMiddleware, requireRoles('admin'), auditMutation, aiUsageRoutes);
-app.use('/api/cli', authMiddleware, auditMutation, cliRoutes);
-app.use('/api/knowledge', authMiddleware, requireRoles('admin'), auditMutation, knowledgeRoutes);
-app.use('/api/device-backups', authMiddleware, requireRoles('admin'), auditMutation, deviceBackupRoutes);
-app.use('/api/compliance', authMiddleware, requireRoles('admin'), auditMutation, complianceRoutes);
-app.use('/api/changes', authMiddleware, requireRoles('admin', 'operator'), auditMutation, changeRequestRoutes);
-app.use('/api/discovery', authMiddleware, requireRoles('admin'), auditMutation, discoveryRoutes);
-app.use('/api/capacity', authMiddleware, auditMutation, capacityRoutes);
-app.use('/api/topology', authMiddleware, auditMutation, topologyRoutes);
-app.use('/api/runbooks', authMiddleware, requireRoles('admin', 'operator'), auditMutation, runbookRoutes);
-app.use('/api/notifications', authMiddleware, auditMutation, notificationRoutes);
-app.use('/api/on-call', authMiddleware, requireRoles('admin'), auditMutation, onCallRoutes);
-app.use('/api/status-page', authMiddleware, requireRoles('admin'), auditMutation, statusAdminRoutes);
+app.use('/api/backups', authMiddleware,globalOnly, requireRoles('admin'), backupRoutes);
+app.use('/api/ai-usage', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, aiUsageRoutes);
+app.use('/api/cli', authMiddleware,globalOnly, auditMutation, cliRoutes);
+app.use('/api/knowledge', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, knowledgeRoutes);
+app.use('/api/device-backups', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, deviceBackupRoutes);
+app.use('/api/compliance', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, complianceRoutes);
+app.use('/api/changes', authMiddleware,globalOnly, requireRoles('admin', 'operator'), auditMutation, changeRequestRoutes);
+app.use('/api/discovery', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, discoveryRoutes);
+app.use('/api/capacity', authMiddleware,globalOnly, auditMutation, capacityRoutes);
+app.use('/api/topology', authMiddleware,globalOnly, auditMutation, topologyRoutes);
+app.use('/api/runbooks', authMiddleware,globalOnly, requireRoles('admin', 'operator'), auditMutation, runbookRoutes);
+app.use('/api/notifications', authMiddleware,globalOnly, auditMutation, notificationRoutes);
+app.use('/api/on-call', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, onCallRoutes);
+app.use('/api/status-page', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, statusAdminRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

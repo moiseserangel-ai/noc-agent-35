@@ -38,7 +38,7 @@ export async function createUser(data) {
   if (!/^[a-z0-9._-]{3,40}$/.test(username)) throw new Error('Usuário inválido: use 3-40 letras, números, ponto, hífen ou sublinhado');
   if (!name) throw new Error('Informe o nome');
   if (!ROLES.includes(data.role)) throw new Error('Perfil inválido');
-  return prisma.user.create({ data: { username, name, role: data.role, passwordHash: await hashPassword(data.password), mustChangePassword: data.mustChangePassword !== false } });
+  return prisma.user.create({ data: { username, name, role: data.role, tenantId:data.tenantId||null, passwordHash: await hashPassword(data.password), mustChangePassword: data.mustChangePassword !== false } });
 }
 
 export async function ensureAdminUser(password) {
