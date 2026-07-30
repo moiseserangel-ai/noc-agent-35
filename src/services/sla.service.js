@@ -32,6 +32,7 @@ export async function buildSlaFields(priority, openedAt = new Date()) {
     slaAckDueAt: new Date(openedAt.getTime() + policy.acknowledgeMinutes * 60_000),
     slaResolveDueAt: new Date(openedAt.getTime() + policy.resolveMinutes * 60_000),
     escalationLevel: 0,
+    criticalEscalationLevel: 0,
   };
 }
 

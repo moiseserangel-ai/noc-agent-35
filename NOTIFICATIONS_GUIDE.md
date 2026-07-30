@@ -21,3 +21,15 @@ Se nenhuma regra corresponder ao evento, o sistema mantém o comportamento globa
 ## Exemplo
 
 Uma regra `Críticos fora do expediente` pode selecionar prioridade `critical`, canal `panel, telegram, whatsapp`, período `18:00–08:00` e o fuso `America/Porto_Velho`. Janelas que atravessam a meia-noite são aceitas.
+
+## Escalonamento de incidentes críticos
+
+Em **Configurações > Notificações e Escalonamento**, o administrador pode habilitar três níveis progressivos para incidentes críticos sem reconhecimento:
+
+1. **Nível 1:** aviso inicial à equipe operacional.
+2. **Nível 2:** reforço por mais canais ou destinatários.
+3. **Nível 3:** escalonamento máximo para responsáveis e gestão.
+
+Os tempos precisam ser positivos e crescentes. Cada nível é enviado uma única vez, registrado na linha do tempo da Task, na central interna e na auditoria de entregas. O escalonamento para imediatamente quando a Task é reconhecida ou encerrada. Se o serviço reiniciar após ultrapassar mais de um limite, ele aplica diretamente o nível correspondente ao tempo atual.
+
+As regras da Central de Notificações têm precedência quando correspondem ao evento (`critical_escalation_level_1`, `critical_escalation_level_2` ou `critical_escalation_level_3`). Sem regra correspondente, são utilizados os canais e Chat IDs configurados em cada nível.

@@ -73,7 +73,16 @@ const SECTIONS = [
       { key: 'notify_critical_channels', label: 'Canais para prioridade crítica', type: 'text', placeholder: 'telegram,whatsapp' },
       { key: 'notify_sla_channels', label: 'Canais para violações de SLA', type: 'text', placeholder: 'telegram,whatsapp' },
       { key: 'notify_resolved', label: 'Notificar resolução', type: 'select', defaultValue: 'true', options: [['true','Sim'],['false','Não']] },
-      { key: 'critical_reminder_minutes', label: 'Repetir crítico sem reconhecimento (min)', type: 'number', placeholder: '30', helperText: 'Mínimo de 5 minutos.' },
+      { key: 'critical_escalation_enabled', label: 'Escalonamento crítico automático', type: 'select', defaultValue: 'false', options: [['true','Habilitado'],['false','Desabilitado']], helperText: 'Avança apenas enquanto o incidente crítico estiver sem reconhecimento.' },
+      { key: 'critical_escalation_level1_minutes', label: 'Nível 1 após (min)', type: 'number', placeholder: '5' },
+      { key: 'critical_escalation_level1_channels', label: 'Nível 1 — canais', type: 'text', placeholder: 'telegram', helperText: 'Valores aceitos: telegram,whatsapp.' },
+      { key: 'critical_escalation_level1_recipients', label: 'Nível 1 — Chat IDs Telegram', type: 'text', placeholder: '-1001234567890', helperText: 'Vazio utiliza os destinatários globais.' },
+      { key: 'critical_escalation_level2_minutes', label: 'Nível 2 após (min)', type: 'number', placeholder: '15' },
+      { key: 'critical_escalation_level2_channels', label: 'Nível 2 — canais', type: 'text', placeholder: 'telegram,whatsapp' },
+      { key: 'critical_escalation_level2_recipients', label: 'Nível 2 — Chat IDs Telegram', type: 'text', placeholder: '-1001234567890,123456789' },
+      { key: 'critical_escalation_level3_minutes', label: 'Nível 3 após (min)', type: 'number', placeholder: '30' },
+      { key: 'critical_escalation_level3_channels', label: 'Nível 3 — canais', type: 'text', placeholder: 'telegram,whatsapp' },
+      { key: 'critical_escalation_level3_recipients', label: 'Nível 3 — Chat IDs Telegram', type: 'text', placeholder: '-1001234567890,123456789' },
     ],
   },
   {
@@ -133,7 +142,10 @@ export default function Settings() {
         v['sla_low_ack_minutes'] ||= '240'; v['sla_low_resolve_minutes'] ||= '1440';
         v['notifications_enabled'] ||= 'false'; v['notify_high_channels'] ||= 'telegram';
         v['notify_critical_channels'] ||= 'telegram,whatsapp'; v['notify_sla_channels'] ||= 'telegram,whatsapp'; v['notify_resolved'] ||= 'true';
-        v['critical_reminder_minutes'] ||= '30';
+        v['critical_escalation_enabled'] ||= 'false';
+        v['critical_escalation_level1_minutes'] ||= '5'; v['critical_escalation_level1_channels'] ||= 'telegram';
+        v['critical_escalation_level2_minutes'] ||= '15'; v['critical_escalation_level2_channels'] ||= 'telegram,whatsapp';
+        v['critical_escalation_level3_minutes'] ||= '30'; v['critical_escalation_level3_channels'] ||= 'telegram,whatsapp';
         v['system_webhook_url'] = window.location.origin + '/api/webhooks/zabbix';
         v['system_evolution_webhook_url'] = window.location.origin + '/api/webhooks/evolution';
         setValues(v);

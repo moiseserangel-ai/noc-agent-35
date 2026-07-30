@@ -6,6 +6,7 @@ import { logAudit } from './audit.service.js';
 import { resolveNotificationRules } from './notification-rule.service.js';
 
 const split = value => String(value || '').split(',').map(x => x.trim()).filter(Boolean);
+const number = (value, fallback) => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
 
 export async function getNotificationConfig() {
   const keys = ['notifications_enabled', 'telegram_bot_token', 'telegram_chat_ids', 'notification_base_url', 'notify_high_channels', 'notify_critical_channels', 'notify_sla_channels', 'notify_resolved'];
@@ -42,7 +43,7 @@ const channelsFor = (task, event, cfg) => {
 
 const format = (task, event, message, baseUrl) => {
   const labels = { opened: 'Novo incidente', reopened: 'Incidente reaberto', acknowledged: 'Incidente reconhecido', resolved: 'Incidente resolvido', validated: 'Resolução validada', closed: 'Incidente encerrado', sla_warning: 'SLA próximo do vencimento', sla_ack_breached: 'SLA de reconhecimento violado', sla_resolution_breached: 'SLA de resolução violado' };
-  const label = event.startsWith('critical_reminder_') ? 'Lembrete de incidente crítico sem reconhecimento' : labels[event] || event;
+  const label = event.startsWith('critical_escalation_level_') ? `Escalonamento crítico — nível ${event.split('_').at(-1)}` : event.startsWith('critical_reminder_') ? 'Lembrete de incidente crítico sem reconhecimento' : labels[event] || event;
   return [`${event.startsWith('sla_') ? '🚨' : task.priority === 'critical' ? '🚨' : task.priority === 'high' ? '🔴' : 'ℹ️'} ${label}`, `Task: #${task.taskNumber}`, `Prioridade: ${task.priority}`, task.device?.name ? `Equipamento: ${task.device.name}` : '', message || task.originalMessage, baseUrl ? `Abrir: ${baseUrl}/tasks` : ''].filter(Boolean).join('\n');
 };
 
@@ -58,7 +59,7 @@ async function recordStandalone(resourceId, event, channel, recipient, status, e
   catch(error){if(error.code==='P2002')return false;throw error;}
 }
 
-export async function notifyTask(task, event, { message = '', io = null } = {}) {
+export async function notifyTask(task, event, { message = '', io = null, channelsOverride = null, recipientsOverride = null } = {}) {
   const cfg = await getNotificationConfig();
   const text = format(task, event, message, cfg.baseUrl);
   const title=text.split('\n')[0];
@@ -67,9 +68,9 @@ export async function notifyTask(task, event, { message = '', io = null } = {}) 
   if (panelRecorded) { io?.emit('task:notification', { taskId: task.id, taskNumber: task.taskNumber, event, message: text }); results.push({ channel: 'panel', status: 'sent' }); }
   if (!cfg.enabled || (event === 'resolved' && !cfg.notifyResolved)) return results;
   const routing=await resolveNotificationRules(task,event);
-  const channels=routing?.channels?.filter(channel=>channel!=='panel')||channelsFor(task,event,cfg);
+  const channels=routing?.channels?.filter(channel=>channel!=='panel')||(channelsOverride||channelsFor(task,event,cfg));
   for (const channel of [...new Set(channels)]) {
-    const recipients = channel === 'telegram' ? (routing?.recipients?.length?routing.recipients:cfg.telegramChats) : [null];
+    const recipients = channel === 'telegram' ? (routing?.recipients?.length?routing.recipients:recipientsOverride?.length?recipientsOverride:cfg.telegramChats) : [null];
     for (const recipient of recipients) {
       const keyExists = await prisma.notificationLog.findUnique({ where: { dedupKey: `${task.id}:${task.occurrenceCount || 1}:${event}:${channel}:${recipient || 'default'}` } });
       if (keyExists) continue;
@@ -88,16 +89,53 @@ export async function notifyTask(task, event, { message = '', io = null } = {}) 
   return results;
 }
 
-export async function runCriticalReminders(io = null) {
-  const cfg = await getNotificationConfig();
-  if (!cfg.enabled) return [];
-  const row = await prisma.settings.findUnique({ where: { key: 'critical_reminder_minutes' } });
-  const minutes = Math.max(Number(row?.value) || 30, 5);
-  const cutoff = new Date(Date.now() - minutes * 60_000);
-  const tasks = await prisma.task.findMany({ where: { priority: 'critical', acknowledgedAt: null, status: { notIn: ['resolved', 'completed', 'validated', 'closed', 'cancelled'] }, OR: [{ incidentOpenedAt: { lte: cutoff } }, { incidentOpenedAt: null, createdAt: { lte: cutoff } }] }, include: { device: true } });
-  const bucket = Math.floor(Date.now() / (minutes * 60_000));
+export function evaluateCriticalEscalation(openedAt, currentLevel, thresholds, now = new Date()) {
+  const elapsedMinutes = Math.max(0, (now.getTime() - new Date(openedAt).getTime()) / 60_000);
+  let level = 0;
+  thresholds.forEach((minutes, index) => { if (elapsedMinutes >= minutes) level = index + 1; });
+  return level > Number(currentLevel || 0) ? level : 0;
+}
+
+export async function runCriticalEscalations(io = null) {
+  const keys = [
+    'critical_escalation_enabled',
+    'critical_escalation_level1_minutes','critical_escalation_level2_minutes','critical_escalation_level3_minutes',
+    'critical_escalation_level1_channels','critical_escalation_level2_channels','critical_escalation_level3_channels',
+    'critical_escalation_level1_recipients','critical_escalation_level2_recipients','critical_escalation_level3_recipients',
+  ];
+  const rows = await prisma.settings.findMany({ where: { key: { in: keys } } });
+  const settings = Object.fromEntries(rows.map(row => [row.key, row.encrypted ? decrypt(row.value) : row.value]));
+  if (settings.critical_escalation_enabled !== 'true') return [];
+  const thresholds = [
+    number(settings.critical_escalation_level1_minutes, 5),
+    number(settings.critical_escalation_level2_minutes, 15),
+    number(settings.critical_escalation_level3_minutes, 30),
+  ];
+  if (!(thresholds[0] < thresholds[1] && thresholds[1] < thresholds[2])) {
+    logger.warn('Critical escalation ignored: level times must be progressively increasing');
+    return [];
+  }
+  const tasks = await prisma.task.findMany({
+    where: { priority: 'critical', acknowledgedAt: null, status: { notIn: ['resolved','completed','validated','closed','cancelled'] } },
+    include: { device: true },
+  });
   const results = [];
-  for (const task of tasks) results.push(...await notifyTask(task, `critical_reminder_${bucket}`, { message: `Incidente crítico permanece sem reconhecimento há mais de ${minutes} minutos.`, io }));
+  for (const task of tasks) {
+    const openedAt = task.incidentOpenedAt || task.createdAt;
+    const targetLevel = evaluateCriticalEscalation(openedAt, task.criticalEscalationLevel, thresholds);
+    if (!targetLevel) continue;
+    const minutes = thresholds[targetLevel - 1];
+    const message = `Incidente crítico sem reconhecimento há ${Math.floor((Date.now() - new Date(openedAt).getTime()) / 60_000)} minutos. Escalonamento automático nível ${targetLevel} (limite: ${minutes} min).`;
+    await prisma.$transaction([
+      prisma.task.update({ where: { id: task.id }, data: { criticalEscalationLevel: targetLevel } }),
+      prisma.taskMessage.create({ data: { taskId: task.id, role: 'system', content: `🚨 ${message}` } }),
+    ]);
+    const channels = split(settings[`critical_escalation_level${targetLevel}_channels`] || (targetLevel === 1 ? 'telegram' : 'telegram,whatsapp'));
+    const recipients = split(settings[`critical_escalation_level${targetLevel}_recipients`]);
+    const delivery = await notifyTask({ ...task, criticalEscalationLevel: targetLevel }, `critical_escalation_level_${targetLevel}`, { message, io, channelsOverride: channels, recipientsOverride: recipients });
+    io?.emit('task:escalation', { taskId: task.id, taskNumber: task.taskNumber, level: targetLevel, message });
+    results.push({ taskId: task.id, taskNumber: task.taskNumber, level: targetLevel, delivery });
+  }
   return results;
 }
 

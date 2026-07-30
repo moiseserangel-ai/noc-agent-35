@@ -12,6 +12,19 @@ import { listAnthropicModels } from '../services/anthropic-model.service.js';
 const router = Router();
 
 const SENSITIVE_KEYS = ['claude_api_key', 'openai_api_key', 'gemini_api_key', 'evolution_api_key', 'telegram_bot_token', 'zabbix_webhook_token', 'zabbix_api_token', 'dashboard_password', 'encryption_key'];
+const validateEscalationSettings = settings => {
+  const map = Object.fromEntries(settings.map(item => [item.key, item.value]));
+  const relevant = settings.some(item => String(item.key).startsWith('critical_escalation_'));
+  if (!relevant) return;
+  const levels = [1,2,3].map(level => Number(map[`critical_escalation_level${level}_minutes`]));
+  if (levels.every(Number.isFinite) && !(levels[0] > 0 && levels[0] < levels[1] && levels[1] < levels[2])) {
+    throw Object.assign(new Error('Os tempos de escalonamento devem ser positivos e crescentes: nível 1 < nível 2 < nível 3'), { statusCode: 400 });
+  }
+  for (const level of [1,2,3]) {
+    const channels = String(map[`critical_escalation_level${level}_channels`] || '').split(',').map(value => value.trim()).filter(Boolean);
+    if (channels.some(channel => !['telegram','whatsapp'].includes(channel))) throw Object.assign(new Error(`Canal inválido no nível ${level}`), { statusCode: 400 });
+  }
+};
 
 router.post('/test-telegram', async (req, res) => {
   try {
@@ -79,6 +92,7 @@ router.post('/bulk', async (req, res, next) => {
     if (!settings || !Array.isArray(settings)) {
       return res.status(400).json({ success: false, error: 'Settings array required' });
     }
+    validateEscalationSettings(settings);
 
     const results = [];
     for (const { key, value } of settings) {

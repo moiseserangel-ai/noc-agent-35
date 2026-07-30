@@ -10,7 +10,7 @@ const toggle=(array,value)=>array.includes(value)?array.filter(item=>item!==valu
 export default function Notifications({isAdmin=false}){
   const [data,setData]=useState({rows:[],unread:0});const [rules,setRules]=useState([]);const [unread,setUnread]=useState(false);const [form,setForm]=useState(null);const [busy,setBusy]=useState('');const toast=useToast();
   const load=async()=>{try{setData((await api.getNotifications({unread})).data);if(isAdmin)setRules((await api.getNotificationRules()).data);}catch(e){toast(e.message,'error');}};
-  useEffect(()=>{load();},[unread]);
+  useEffect(()=>{load();const timer=setInterval(load,30000);return()=>clearInterval(timer);},[unread]);
   const mark=async id=>{try{await api.readNotification(id);setData(value=>({...value,rows:value.rows.map(row=>row.id===id?{...row,readAt:new Date().toISOString()}:row),unread:Math.max(0,value.unread-1)}));}catch(e){toast(e.message,'error');}};
   const save=async()=>{setBusy('save');try{const result=form.id?await api.updateNotificationRule(form.id,form):await api.createNotificationRule(form);toast(result.message,'success');setForm(null);await load();}catch(e){toast(e.message,'error');}finally{setBusy('');}};
   return <div><div className="page-header page-header-actions"><div><h2>Central de Notificações</h2><p>Alertas internos, entregas omnichannel e regras de roteamento</p></div><div><button className="btn btn-secondary" onClick={load}><RefreshCw size={15}/> Atualizar</button>{data.unread>0&&<button className="btn btn-secondary" onClick={async()=>{await api.readAllNotifications();await load();}}><CheckCheck size={15}/> Marcar todas</button>}{isAdmin&&<button className="btn btn-primary" onClick={()=>setForm(emptyRule())}><Plus size={15}/> Nova regra</button>}</div></div>

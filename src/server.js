@@ -51,7 +51,7 @@ import SupportAgent from './agents/support-agent.js';
 import { createSpecialistAgents, getDeviceTypeLabel } from './vendors/registry.js';
 import * as taskService from './services/task.service.js';
 import { runSlaMonitor } from './services/sla.service.js';
-import { notifyTask, runCriticalReminders } from './services/notification.service.js';
+import { notifyTask, runCriticalEscalations } from './services/notification.service.js';
 import { runAutomaticBackup } from './services/backup.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -392,10 +392,11 @@ const slaMonitor = setInterval(() => {
 }, 60_000);
 slaMonitor.unref();
 
-const criticalReminderMonitor = setInterval(() => {
-  runCriticalReminders(io).catch(err => logger.error(`Critical reminder error: ${err.message}`));
+const criticalEscalationMonitor = setInterval(() => {
+  runCriticalEscalations(io).catch(err => logger.error(`Critical escalation error: ${err.message}`));
 }, 60_000);
-criticalReminderMonitor.unref();
+criticalEscalationMonitor.unref();
+runCriticalEscalations(io).catch(err => logger.error(`Initial critical escalation error: ${err.message}`));
 
 const backupMonitor = setInterval(() => {
   runAutomaticBackup().catch(err => logger.error(`Automatic backup error: ${err.message}`));
@@ -439,7 +440,7 @@ runRunbookScheduleScheduler();
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   clearInterval(slaMonitor);
-  clearInterval(criticalReminderMonitor);
+  clearInterval(criticalEscalationMonitor);
   clearInterval(backupMonitor);
   clearInterval(deviceBackupMonitor);
   clearInterval(complianceMonitor);
@@ -455,7 +456,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   clearInterval(slaMonitor);
-  clearInterval(criticalReminderMonitor);
+  clearInterval(criticalEscalationMonitor);
   clearInterval(backupMonitor);
   clearInterval(deviceBackupMonitor);
   clearInterval(complianceMonitor);
