@@ -43,6 +43,7 @@ import { runDeviceBackupScheduler } from './services/device-backup.service.js';
 import { runComplianceEscalations, runComplianceExceptionReminders, runComplianceScheduler } from './services/compliance.service.js';
 import { runCapacityScheduler } from './services/capacity.service.js';
 import { runRunbookScheduleScheduler } from './services/runbook-schedule.service.js';
+import { resumeInterruptedBatches } from './services/runbook-batch.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -378,6 +379,7 @@ httpServer.listen(config.port, config.host, () => {
 });
 
 resumeKnowledgeImportJobs().catch(err => logger.error(`Knowledge import recovery error: ${err.message}`));
+resumeInterruptedBatches().catch(err=>logger.error(`Runbook batch recovery error: ${err.message}`));
 
 const slaMonitor = setInterval(() => {
   runSlaMonitor(async (task, message, level) => {

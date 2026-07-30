@@ -77,14 +77,14 @@ export function assessRunbookRisk(definition){
 export const publicRunbook=row=>({...row,variables:safeJson(row.variables,[]),steps:safeJson(row.steps,[]),executions:row.executions?.map(publicExecution)});
 export const publicExecution=row=>({...row,variables:protectedJson(row.variables,{}),renderedSteps:protectedJson(row.renderedSteps,[]),results:protectedJson(row.results,[])});
 
-export function createSimulation({runbook,device,rendered,requestedBy,taskId=null,scheduleId=null}){
+export function createSimulation({runbook,device,rendered,requestedBy,taskId=null,scheduleId=null,batchId=null}){
   const inputHash=runbookInputHash(runbook.id,device.id,rendered.variables);
-  return prisma.runbookExecution.create({data:{runbookId:runbook.id,deviceId:device.id,taskId,scheduleId,mode:'simulation',status:'completed',inputHash,variables:encrypt(JSON.stringify(rendered.variables)),renderedSteps:encrypt(JSON.stringify(rendered.steps)),results:encrypt(JSON.stringify(rendered.steps.map(step=>({stepId:step.id,name:step.name,commandType:step.commandType,validationType:step.validationType,rollbackAvailable:Boolean(step.rollback),status:'simulated'})))),requestedBy,completedAt:new Date()}});
+  return prisma.runbookExecution.create({data:{runbookId:runbook.id,deviceId:device.id,taskId,scheduleId,batchId,mode:'simulation',status:'completed',inputHash,variables:encrypt(JSON.stringify(rendered.variables)),renderedSteps:encrypt(JSON.stringify(rendered.steps)),results:encrypt(JSON.stringify(rendered.steps.map(step=>({stepId:step.id,name:step.name,commandType:step.commandType,validationType:step.validationType,rollbackAvailable:Boolean(step.rollback),status:'simulated'})))),requestedBy,completedAt:new Date()}});
 }
 
-export async function executeRunbook({runbook,device,rendered,requestedBy,approvedBy,taskId=null,scheduleId=null}){
+export async function executeRunbook({runbook,device,rendered,requestedBy,approvedBy,taskId=null,scheduleId=null,batchId=null}){
   const hash=runbookInputHash(runbook.id,device.id,rendered.variables);
-  const execution=await prisma.runbookExecution.create({data:{runbookId:runbook.id,deviceId:device.id,taskId,scheduleId,mode:'execution',status:'running',inputHash:hash,variables:encrypt(JSON.stringify(rendered.variables)),renderedSteps:encrypt(JSON.stringify(rendered.steps)),requestedBy,approvedBy,startedAt:new Date()}});
+  const execution=await prisma.runbookExecution.create({data:{runbookId:runbook.id,deviceId:device.id,taskId,scheduleId,batchId,mode:'execution',status:'running',inputHash:hash,variables:encrypt(JSON.stringify(rendered.variables)),renderedSteps:encrypt(JSON.stringify(rendered.steps)),requestedBy,approvedBy,startedAt:new Date()}});
   const results=[];let failed=false;
   for(const step of rendered.steps){
     const startedAt=new Date();

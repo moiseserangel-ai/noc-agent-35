@@ -140,6 +140,11 @@ export const api = {
   createRunbookSchedule: data => request('/runbooks/schedules',{method:'POST',body:JSON.stringify(data)}),
   setRunbookScheduleEnabled: (id,enabled) => request(`/runbooks/schedules/${id}`,{method:'PATCH',body:JSON.stringify({enabled})}),
   deleteRunbookSchedule: id => request(`/runbooks/schedules/${id}`,{method:'DELETE'}),
+  getRunbookBatches: () => request('/runbooks/batches'),
+  getRunbookBatch: id => request(`/runbooks/batches/${id}`),
+  createRunbookBatch: data => request('/runbooks/batches',{method:'POST',body:JSON.stringify(data)}),
+  simulateRunbookBatch: id => request(`/runbooks/batches/${id}/simulate`,{method:'POST'}),
+  executeRunbookBatch: id => request(`/runbooks/batches/${id}/execute`,{method:'POST',body:JSON.stringify({confirmed:true})}),
 
   // Devices
   getDevices: () => request('/devices'),

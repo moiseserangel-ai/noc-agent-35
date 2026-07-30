@@ -150,6 +150,7 @@ export default function Docs() {
               <li>Cada resultado fica registrado no histórico; quando definido, o rollback pode ser executado pelo administrador.</li>
               <li>Em Tasks de incidente, o sistema sugere modelos compatíveis; operadores simulam e administradores confirmam, sem execução automática.</li>
               <li>Administradores podem criar agendas diárias ou semanais; execução recorrente automática é limitada a Runbooks de baixo risco.</li>
+              <li>A execução em lote aceita equipamentos ou grupos, usa três conexões simultâneas e interrompe novas ondas ao atingir 20% de falhas.</li>
             </ol>
             <h4>Variáveis</h4>
             <p>Use chaves como <code>interface</code>, <code>vlan_id</code> ou <code>ip_rede</code> e referencie-as no comando com <code>{'{{interface}}'}</code>. Uma expressão regular opcional pode limitar o formato aceito. Não use senhas ou tokens como variáveis.</p>

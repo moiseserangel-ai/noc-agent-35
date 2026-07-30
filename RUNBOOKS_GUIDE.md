@@ -54,3 +54,9 @@ O operador pode preencher variáveis e simular diretamente na Task. A simulaçã
 Administradores podem criar agendas diárias ou semanais para um Runbook publicado e um equipamento ativo. O horário usa um fuso IANA explícito, por padrão `America/Porto_Velho`, e cada execução fica vinculada ao agendamento.
 
 O modo **Somente simular** é permitido para qualquer Runbook publicado. O modo **Simular e executar automaticamente** exige confirmação administrativa no cadastro e é limitado a Runbooks de baixo risco. Runbooks de alto risco ou críticos nunca executam mudanças de forma autônoma. Agendas podem ser pausadas, reativadas ou excluídas.
+
+## Execução em lote
+
+Um lote aplica o mesmo Runbook e conjunto de variáveis a equipamentos selecionados manualmente ou por grupo. São aceitos de 2 a 50 equipamentos compatíveis.
+
+Administradores e operadores podem criar e simular lotes. A execução real exige administrador e confirmação explícita, usa no máximo 3 conexões simultâneas e interrompe novas ondas quando as falhas atingem 20% dos equipamentos já processados. Equipamentos restantes são marcados como ignorados, preservando o resultado individual e o resumo do lote.

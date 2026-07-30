@@ -4,6 +4,7 @@ import { logAudit, requestIdentity } from '../services/audit.service.js';
 import { assessRunbookRisk, createSimulation, executeRunbook, publicExecution, publicRunbook, renderRunbook, rollbackRunbook, runbookInputHash, validateRunbookDefinition } from '../services/runbook.service.js';
 import { getRunbookTemplate, listRunbookTemplates } from '../services/runbook-template.service.js';
 import { nextScheduleRun, protectScheduleVariables, publicSchedule, validateTimezone } from '../services/runbook-schedule.service.js';
+import { createRunbookBatch, getRunbookBatch, listRunbookBatches, publicBatch, simulateRunbookBatch, startRunbookBatch } from '../services/runbook-batch.service.js';
 
 const router=Router();
 const actor=req=>req.user?.name||req.user?.username||'Sistema';
@@ -39,6 +40,30 @@ router.get('/executions',async(req,res,next)=>{try{
 router.get('/schedules',async(req,res,next)=>{try{
   const rows=await prisma.runbookSchedule.findMany({include:{runbook:{select:{name:true,version:true,riskLevel:true,status:true}},device:{select:{name:true,type:true,hostname:true}},executions:{select:{id:true,mode:true,status:true,error:true,createdAt:true},orderBy:{createdAt:'desc'},take:5}},orderBy:[{enabled:'desc'},{nextRunAt:'asc'}]});
   res.json({success:true,data:rows.map(publicSchedule)});
+}catch(error){next(error);}});
+
+router.get('/batches',async(req,res,next)=>{try{res.json({success:true,data:(await listRunbookBatches()).map(publicBatch)});}catch(error){next(error);}});
+router.get('/batches/:batchId',async(req,res,next)=>{try{const row=await getRunbookBatch(req.params.batchId);if(!row)return res.status(404).json({success:false,error:'Lote não encontrado'});res.json({success:true,data:publicBatch(row)});}catch(error){next(error);}});
+router.post('/batches',async(req,res,next)=>{try{
+  const runbook=await prisma.runbook.findUnique({where:{id:String(req.body.runbookId||'')}});
+  if(!runbook||runbook.status!=='published')return res.status(404).json({success:false,error:'Runbook publicado não encontrado'});
+  const ids=[...new Set((Array.isArray(req.body.deviceIds)?req.body.deviceIds:[]).map(String))];
+  const group=String(req.body.group||'').trim();
+  const devices=await prisma.device.findMany({where:{isActive:true,...(group?{group}:ids.length?{id:{in:ids}}:{id:{in:[]}})}});
+  const row=await createRunbookBatch({name:req.body.name,runbook,devices,variables:req.body.variables||{},createdBy:actor(req)});
+  await logAudit({...requestIdentity(req),action:'create',resource:'runbook_batch',resourceId:row.id,details:{runbookId:runbook.id,totalTargets:row.totalTargets,group:group||null}});
+  res.status(201).json({success:true,data:publicBatch(row),message:'Lote criado; execute a simulação antes de confirmar'});
+}catch(error){next(error);}});
+router.post('/batches/:batchId/simulate',async(req,res,next)=>{try{
+  const row=await simulateRunbookBatch(req.params.batchId,actor(req));
+  await logAudit({...requestIdentity(req),action:'simulate',resource:'runbook_batch',resourceId:row.id,details:{simulated:row.simulatedTargets,failed:row.failedTargets}});
+  res.json({success:true,data:publicBatch(row),message:'Simulação do lote concluída; nenhum comando foi executado'});
+}catch(error){next(error);}});
+router.post('/batches/:batchId/execute',async(req,res,next)=>{try{
+  if(req.user.role!=='admin'||req.body.confirmed!==true)return res.status(403).json({success:false,error:'Execução em lote exige administrador e confirmação explícita'});
+  const row=await startRunbookBatch(req.params.batchId,actor(req));
+  await logAudit({...requestIdentity(req),action:'start',resource:'runbook_batch',resourceId:row.id,details:{totalTargets:row.totalTargets,concurrency:row.concurrency,failureThreshold:row.failureThreshold}});
+  res.status(202).json({success:true,data:publicBatch(row),message:'Execução em lote iniciada em segundo plano'});
 }catch(error){next(error);}});
 
 router.post('/schedules',async(req,res,next)=>{try{

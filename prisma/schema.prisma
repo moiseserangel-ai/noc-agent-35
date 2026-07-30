@@ -118,6 +118,7 @@ model Device {
   topologyNeighborsMatched TopologyNeighbor[]     @relation("TopologyNeighborMatched")
   runbookExecutions        RunbookExecution[]
   runbookSchedules         RunbookSchedule[]
+  runbookBatchTargets      RunbookBatchTarget[]
 }
 
 model Runbook {
@@ -147,6 +148,7 @@ model Runbook {
   updatedAt   DateTime           @updatedAt
   executions  RunbookExecution[]
   schedules   RunbookSchedule[]
+  batches     RunbookBatch[]
 
   @@index([status, category])
   @@index([deviceType, status])
@@ -162,6 +164,8 @@ model RunbookExecution {
   task          Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
   scheduleId    String?
   schedule      RunbookSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  batchId       String?
+  batch         RunbookBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
   mode          String // simulation|execution|rollback
   status        String    @default("queued") // queued|running|completed|failed|blocked
   inputHash     String
@@ -179,7 +183,54 @@ model RunbookExecution {
   @@index([deviceId, createdAt])
   @@index([taskId, createdAt])
   @@index([scheduleId, createdAt])
+  @@index([batchId, createdAt])
   @@index([inputHash, mode, status])
+}
+
+model RunbookBatch {
+  id               String    @id @default(uuid())
+  name             String
+  runbookId        String
+  runbook          Runbook   @relation(fields: [runbookId], references: [id], onDelete: Restrict)
+  status           String    @default("draft") // draft|simulated|running|completed|stopped|failed
+  variables        String    @default("{}") // encrypted JSON
+  concurrency      Int       @default(3)
+  failureThreshold Int       @default(20)
+  totalTargets     Int       @default(0)
+  simulatedTargets Int      @default(0)
+  succeededTargets Int      @default(0)
+  failedTargets    Int       @default(0)
+  skippedTargets   Int       @default(0)
+  createdBy        String
+  approvedBy       String?
+  simulatedAt      DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  targets          RunbookBatchTarget[]
+  executions       RunbookExecution[]
+
+  @@index([status, createdAt])
+}
+
+model RunbookBatchTarget {
+  id                    String    @id @default(uuid())
+  batchId               String
+  batch                 RunbookBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  deviceId              String
+  device                Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  status                String    @default("pending") // pending|simulated|running|completed|failed|skipped
+  error                 String?
+  simulationExecutionId String?
+  executionId           String?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([batchId, deviceId])
+  @@index([batchId, status])
 }
 
 model RunbookSchedule {
