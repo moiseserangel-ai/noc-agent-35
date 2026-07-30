@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { renderRunbook, runbookInputHash, validateRunbookDefinition } from '../src/services/runbook.service.js';
+import { assessRunbookRisk, renderRunbook, runbookInputHash, validateRunbookDefinition } from '../src/services/runbook.service.js';
 import { listRunbookTemplates } from '../src/services/runbook-template.service.js';
 
 const device={id:'dev-1',type:'cisco_ios'};
@@ -45,4 +45,13 @@ test('todos os modelos da biblioteca são válidos e somente de consulta',()=>{
     assert.equal(rendered.hasChanges,false,template.name);
     assert.ok(rendered.steps.length>0,template.name);
   }
+});
+
+test('classifica risco conforme alteração e disponibilidade de rollback',()=>{
+  const read=validateRunbookDefinition(base);
+  assert.equal(assessRunbookRisk(read),'low');
+  const high=validateRunbookDefinition({...base,steps:[{name:'Desabilitar porta',command:'configure terminal\ninterface {{interface}}\nshutdown',rollback:'configure terminal\ninterface {{interface}}\nno shutdown'}]});
+  assert.equal(assessRunbookRisk(high),'high');
+  const critical=validateRunbookDefinition({...base,steps:[{name:'Desabilitar porta',command:'configure terminal\ninterface {{interface}}\nshutdown'}]});
+  assert.equal(assessRunbookRisk(critical),'critical');
 });

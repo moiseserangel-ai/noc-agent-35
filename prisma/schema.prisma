@@ -127,6 +127,15 @@ model Runbook {
   deviceType  String             @default("any")
   version     Int                @default(1)
   status      String             @default("draft") // draft|published|archived
+  riskLevel   String             @default("low") // low|high|critical
+  approvalStatus String          @default("not_required") // not_required|pending|approved|rejected
+  approvalRequestedBy String?
+  approvalRequestedById String?
+  approvalRequestedAt DateTime?
+  approvedBy  String?
+  approvedById String?
+  approvedAt  DateTime?
+  rejectionReason String?
   variables   String             @default("[]") // JSON
   steps       String             @default("[]") // JSON
   createdBy   String

@@ -16,6 +16,12 @@ A opção **Biblioteca** oferece modelos de diagnóstico somente leitura para Mi
 
 Uma execução real exige uma simulação com o mesmo runbook, equipamento e valores de variáveis nos últimos 30 minutos.
 
+## Aprovação em duas etapas
+
+Runbooks somente de consulta são classificados como baixo risco e podem ser publicados diretamente. Runbooks com comandos de alteração e rollback são de alto risco; alterações sem rollback ou comandos que não possam ser classificados são críticos.
+
+Runbooks de alto risco ou críticos exigem aprovação independente. O administrador que criou, editou ou solicitou a aprovação não pode aprovar nem rejeitar a própria versão. Qualquer edição invalida a aprovação anterior e inicia uma nova revisão.
+
 ## Etapas
 
 Cada etapa possui:

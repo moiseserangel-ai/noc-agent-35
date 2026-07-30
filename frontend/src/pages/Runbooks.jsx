@@ -7,9 +7,11 @@ const localId=()=>globalThis.crypto?.randomUUID?.()||`step-${Date.now()}-${Math.
 const emptyStep=()=>({id:localId(),name:'',deviceType:'any',command:'',validation:'',rollback:'',continueOnError:false});
 const emptyForm=()=>({name:'',description:'',category:'diagnostic',deviceType:'any',variables:[],steps:[emptyStep()]});
 const labels={draft:'Rascunho',published:'Publicado',archived:'Arquivado',simulation:'Simulação',execution:'Execução',rollback:'Rollback',completed:'Concluída',failed:'Falhou',running:'Executando'};
+const riskLabels={low:'Baixo risco',high:'Alto risco',critical:'Risco crítico'};
+const approvalLabels={not_required:'Sem aprovação adicional',pending:'Aguardando outro administrador',approved:'Aprovado',rejected:'Rejeitado'};
 const fmt=value=>value?new Date(value).toLocaleString('pt-BR'):'—';
 
-export default function Runbooks({isAdmin=false}){
+export default function Runbooks({isAdmin=false,user}){
   const [runbooks,setRunbooks]=useState([]);
   const [devices,setDevices]=useState([]);
   const [deviceTypes,setDeviceTypes]=useState([]);
@@ -34,6 +36,7 @@ export default function Runbooks({isAdmin=false}){
   const rollback=id=>{if(!window.confirm('Executar o rollback desta execução?'))return;runAction('rollback',()=>api.rollbackRunbook(id));};
   const openTemplates=async()=>{setBusy('templates');try{setTemplates((await api.getRunbookTemplates()).data);setTemplateOpen(true);}catch(e){toast(e.message,'error');}finally{setBusy('');}};
   const importTemplate=async key=>{setBusy(`template:${key}`);try{const result=await api.importRunbookTemplate(key);toast(result.message,'success');setTemplateOpen(false);choose(result.data);await load();setForm(structuredClone(result.data));}catch(e){toast(e.message,'error');}finally{setBusy('');}};
+  const review=approved=>{let reason='';if(!approved){reason=window.prompt('Informe o motivo da rejeição:')||'';if(!reason)return;}mutate(approved?'approve':'reject',()=>api.reviewRunbook(selected.id,approved,reason))();};
   const setVariable=(index,patch)=>setForm(v=>({...v,variables:v.variables.map((x,i)=>i===index?{...x,...patch}:x)}));
   const setStep=(index,patch)=>setForm(v=>({...v,steps:v.steps.map((x,i)=>i===index?{...x,...patch}:x)}));
 
@@ -45,8 +48,9 @@ export default function Runbooks({isAdmin=false}){
       </section>
       <section className="card runbook-workspace">
         {!selected?<div className="empty-state"><Eye/><p>Selecione um runbook para visualizar e simular.</p></div>:<>
-          <div className="runbook-detail-head"><div><h3>{selected.name}</h3><p>{selected.description}</p></div><div className="runbook-actions">{isAdmin&&selected.status!=='archived'&&<button className="btn btn-secondary" onClick={()=>setForm(structuredClone(selected))}><Edit3 size={14}/> Editar</button>}{isAdmin&&selected.status==='draft'&&<button className="btn btn-primary" disabled={busy} onClick={mutate('publish',()=>api.publishRunbook(selected.id))}><CheckCircle2 size={14}/> Publicar</button>}{isAdmin&&selected.status!=='archived'&&<button className="btn btn-ghost" disabled={busy} onClick={mutate('archive',()=>api.archiveRunbook(selected.id))}><Archive size={14}/> Arquivar</button>}</div></div>
-          <div className="runbook-meta"><span>Versão <strong>{selected.version}</strong></span><span>{selected.steps.length} etapa(s)</span><span>{selected._count?.executions||0} execução(ões)</span></div>
+          <div className="runbook-detail-head"><div><h3>{selected.name}</h3><p>{selected.description}</p></div><div className="runbook-actions">{isAdmin&&selected.status!=='archived'&&<button className="btn btn-secondary" onClick={()=>setForm(structuredClone(selected))}><Edit3 size={14}/> Editar</button>}{isAdmin&&selected.status==='draft'&&(selected.riskLevel==='low'||selected.approvalStatus==='approved')&&<button className="btn btn-primary" disabled={busy} onClick={mutate('publish',()=>api.publishRunbook(selected.id))}><CheckCircle2 size={14}/> Publicar</button>}{isAdmin&&selected.status!=='archived'&&<button className="btn btn-ghost" disabled={busy} onClick={mutate('archive',()=>api.archiveRunbook(selected.id))}><Archive size={14}/> Arquivar</button>}</div></div>
+          <div className="runbook-meta"><span>Versão <strong>{selected.version}</strong></span><span>{selected.steps.length} etapa(s)</span><span>{selected._count?.executions||0} execução(ões)</span><span className={`runbook-risk-${selected.riskLevel||'low'}`}>{riskLabels[selected.riskLevel]||'Baixo risco'}</span></div>
+          {selected.riskLevel!=='low'&&<div className={`runbook-approval runbook-approval-${selected.approvalStatus}`}><div><strong>{approvalLabels[selected.approvalStatus]||selected.approvalStatus}</strong><span>Solicitado por {selected.approvalRequestedBy||'—'}{selected.approvedBy?` · revisado por ${selected.approvedBy}`:''}</span>{selected.rejectionReason&&<small>{selected.rejectionReason}</small>}</div>{isAdmin&&selected.status==='draft'&&<div className="runbook-actions">{selected.approvalStatus==='rejected'&&<button className="btn btn-secondary" disabled={busy} onClick={mutate('request',()=>api.requestRunbookApproval(selected.id))}>Solicitar novamente</button>}{selected.approvalStatus==='pending'&&<><button className="btn btn-secondary" disabled={busy} onClick={()=>review(false)}>Rejeitar</button><button className="btn btn-primary" disabled={busy||selected.approvalRequestedById===String(user?.sub||user?.id||user?.username)} onClick={()=>review(true)}><CheckCircle2 size={14}/> Aprovar</button></>}</div>}</div>}
           <div className="runbook-execute">
             <h4>Preparar execução</h4><div className="form-group"><label className="form-label">Equipamento</label><select className="form-select" value={deviceId} onChange={e=>{setDeviceId(e.target.value);setSimulation(null);}}><option value="">Selecione...</option>{compatible.map(d=><option key={d.id} value={d.id}>{d.name} · {d.hostname} · {d.type}</option>)}</select></div>
             {selected.variables.length>0&&<div className="runbook-variable-grid">{selected.variables.map(v=><div className="form-group" key={v.key}><label className="form-label">{v.label}{v.required?' *':''}</label><input className="form-input" value={values[v.key]||''} onChange={e=>{setValues(x=>({...x,[v.key]:e.target.value}));setSimulation(null);}} placeholder={v.key}/></div>)}</div>}

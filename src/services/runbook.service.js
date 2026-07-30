@@ -63,6 +63,17 @@ export function renderRunbook(definition,values,device){
 }
 
 export const runbookInputHash=(runbookId,deviceId,variables)=>crypto.createHash('sha256').update(JSON.stringify({runbookId,deviceId,variables:Object.keys(variables).sort().map(key=>[key,variables[key]])})).digest('hex');
+export function assessRunbookRisk(definition){
+  let hasChange=false;let missingRollback=false;let unknown=false;
+  for(const step of definition.steps){
+    const type=step.deviceType!=='any'?step.deviceType:definition.deviceType;
+    const policy=type&&type!=='any'?classifyCliCommand(type,step.command):null;
+    if(!policy?.valid){unknown=true;continue;}
+    if(policy.type==='change'){hasChange=true;if(!step.rollback)missingRollback=true;}
+  }
+  if(unknown||missingRollback)return'critical';
+  return hasChange?'high':'low';
+}
 export const publicRunbook=row=>({...row,variables:safeJson(row.variables,[]),steps:safeJson(row.steps,[]),executions:row.executions?.map(publicExecution)});
 export const publicExecution=row=>({...row,variables:protectedJson(row.variables,{}),renderedSteps:protectedJson(row.renderedSteps,[]),results:protectedJson(row.results,[])});
 

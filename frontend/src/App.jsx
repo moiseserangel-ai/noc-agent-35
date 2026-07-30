@@ -179,7 +179,7 @@ export default function App() {
               <Route path="discovery" element={user?.role==='admin' ? <Discovery /> : <Navigate to="/" replace />} />
               <Route path="capacity" element={<Capacity isAdmin={user?.role==='admin'} />} />
               <Route path="topology" element={<Topology isAdmin={user?.role==='admin'} />} />
-              <Route path="runbooks" element={['admin','operator'].includes(user?.role) ? <Runbooks isAdmin={user?.role==='admin'} /> : <Navigate to="/" replace />} />
+              <Route path="runbooks" element={['admin','operator'].includes(user?.role) ? <Runbooks isAdmin={user?.role==='admin'} user={user} /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />

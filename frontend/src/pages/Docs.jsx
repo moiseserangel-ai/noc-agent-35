@@ -143,6 +143,7 @@ export default function Docs() {
             <ol>
               <li>O administrador cria o runbook como rascunho, define variáveis e etapas.</li>
               <li>O administrador publica uma versão revisada.</li>
+              <li>Versões com alterações exigem aprovação de um segundo administrador; o solicitante não pode aprovar a própria versão.</li>
               <li>Administrador ou operador seleciona o equipamento e executa a simulação.</li>
               <li>A prévia mostra todos os comandos renderizados e identifica consulta ou alteração.</li>
               <li>Somente o administrador pode confirmar a execução real. A simulação idêntica vale por 30 minutos.</li>
