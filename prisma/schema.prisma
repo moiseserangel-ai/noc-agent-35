@@ -156,6 +156,8 @@ model RunbookExecution {
   runbook       Runbook   @relation(fields: [runbookId], references: [id], onDelete: Restrict)
   deviceId      String
   device        Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  taskId        String?
+  task          Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
   mode          String // simulation|execution|rollback
   status        String    @default("queued") // queued|running|completed|failed|blocked
   inputHash     String
@@ -171,6 +173,7 @@ model RunbookExecution {
 
   @@index([runbookId, createdAt])
   @@index([deviceId, createdAt])
+  @@index([taskId, createdAt])
   @@index([inputHash, mode, status])
 }
 
@@ -437,6 +440,7 @@ model Task {
   updatedAt            DateTime        @updatedAt
   messages             TaskMessage[]
   changeRequests       ChangeRequest[]
+  runbookExecutions    RunbookExecution[]
 
   @@index([incidentKey, status])
 }

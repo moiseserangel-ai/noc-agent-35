@@ -158,6 +158,9 @@ export const api = {
   completeTask: (id, note) => request(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({ note }) }),
   updateTaskWorkflow: (id, data) => request(`/tasks/${id}/workflow`, { method: 'POST', body: JSON.stringify(data) }),
   approveTask: (id, approved) => request(`/tasks/${id}/approval`, { method:'POST', body:JSON.stringify({approved}) }),
+  getTaskRunbooks: id => request(`/tasks/${id}/runbooks`),
+  simulateTaskRunbook: (taskId,runbookId,variables) => request(`/tasks/${taskId}/runbooks/${runbookId}/simulate`,{method:'POST',body:JSON.stringify({variables})}),
+  executeTaskRunbook: (taskId,runbookId,variables) => request(`/tasks/${taskId}/runbooks/${runbookId}/execute`,{method:'POST',body:JSON.stringify({variables,confirmed:true})}),
 
   // Settings
   getSettings: () => request('/settings'),

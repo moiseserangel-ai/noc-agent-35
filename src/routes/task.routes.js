@@ -7,6 +7,8 @@ import { notifyTask } from '../services/notification.service.js';
 import { configurationPlanningInstruction, specialistResultNeedsApproval } from '../services/agent-approval-policy.service.js';
 import { logAudit } from '../services/audit.service.js';
 import { runComplianceScan } from '../services/compliance.service.js';
+import { recommendRunbooksForTask } from '../services/incident-runbook.service.js';
+import { createSimulation, executeRunbook, publicExecution, renderRunbook, runbookInputHash } from '../services/runbook.service.js';
 
 const router = Router();
 const specialistAgents = createSpecialistAgents();
@@ -193,6 +195,59 @@ router.post('/:id/complete', async (req, res, next) => {
     updated = await validateComplianceRemediation({...task,...updated},req.user?.username || 'admin',req.app.get('io')) || updated;
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
+});
+
+router.get('/:id/runbooks',async(req,res,next)=>{
+  try{
+    const task=await taskService.getTaskById(req.params.id);
+    if(!task)return res.status(404).json({success:false,error:'Task não encontrada'});
+    const [suggestions,executions]=await Promise.all([
+      recommendRunbooksForTask(task),
+      prisma.runbookExecution.findMany({where:{taskId:task.id},include:{runbook:{select:{name:true,version:true}},device:{select:{name:true,type:true}}},orderBy:{createdAt:'desc'},take:20}),
+    ]);
+    res.json({success:true,data:{suggestions,executions:executions.map(publicExecution)}});
+  }catch(error){next(error);}
+});
+
+router.post('/:id/runbooks/:runbookId/simulate',async(req,res,next)=>{
+  try{
+    if(!['admin','operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Sem permissão para simular runbooks'});
+    const task=await taskService.getTaskById(req.params.id);
+    if(!task)return res.status(404).json({success:false,error:'Task não encontrada'});
+    if(!task.deviceId||!task.device?.isActive)return res.status(409).json({success:false,error:'Vincule um equipamento ativo à Task antes da simulação'});
+    const runbook=await prisma.runbook.findUnique({where:{id:req.params.runbookId}});
+    if(!runbook||runbook.status!=='published')return res.status(404).json({success:false,error:'Runbook publicado não encontrado'});
+    if(runbook.deviceType!=='any'&&runbook.deviceType!==task.device.type)return res.status(400).json({success:false,error:'Runbook incompatível com o equipamento da Task'});
+    const definition={...runbook,variables:JSON.parse(runbook.variables||'[]'),steps:JSON.parse(runbook.steps||'[]')};
+    const rendered=renderRunbook(definition,req.body.variables||{},task.device);
+    const actor=req.user.name||req.user.username;
+    const execution=await createSimulation({runbook,device:task.device,rendered,requestedBy:actor,taskId:task.id});
+    const changeCount=rendered.steps.filter(step=>step.commandType==='change').length;
+    await taskService.addTaskMessage(task.id,'system',`${actor} simulou o Runbook "${runbook.name}" v${runbook.version}: ${rendered.steps.length} etapa(s), ${changeCount} alteração(ões). Nenhum comando foi executado.`,'runbook');
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'simulate',resource:'task_runbook',resourceId:execution.id,status:'success',details:{taskNumber:task.taskNumber,runbookId:runbook.id,runbookVersion:runbook.version,deviceId:task.deviceId,changeCount}});
+    res.json({success:true,data:publicExecution(execution),message:'Simulação vinculada à linha do tempo; nenhum comando foi executado'});
+  }catch(error){next(error);}
+});
+
+router.post('/:id/runbooks/:runbookId/execute',async(req,res,next)=>{
+  try{
+    if(req.user.role!=='admin'||req.body.confirmed!==true)return res.status(403).json({success:false,error:'Execução exige administrador e confirmação explícita'});
+    const task=await taskService.getTaskById(req.params.id);
+    if(!task||!task.deviceId||!task.device?.isActive)return res.status(404).json({success:false,error:'Task com equipamento ativo não encontrada'});
+    const runbook=await prisma.runbook.findUnique({where:{id:req.params.runbookId}});
+    if(!runbook||runbook.status!=='published')return res.status(404).json({success:false,error:'Runbook publicado não encontrado'});
+    if(runbook.deviceType!=='any'&&runbook.deviceType!==task.device.type)return res.status(400).json({success:false,error:'Runbook incompatível com o equipamento da Task'});
+    const definition={...runbook,variables:JSON.parse(runbook.variables||'[]'),steps:JSON.parse(runbook.steps||'[]')};
+    const rendered=renderRunbook(definition,req.body.variables||{},task.device);
+    const inputHash=runbookInputHash(runbook.id,task.deviceId,rendered.variables);
+    const simulation=await prisma.runbookExecution.findFirst({where:{taskId:task.id,runbookId:runbook.id,deviceId:task.deviceId,mode:'simulation',status:'completed',inputHash,createdAt:{gte:new Date(Date.now()-30*60_000)}},orderBy:{createdAt:'desc'}});
+    if(!simulation)return res.status(409).json({success:false,error:'Simule estes mesmos valores nesta Task nos últimos 30 minutos antes de executar'});
+    const actor=req.user.name||req.user.username;
+    const execution=await executeRunbook({runbook,device:task.device,rendered,requestedBy:actor,approvedBy:actor,taskId:task.id});
+    await taskService.addTaskMessage(task.id,'system',`${actor} executou o Runbook "${runbook.name}" v${runbook.version}. Resultado: ${execution.status==='completed'?'concluído':'falhou'}. O incidente permanece aberto até validação humana.`,'runbook');
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'execute',resource:'task_runbook',resourceId:execution.id,status:execution.status==='completed'?'success':'failure',details:{taskNumber:task.taskNumber,runbookId:runbook.id,runbookVersion:runbook.version,deviceId:task.deviceId}});
+    res.json({success:true,data:publicExecution(execution),message:execution.status==='completed'?'Runbook executado; valide a recuperação antes de resolver a Task':'Runbook terminou com falha; revise as evidências'});
+  }catch(error){next(error);}
 });
 
 router.get('/:id', async (req, res, next) => {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle } from 'lucide-react';
+import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle, Workflow, Eye } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -30,6 +30,7 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
   const [selectedDevices, setSelectedDevices] = useState({});
   const [processing, setProcessing] = useState(null);
   const [workflowForms, setWorkflowForms] = useState({});
+  const [taskRunbooks,setTaskRunbooks]=useState({});
   const toast = useToast();
 
   useEffect(() => { api.getDevices().then(r => setDevices(r.data)).catch(() => {}); }, []);
@@ -65,7 +66,27 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
       const r = await api.getTask(id);
       setTasks(items => items.map(item => item.id === id ? r.data : item));
       setWorkflowForms(forms => ({ ...forms, [id]: { assignedTo: r.data.assignedTo || '', dueAt: r.data.dueAt ? new Date(r.data.dueAt).toISOString().slice(0, 16) : '', note: '' } }));
+      if(r.data.deviceId&&r.data.workType==='incident')loadRunbooks(r.data);
     } catch (e) { toast(e.message, 'error'); }
+  };
+
+  const loadRunbooks=async task=>{
+    setTaskRunbooks(value=>({...value,[task.id]:{...(value[task.id]||{}),loading:true}}));
+    try{const result=await api.getTaskRunbooks(task.id);setTaskRunbooks(value=>({...value,[task.id]:{...result.data,loading:false,values:value[task.id]?.values||{},preview:value[task.id]?.preview||null}}));}
+    catch(error){setTaskRunbooks(value=>({...value,[task.id]:{...(value[task.id]||{}),loading:false,error:error.message}}));}
+  };
+  const setRunbookValue=(taskId,runbookId,key,value)=>setTaskRunbooks(state=>({...state,[taskId]:{...state[taskId],preview:null,values:{...state[taskId]?.values,[runbookId]:{...state[taskId]?.values?.[runbookId],[key]:value}}}}));
+  const simulateRunbook=async(task,runbook)=>{
+    setProcessing(`runbook:${task.id}`);
+    try{const defaults=Object.fromEntries(runbook.variables.map(variable=>[variable.key,variable.default||'']));const variables={...defaults,...taskRunbooks[task.id]?.values?.[runbook.id]};const result=await api.simulateTaskRunbook(task.id,runbook.id,variables);toast(result.message,'success');setTaskRunbooks(state=>({...state,[task.id]:{...state[task.id],preview:{...result.data,runbookId:runbook.id,runbookName:runbook.name,variables}}}));const detail=await api.getTask(task.id);setTasks(items=>items.map(item=>item.id===task.id?detail.data:item));}
+    catch(error){toast(error.message,'error');}finally{setProcessing(null);}
+  };
+  const executeTaskRunbook=async task=>{
+    const preview=taskRunbooks[task.id]?.preview;if(!preview)return;
+    if(!window.confirm(`Executar o Runbook "${preview.runbookName}" no equipamento ${task.device?.name}? Os comandos exibidos na simulação serão aplicados.`))return;
+    setProcessing(`runbook:${task.id}`);
+    try{const result=await api.executeTaskRunbook(task.id,preview.runbookId,preview.variables);toast(result.message,result.data.status==='completed'?'success':'error');const detail=await api.getTask(task.id);setTasks(items=>items.map(item=>item.id===task.id?detail.data:item));await loadRunbooks(detail.data);}
+    catch(error){toast(error.message,'error');}finally{setProcessing(null);}
   };
 
   const workflow = async (task, action, extra = {}) => {
@@ -185,6 +206,17 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
                 {t.executionResult && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 600, marginBottom: 4 }}>RESULTADO</div>
                   <div style={{ fontSize: '0.8rem', background: 'var(--bg-primary)', padding: 12, borderRadius: 8 }}><AgentResponse content={t.executionResult} /></div>
+                </div>}
+                {t.workType==='incident'&&t.deviceId&&<div className="task-runbook-panel">
+                  <div className="task-runbook-title"><div><Workflow size={17}/><strong>Runbooks sugeridos</strong></div><button className="btn btn-ghost" disabled={taskRunbooks[t.id]?.loading} onClick={()=>loadRunbooks(t)}><RefreshCw size={14}/> Atualizar</button></div>
+                  {taskRunbooks[t.id]?.loading?<div className="task-runbook-loading"><span className="spinner"/> Analisando compatibilidade...</div>:taskRunbooks[t.id]?.error?<p className="task-runbook-empty">{taskRunbooks[t.id].error}</p>:!taskRunbooks[t.id]?.suggestions?.length?<p className="task-runbook-empty">Nenhum Runbook publicado é compatível. Importe, revise e publique um modelo no Catálogo de Runbooks.</p>:<div className="task-runbook-suggestions">{taskRunbooks[t.id].suggestions.map(runbook=><article key={runbook.id}>
+                    <div className="task-runbook-head"><div><strong>{runbook.name}</strong><small>v{runbook.version} · {runbook.deviceType}</small></div><span>{runbook.recommendationScore}% compatível</span></div>
+                    <p>{runbook.description}</p><div className="task-runbook-reasons">{runbook.recommendationReasons.map(reason=><span key={reason}>{reason}</span>)}</div>
+                    {runbook.variables.length>0&&<div className="task-runbook-variables">{runbook.variables.map(variable=><label key={variable.key}><span>{variable.label}{variable.required?' *':''}</span><input className="form-input" value={taskRunbooks[t.id]?.values?.[runbook.id]?.[variable.key]??variable.default??''} onChange={e=>setRunbookValue(t.id,runbook.id,variable.key,e.target.value)}/></label>)}</div>}
+                    <button className="btn btn-secondary" disabled={processing===`runbook:${t.id}`} onClick={()=>simulateRunbook(t,runbook)}><Eye size={14}/> Simular na Task</button>
+                  </article>)}</div>}
+                  {taskRunbooks[t.id]?.preview&&<div className="task-runbook-preview"><strong>Prévia · {taskRunbooks[t.id].preview.runbookName}</strong><span>Nenhum comando executado</span>{taskRunbooks[t.id].preview.renderedSteps.map((step,index)=><div key={step.id}><small>{index+1}. {step.name} · {step.commandType==='change'?'ALTERAÇÃO':'CONSULTA'}</small><pre>{step.command}</pre></div>)}{isAdmin&&<button className="btn btn-primary" disabled={processing===`runbook:${t.id}`} onClick={()=>executeTaskRunbook(t)}><ShieldCheck size={14}/> Confirmar e executar</button>}</div>}
+                  {taskRunbooks[t.id]?.executions?.length>0&&<div className="task-runbook-linked"><strong>Atividade vinculada</strong>{taskRunbooks[t.id].executions.slice(0,5).map(execution=><span key={execution.id}>{new Date(execution.createdAt).toLocaleString('pt-BR')} · {execution.runbook?.name} · {execution.mode==='simulation'?'Simulação':execution.mode}</span>)}</div>}
                 </div>}
                 {t.messages?.length > 0 && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6 }}>LINHA DO TEMPO</div>

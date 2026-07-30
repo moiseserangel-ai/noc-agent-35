@@ -42,3 +42,9 @@ Não cadastre senhas, tokens ou outras credenciais como variáveis de runbook. O
 ## Estados e evidências
 
 Runbooks podem estar em `draft`, `published` ou `archived`. Cada simulação, execução e rollback registra solicitante, equipamento, versão, comandos renderizados, resultados, horário e estado final.
+
+## Integração assistida com incidentes
+
+Ao abrir uma Task de incidente vinculada a um equipamento, o sistema procura Runbooks publicados compatíveis com o fabricante. A classificação considera o texto do alerta, o diagnóstico, a categoria e termos como interface, rota, firewall, latência, CPU, memória, disco e serviço.
+
+O operador pode preencher variáveis e simular diretamente na Task. A simulação não executa comandos e fica registrada na linha do tempo. Um administrador pode confirmar a execução dos mesmos valores durante 30 minutos; a Task permanece aberta até que um usuário valide a recuperação e conclua o incidente.
