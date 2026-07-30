@@ -109,3 +109,10 @@ O modo **Somente simular** é permitido para qualquer Runbook publicado. O modo 
 Um lote aplica o mesmo Runbook e conjunto de variáveis a equipamentos selecionados manualmente ou por grupo. São aceitos de 2 a 50 equipamentos compatíveis.
 
 Administradores e operadores podem criar e simular lotes. A execução real exige administrador e confirmação explícita, usa no máximo 3 conexões simultâneas e interrompe novas ondas quando as falhas atingem 20% dos equipamentos já processados. Equipamentos restantes são marcados como ignorados, preservando o resultado individual e o resumo do lote.
+
+## Recursos de finalização
+
+- **Comparação de versões:** cada nova edição salva uma fotografia das variáveis e etapas. A opção Comparar versões exibe as duas configurações lado a lado.
+- **Notificações:** solicitações de aprovação, falhas, interrupções de lote e resultados de agendamentos usam os canais Telegram/WhatsApp já configurados no sistema.
+- **Indicadores:** a página mostra taxa de sucesso, duração média, Runbooks mais usados e resultado por fabricante nos últimos 30 dias.
+- **Editor inteligente:** o formulário sugere comandos de consulta conforme o fabricante e permite inserir variáveis no formato `{{chave}}`. As sugestões ainda passam pela simulação e pela política de comandos do backend.

@@ -149,9 +149,29 @@ model Runbook {
   executions  RunbookExecution[]
   schedules   RunbookSchedule[]
   batches     RunbookBatch[]
+  revisions   RunbookRevision[]
 
   @@index([status, category])
   @@index([deviceType, status])
+}
+
+model RunbookRevision {
+  id          String   @id @default(uuid())
+  runbookId   String
+  runbook     Runbook  @relation(fields: [runbookId], references: [id], onDelete: Cascade)
+  version     Int
+  name        String
+  description String
+  category    String
+  deviceType  String
+  riskLevel   String
+  variables   String
+  steps       String
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@unique([runbookId, version])
+  @@index([runbookId, createdAt])
 }
 
 model RunbookExecution {

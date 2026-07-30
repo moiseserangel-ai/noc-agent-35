@@ -145,6 +145,9 @@ export const api = {
   createRunbookBatch: data => request('/runbooks/batches',{method:'POST',body:JSON.stringify(data)}),
   simulateRunbookBatch: id => request(`/runbooks/batches/${id}/simulate`,{method:'POST'}),
   executeRunbookBatch: id => request(`/runbooks/batches/${id}/execute`,{method:'POST',body:JSON.stringify({confirmed:true})}),
+  getRunbookMetrics: () => request('/runbooks/metrics'),
+  getRunbookRevisions: id => request(`/runbooks/${id}/revisions`),
+  compareRunbookVersions: (id,from,to) => request(`/runbooks/${id}/compare?from=${from}&to=${to}`),
 
   // Devices
   getDevices: () => request('/devices'),

@@ -137,3 +137,26 @@ export async function notifyComplianceException(exception, thresholdDays, io = n
   await logAudit({username:'system',displayName:'Sistema de notificações',role:'system',action:'expiry_notice',resource:'compliance_exception',resourceId:exception.id,status:results.some(item=>item.status==='failed')?'failure':'success',details:{thresholdDays,channels:results.map(item=>({channel:item.channel,status:item.status}))}});
   return results;
 }
+
+export async function notifyRunbookEvent({resourceId,event,title,message,critical=false}){
+  const cfg=await getNotificationConfig();
+  if(!cfg.enabled)return[];
+  const text=[critical?'🚨 Automação de Runbook':'⚙️ Automação de Runbook',title,message,cfg.baseUrl?`Abrir: ${cfg.baseUrl}/runbooks`:null].filter(Boolean).join('\n');
+  const results=[];
+  await recordStandalone(`runbook:${resourceId}`,event,'panel',null,'sent');
+  const channels=critical?cfg.criticalChannels:cfg.highChannels;
+  for(const channel of [...new Set(channels)]){
+    const recipients=channel==='telegram'?cfg.telegramChats:[null];
+    for(const recipient of recipients){
+      const key=`runbook:${resourceId}:${event}:${channel}:${recipient||'default'}`;
+      if(await prisma.notificationLog.findUnique({where:{dedupKey:key}}))continue;
+      try{
+        if(channel==='telegram')await sendTelegramMessage(recipient,text,cfg.telegramToken);
+        else if(channel==='whatsapp'){const sent=await sendToAdmin(text);if(!sent)throw new Error('WhatsApp Admin não configurado');}
+        else continue;
+        await recordStandalone(`runbook:${resourceId}`,event,channel,recipient,'sent');results.push({channel,status:'sent'});
+      }catch(error){await recordStandalone(`runbook:${resourceId}`,event,channel,recipient,'failed',error.message);results.push({channel,status:'failed'});}
+    }
+  }
+  return results;
+}

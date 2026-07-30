@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import { createSimulation, executeRunbook, renderRunbook } from './runbook.service.js';
 import { logAudit } from './audit.service.js';
+import { notifyRunbookEvent } from './notification.service.js';
 
 const json=value=>{try{return JSON.parse(value);}catch{return{};}};
 const definition=row=>({...row,variables:JSON.parse(row.variables||'[]'),steps:JSON.parse(row.steps||'[]')});
@@ -51,9 +52,11 @@ export async function runDueRunbookSchedules(now=new Date()){
         execution=await executeRunbook({runbook:schedule.runbook,device:schedule.device,rendered,requestedBy:`agenda:${schedule.name}`,approvedBy:schedule.createdBy,scheduleId:schedule.id});
       }else execution=await createSimulation({runbook:schedule.runbook,device:schedule.device,rendered,requestedBy:`agenda:${schedule.name}`,scheduleId:schedule.id});
       await prisma.runbookSchedule.update({where:{id:schedule.id},data:{lastStatus:execution.status,lastError:execution.error}});
+      await notifyRunbookEvent({resourceId:`schedule:${schedule.id}:${now.toISOString()}`,event:execution.status==='completed'?'schedule_completed':'schedule_failed',title:schedule.name,message:`${schedule.runbook.name} em ${schedule.device.name}: ${execution.status}.`,critical:execution.status!=='completed'}).catch(()=>{});
       await logAudit({username:'scheduler',displayName:'Agendador de Runbooks',role:'system',action:schedule.mode,resource:'runbook_schedule',resourceId:schedule.id,status:execution.status==='completed'?'success':'failure',details:{executionId:execution.id,runbookId:schedule.runbookId,deviceId:schedule.deviceId}});
     }catch(error){
       await prisma.runbookSchedule.update({where:{id:schedule.id},data:{lastStatus:'failed',lastError:String(error.message).slice(0,1000)}});
+      await notifyRunbookEvent({resourceId:`schedule:${schedule.id}:${now.toISOString()}`,event:'schedule_failed',title:schedule.name,message:error.message,critical:true}).catch(()=>{});
       logger.error(`Falha no agendamento ${schedule.id}: ${error.message}`);
     }
   }

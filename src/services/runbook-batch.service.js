@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import { createSimulation, executeRunbook, publicExecution, renderRunbook } from './runbook.service.js';
 import { logAudit } from './audit.service.js';
+import { notifyRunbookEvent } from './notification.service.js';
 
 const parse=value=>{try{return JSON.parse(value);}catch{return{};}};
 const definition=row=>({...row,variables:JSON.parse(row.variables||'[]'),steps:JSON.parse(row.steps||'[]')});
@@ -66,6 +67,7 @@ export async function processRunbookBatch(id,actor){
     if(remaining)await prisma.runbookBatchTarget.updateMany({where:{batchId:batch.id,status:'simulated'},data:{status:'skipped',error:'Interrompido pelo limite de falhas',completedAt:new Date()}});
     const status=stopped?'stopped':failed?'completed':'completed';
     await prisma.runbookBatch.update({where:{id:batch.id},data:{status,succeededTargets:success,failedTargets:failed,skippedTargets:remaining,completedAt:new Date()}});
+    await notifyRunbookEvent({resourceId:`batch:${batch.id}`,event:stopped?'batch_stopped':'batch_completed',title:batch.name,message:`Sucesso: ${success}; falhas: ${failed}; ignorados: ${remaining}.`,critical:stopped||failed>0}).catch(()=>{});
     await logAudit({username:actor,displayName:actor,role:'admin',action:'execute',resource:'runbook_batch',resourceId:batch.id,status:failed?'failure':'success',details:{success,failed,skipped:remaining,stopped}});
   }catch(error){
     logger.error(`Falha no lote ${batch.id}: ${error.message}`);

@@ -188,6 +188,8 @@ export default function Docs() {
             <div className="docs-warning"><strong>Segurança</strong><p>Não use variáveis para senhas, tokens, chaves privadas ou outros segredos. Os valores aparecem na prévia e no histórico para usuários autorizados. Sempre simule e confira o comando final antes de executar.</p></div>
             <h4>Permissões</h4>
             <ul><li><strong>Operador:</strong> consulta catálogo e executa simulações.</li><li><strong>Administrador:</strong> cria, edita, publica, arquiva, executa e aciona rollback.</li></ul>
+            <h4>Recursos profissionais</h4>
+            <ul><li><strong>Comparação:</strong> versões salvas podem ser conferidas lado a lado antes da aprovação.</li><li><strong>Notificações:</strong> aprovações, falhas, lotes e agendamentos usam Telegram e WhatsApp configurados.</li><li><strong>Indicadores:</strong> taxa de sucesso, tempo médio, uso por Runbook e fabricante nos últimos 30 dias.</li><li><strong>Editor inteligente:</strong> sugestões de comandos por fabricante e inserção rápida de variáveis.</li></ul>
           </div>
         )}
       </div>

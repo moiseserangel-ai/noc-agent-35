@@ -5,12 +5,14 @@ import { assessRunbookRisk, createSimulation, executeRunbook, publicExecution, p
 import { getRunbookTemplate, listRunbookTemplates } from '../services/runbook-template.service.js';
 import { nextScheduleRun, protectScheduleVariables, publicSchedule, validateTimezone } from '../services/runbook-schedule.service.js';
 import { createRunbookBatch, getRunbookBatch, listRunbookBatches, publicBatch, simulateRunbookBatch, startRunbookBatch } from '../services/runbook-batch.service.js';
+import { notifyRunbookEvent } from '../services/notification.service.js';
 
 const router=Router();
 const actor=req=>req.user?.name||req.user?.username||'Sistema';
 const actorId=req=>String(req.user?.sub||req.user?.id||req.user?.username||actor(req));
 const definition=row=>({variables:JSON.parse(row.variables||'[]'),steps:JSON.parse(row.steps||'[]')});
 const include={_count:{select:{executions:true}}};
+const revisionData=(row,createdBy)=>({runbookId:row.id,version:row.version,name:row.name,description:row.description,category:row.category,deviceType:row.deviceType,riskLevel:row.riskLevel,variables:row.variables,steps:row.steps,createdBy});
 
 router.get('/templates',async(req,res)=>res.json({success:true,data:listRunbookTemplates()}));
 
@@ -35,6 +37,20 @@ router.get('/',async(req,res,next)=>{try{
 router.get('/executions',async(req,res,next)=>{try{
   const rows=await prisma.runbookExecution.findMany({where:{...(req.query.runbookId&&{runbookId:String(req.query.runbookId)}),...(req.query.deviceId&&{deviceId:String(req.query.deviceId)})},include:{runbook:{select:{name:true,version:true}},device:{select:{name:true,type:true}}},orderBy:{createdAt:'desc'},take:Math.min(Number(req.query.limit)||100,300)});
   res.json({success:true,data:rows.map(publicExecution)});
+}catch(error){next(error);}});
+
+router.get('/metrics',async(req,res,next)=>{try{
+  const since=new Date(Date.now()-30*24*60*60_000);
+  const [executions,byRunbook,byDeviceType]=await Promise.all([
+    prisma.runbookExecution.findMany({where:{createdAt:{gte:since},mode:{in:['execution','rollback']}},select:{status:true,mode:true,createdAt:true,startedAt:true,completedAt:true}}),
+    prisma.runbookExecution.groupBy({by:['runbookId'],where:{createdAt:{gte:since},mode:'execution'},_count:{_all:true},orderBy:{_count:{runbookId:'desc'}},take:8}),
+    prisma.runbookExecution.findMany({where:{createdAt:{gte:since},mode:'execution'},select:{status:true,device:{select:{type:true}}}}),
+  ]);
+  const ids=byRunbook.map(item=>item.runbookId);const names=await prisma.runbook.findMany({where:{id:{in:ids}},select:{id:true,name:true}});
+  const completed=executions.filter(item=>item.status==='completed').length;
+  const durations=executions.filter(item=>item.startedAt&&item.completedAt).map(item=>item.completedAt-item.startedAt);
+  const vendorMap={};for(const item of byDeviceType){const key=item.device.type;vendorMap[key]??={total:0,success:0};vendorMap[key].total++;if(item.status==='completed')vendorMap[key].success++;}
+  res.json({success:true,data:{periodDays:30,total:executions.length,completed,failed:executions.length-completed,successRate:executions.length?Math.round(completed/executions.length*100):0,averageDurationMs:durations.length?Math.round(durations.reduce((a,b)=>a+b,0)/durations.length):0,topRunbooks:byRunbook.map(item=>({id:item.runbookId,name:names.find(row=>row.id===item.runbookId)?.name||'Runbook removido',executions:item._count._all})),vendors:Object.entries(vendorMap).map(([type,value])=>({type,...value,successRate:Math.round(value.success/value.total*100)}))}});
 }catch(error){next(error);}});
 
 router.get('/schedules',async(req,res,next)=>{try{
@@ -117,6 +133,8 @@ router.post('/',async(req,res,next)=>{try{
   const input=validateRunbookDefinition(req.body);
   const riskLevel=assessRunbookRisk(input);
   const row=await prisma.runbook.create({data:{...input,riskLevel,approvalStatus:riskLevel==='low'?'not_required':'pending',variables:JSON.stringify(input.variables),steps:JSON.stringify(input.steps),createdBy:actor(req),updatedBy:actor(req),...(riskLevel!=='low'&&{approvalRequestedBy:actor(req),approvalRequestedById:actorId(req),approvalRequestedAt:new Date()})},include});
+  await prisma.runbookRevision.create({data:revisionData(row,actor(req))});
+  if(riskLevel!=='low')await notifyRunbookEvent({resourceId:`approval:${row.id}:v${row.version}`,event:'approval_required',title:`Aprovação necessária: ${row.name}`,message:`Versão ${row.version}, risco ${riskLevel}, solicitada por ${actor(req)}.`,critical:riskLevel==='critical'}).catch(()=>{});
   await logAudit({...requestIdentity(req),action:'create',resource:'runbook',resourceId:row.id,details:{name:row.name,version:row.version}});
   res.status(201).json({success:true,data:publicRunbook(row)});
 }catch(error){next(error);}});
@@ -129,8 +147,26 @@ router.put('/:id',async(req,res,next)=>{try{
   const input=validateRunbookDefinition(req.body);
   const riskLevel=assessRunbookRisk(input);
   const row=await prisma.runbook.update({where:{id:current.id},data:{...input,riskLevel,approvalStatus:riskLevel==='low'?'not_required':'pending',approvalRequestedBy:riskLevel==='low'?null:actor(req),approvalRequestedById:riskLevel==='low'?null:actorId(req),approvalRequestedAt:riskLevel==='low'?null:new Date(),approvedBy:null,approvedById:null,approvedAt:null,rejectionReason:null,variables:JSON.stringify(input.variables),steps:JSON.stringify(input.steps),version:{increment:1},status:'draft',publishedAt:null,publishedBy:null,updatedBy:actor(req)},include});
+  await prisma.runbookRevision.create({data:revisionData(row,actor(req))});
   await logAudit({...requestIdentity(req),action:'update',resource:'runbook',resourceId:row.id,details:{name:row.name,version:row.version}});
   res.json({success:true,data:publicRunbook(row)});
+}catch(error){next(error);}});
+
+router.get('/:id/revisions',async(req,res,next)=>{try{
+  const runbook=await prisma.runbook.findUnique({where:{id:req.params.id}});
+  if(!runbook)return res.status(404).json({success:false,error:'Runbook não encontrado'});
+  await prisma.runbookRevision.upsert({where:{runbookId_version:{runbookId:runbook.id,version:runbook.version}},update:{},create:revisionData(runbook,runbook.updatedBy)});
+  const rows=await prisma.runbookRevision.findMany({where:{runbookId:runbook.id},orderBy:{version:'desc'}});
+  res.json({success:true,data:rows.map(row=>({...row,variables:JSON.parse(row.variables),steps:JSON.parse(row.steps)}))});
+}catch(error){next(error);}});
+
+router.get('/:id/compare',async(req,res,next)=>{try{
+  const versions=[Number(req.query.from),Number(req.query.to)];
+  if(versions.some(value=>!Number.isInteger(value)))return res.status(400).json({success:false,error:'Informe as versões para comparação'});
+  const rows=await prisma.runbookRevision.findMany({where:{runbookId:req.params.id,version:{in:versions}}});
+  if(rows.length!==2)return res.status(404).json({success:false,error:'Versões não encontradas'});
+  const output=Object.fromEntries(rows.map(row=>[row.version,{...row,variables:JSON.parse(row.variables),steps:JSON.parse(row.steps)}]));
+  res.json({success:true,data:{from:output[versions[0]],to:output[versions[1]]}});
 }catch(error){next(error);}});
 
 router.post('/:id/publish',async(req,res,next)=>{try{
@@ -151,6 +187,7 @@ router.post('/:id/request-approval',async(req,res,next)=>{try{
   if(current.status!=='draft'||current.riskLevel==='low')return res.status(409).json({success:false,error:'Este runbook não exige aprovação independente'});
   const row=await prisma.runbook.update({where:{id:current.id},data:{approvalStatus:'pending',approvalRequestedBy:actor(req),approvalRequestedById:actorId(req),approvalRequestedAt:new Date(),approvedBy:null,approvedById:null,approvedAt:null,rejectionReason:null,updatedBy:actor(req)},include});
   await logAudit({...requestIdentity(req),action:'request_approval',resource:'runbook',resourceId:row.id,details:{riskLevel:row.riskLevel,version:row.version}});
+  await notifyRunbookEvent({resourceId:`approval:${row.id}:v${row.version}`,event:'approval_required',title:`Aprovação necessária: ${row.name}`,message:`Versão ${row.version}, risco ${row.riskLevel}, solicitada por ${actor(req)}.`,critical:row.riskLevel==='critical'}).catch(()=>{});
   res.json({success:true,data:publicRunbook(row),message:'Aprovação solicitada a outro administrador'});
 }catch(error){next(error);}});
 
