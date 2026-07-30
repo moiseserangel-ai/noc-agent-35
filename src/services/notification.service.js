@@ -3,6 +3,7 @@ import logger from '../utils/logger.js';
 import { decrypt } from '../utils/crypto.js';
 import { sendToAdmin } from './evolution.service.js';
 import { logAudit } from './audit.service.js';
+import { resolveNotificationRules } from './notification-rule.service.js';
 
 const split = value => String(value || '').split(',').map(x => x.trim()).filter(Boolean);
 
@@ -45,27 +46,30 @@ const format = (task, event, message, baseUrl) => {
   return [`${event.startsWith('sla_') ? '🚨' : task.priority === 'critical' ? '🚨' : task.priority === 'high' ? '🔴' : 'ℹ️'} ${label}`, `Task: #${task.taskNumber}`, `Prioridade: ${task.priority}`, task.device?.name ? `Equipamento: ${task.device.name}` : '', message || task.originalMessage, baseUrl ? `Abrir: ${baseUrl}/tasks` : ''].filter(Boolean).join('\n');
 };
 
-async function record(task, event, channel, recipient, status, error = null) {
+async function record(task, event, channel, recipient, status, error = null, meta = {}) {
   const dedupKey = `${task.id}:${task.occurrenceCount || 1}:${event}:${channel}:${recipient || 'default'}`;
-  try { await prisma.notificationLog.create({ data: { taskId: task.id, taskNumber: task.taskNumber, event, channel, recipient: recipient || null, status, error: error?.slice(0, 1000) || null, dedupKey } }); return true; }
+  try { await prisma.notificationLog.create({ data: { taskId: task.id, taskNumber: task.taskNumber, event, channel, recipient: recipient || null, status, error: error?.slice(0, 1000) || null, dedupKey,title:meta.title||null,message:meta.message||null,priority:task.priority||null,resourceType:'task',resourceId:task.id } }); return true; }
   catch (err) { if (err.code === 'P2002') return false; throw err; }
 }
 
-async function recordStandalone(resourceId, event, channel, recipient, status, error = null) {
+async function recordStandalone(resourceId, event, channel, recipient, status, error = null, meta = {}) {
   const dedupKey = `${resourceId}:${event}:${channel}:${recipient || 'default'}`;
-  try { await prisma.notificationLog.create({ data:{event,channel,recipient:recipient||null,status,error:error?.slice(0,1000)||null,dedupKey} }); return true; }
+  try { await prisma.notificationLog.create({ data:{event,channel,recipient:recipient||null,status,error:error?.slice(0,1000)||null,dedupKey,title:meta.title||null,message:meta.message||null,priority:meta.priority||null,resourceType:meta.resourceType||null,resourceId:meta.resourceId||resourceId} }); return true; }
   catch(error){if(error.code==='P2002')return false;throw error;}
 }
 
 export async function notifyTask(task, event, { message = '', io = null } = {}) {
   const cfg = await getNotificationConfig();
-  if (!cfg.enabled || (event === 'resolved' && !cfg.notifyResolved)) return [];
   const text = format(task, event, message, cfg.baseUrl);
+  const title=text.split('\n')[0];
   const results = [];
-  const panelRecorded = await record(task, event, 'panel', null, 'sent');
+  const panelRecorded = await record(task, event, 'panel', null, 'sent',null,{title,message:text});
   if (panelRecorded) { io?.emit('task:notification', { taskId: task.id, taskNumber: task.taskNumber, event, message: text }); results.push({ channel: 'panel', status: 'sent' }); }
-  for (const channel of [...new Set(channelsFor(task, event, cfg))]) {
-    const recipients = channel === 'telegram' ? cfg.telegramChats : [null];
+  if (!cfg.enabled || (event === 'resolved' && !cfg.notifyResolved)) return results;
+  const routing=await resolveNotificationRules(task,event);
+  const channels=routing?.channels?.filter(channel=>channel!=='panel')||channelsFor(task,event,cfg);
+  for (const channel of [...new Set(channels)]) {
+    const recipients = channel === 'telegram' ? (routing?.recipients?.length?routing.recipients:cfg.telegramChats) : [null];
     for (const recipient of recipients) {
       const keyExists = await prisma.notificationLog.findUnique({ where: { dedupKey: `${task.id}:${task.occurrenceCount || 1}:${event}:${channel}:${recipient || 'default'}` } });
       if (keyExists) continue;
@@ -73,9 +77,9 @@ export async function notifyTask(task, event, { message = '', io = null } = {}) 
         if (channel === 'telegram') await sendTelegramMessage(recipient, text, cfg.telegramToken);
         else if (channel === 'whatsapp') { const sent = await sendToAdmin(text); if (!sent) throw new Error('WhatsApp Admin não configurado'); }
         else continue;
-        await record(task, event, channel, recipient, 'sent'); results.push({ channel, recipient, status: 'sent' });
+        await record(task, event, channel, recipient, 'sent',null,{title,message:text}); results.push({ channel, recipient, status: 'sent' });
       } catch (error) {
-        await record(task, event, channel, recipient, 'failed', error.message); results.push({ channel, recipient, status: 'failed', error: error.message });
+        await record(task, event, channel, recipient, 'failed', error.message,{title,message:text}); results.push({ channel, recipient, status: 'failed', error: error.message });
         logger.warn(`Notification ${channel} failed for Task #${task.taskNumber}: ${error.message}`);
       }
     }
@@ -111,7 +115,8 @@ export async function notifyComplianceException(exception, thresholdDays, io = n
     cfg.baseUrl?`Revisar: ${cfg.baseUrl}/compliance`:'',
   ].filter(Boolean).join('\n');
   const results=[];
-  if(await recordStandalone(`compliance-exception:${exception.id}`,event,'panel',null,'sent')){
+  const meta={title:text.split('\n')[0],message:text,priority:thresholdDays<=1?'critical':'high',resourceType:'compliance_exception',resourceId:exception.id};
+  if(await recordStandalone(`compliance-exception:${exception.id}`,event,'panel',null,'sent',null,meta)){
     io?.emit('compliance:notification',{exceptionId:exception.id,event,message:text});
     results.push({channel:'panel',status:'sent'});
   }
@@ -125,10 +130,10 @@ export async function notifyComplianceException(exception, thresholdDays, io = n
         if(channel==='telegram')await sendTelegramMessage(recipient,text,cfg.telegramToken);
         else if(channel==='whatsapp'){const sent=await sendToAdmin(text);if(!sent)throw new Error('WhatsApp Admin não configurado');}
         else continue;
-        await recordStandalone(`compliance-exception:${exception.id}`,event,channel,recipient,'sent');
+        await recordStandalone(`compliance-exception:${exception.id}`,event,channel,recipient,'sent',null,meta);
         results.push({channel,recipient,status:'sent'});
       }catch(error){
-        await recordStandalone(`compliance-exception:${exception.id}`,event,channel,recipient,'failed',error.message);
+        await recordStandalone(`compliance-exception:${exception.id}`,event,channel,recipient,'failed',error.message,meta);
         results.push({channel,recipient,status:'failed',error:error.message});
         logger.warn(`Compliance exception notification ${channel} failed: ${error.message}`);
       }
@@ -140,10 +145,11 @@ export async function notifyComplianceException(exception, thresholdDays, io = n
 
 export async function notifyRunbookEvent({resourceId,event,title,message,critical=false}){
   const cfg=await getNotificationConfig();
-  if(!cfg.enabled)return[];
   const text=[critical?'🚨 Automação de Runbook':'⚙️ Automação de Runbook',title,message,cfg.baseUrl?`Abrir: ${cfg.baseUrl}/runbooks`:null].filter(Boolean).join('\n');
   const results=[];
-  await recordStandalone(`runbook:${resourceId}`,event,'panel',null,'sent');
+  const meta={title:title||'Automação de Runbook',message:text,priority:critical?'critical':'medium',resourceType:'runbook',resourceId};
+  if(await recordStandalone(`runbook:${resourceId}`,event,'panel',null,'sent',null,meta))results.push({channel:'panel',status:'sent'});
+  if(!cfg.enabled)return results;
   const channels=critical?cfg.criticalChannels:cfg.highChannels;
   for(const channel of [...new Set(channels)]){
     const recipients=channel==='telegram'?cfg.telegramChats:[null];
@@ -154,8 +160,8 @@ export async function notifyRunbookEvent({resourceId,event,title,message,critica
         if(channel==='telegram')await sendTelegramMessage(recipient,text,cfg.telegramToken);
         else if(channel==='whatsapp'){const sent=await sendToAdmin(text);if(!sent)throw new Error('WhatsApp Admin não configurado');}
         else continue;
-        await recordStandalone(`runbook:${resourceId}`,event,channel,recipient,'sent');results.push({channel,status:'sent'});
-      }catch(error){await recordStandalone(`runbook:${resourceId}`,event,channel,recipient,'failed',error.message);results.push({channel,status:'failed'});}
+        await recordStandalone(`runbook:${resourceId}`,event,channel,recipient,'sent',null,meta);results.push({channel,status:'sent'});
+      }catch(error){await recordStandalone(`runbook:${resourceId}`,event,channel,recipient,'failed',error.message,meta);results.push({channel,status:'failed'});}
     }
   }
   return results;

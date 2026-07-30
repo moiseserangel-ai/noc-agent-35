@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow, Bell
 } from 'lucide-react';
 import ThemeSelector from './ThemeSelector.jsx';
 
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { path: '/capacity', label: 'Capacidade', icon: Gauge },
   { path: '/topology', label: 'Mapa de rede', icon: Network },
   { path: '/tasks', label: 'Tasks', icon: ListTodo },
+  { path: '/notifications', label: 'Notificações', icon: Bell },
   { path: '/runbooks', label: 'Runbooks', icon: Workflow, roles: ['admin', 'operator'] },
   { path: '/chat', label: 'Chat IA', icon: MessageSquare, roles: ['admin', 'operator'] },
   { path: '/terminal', label: 'Terminal CLI', icon: TerminalSquare },

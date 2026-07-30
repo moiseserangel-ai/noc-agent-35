@@ -73,11 +73,42 @@ model NotificationLog {
   recipient  String?
   status     String
   error      String?
+  title      String?
+  message    String?
+  priority   String?
+  resourceType String?
+  resourceId String?
+  readAt     DateTime?
+  readBy     String?
   dedupKey   String   @unique
   createdAt  DateTime @default(now())
 
   @@index([taskId, createdAt])
   @@index([status, channel])
+  @@index([channel, readAt, createdAt])
+  @@index([resourceType, resourceId])
+}
+
+model NotificationRule {
+  id          String   @id @default(uuid())
+  name        String
+  enabled     Boolean  @default(true)
+  sortOrder   Int      @default(100)
+  priorities  String   @default("") // comma-separated
+  events      String   @default("")
+  sources     String   @default("")
+  deviceGroups String  @default("")
+  channels    String   @default("panel")
+  recipients  String   @default("")
+  activeDays  String   @default("0,1,2,3,4,5,6")
+  startTime   String   @default("00:00")
+  endTime     String   @default("23:59")
+  timezone    String   @default("America/Porto_Velho")
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
 }
 
 model Device {

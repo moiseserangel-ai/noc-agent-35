@@ -24,6 +24,7 @@ import Discovery from './pages/Discovery.jsx';
 import Capacity from './pages/Capacity.jsx';
 import Topology from './pages/Topology.jsx';
 import Runbooks from './pages/Runbooks.jsx';
+import Notifications from './pages/Notifications.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
 
@@ -180,6 +181,7 @@ export default function App() {
               <Route path="capacity" element={<Capacity isAdmin={user?.role==='admin'} />} />
               <Route path="topology" element={<Topology isAdmin={user?.role==='admin'} />} />
               <Route path="runbooks" element={['admin','operator'].includes(user?.role) ? <Runbooks isAdmin={user?.role==='admin'} user={user} /> : <Navigate to="/" replace />} />
+              <Route path="notifications" element={<Notifications isAdmin={user?.role==='admin'} />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />

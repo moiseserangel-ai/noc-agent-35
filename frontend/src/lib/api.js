@@ -219,4 +219,11 @@ export const api = {
 
   // Health
   getHealth: () => fetch(`${BASE}/health`).then(r => r.json()),
+  getNotifications: (params={}) => request(`/notifications?${new URLSearchParams(params)}`),
+  readNotification: id => request(`/notifications/${id}/read`,{method:'POST'}),
+  readAllNotifications: () => request('/notifications/read-all',{method:'POST'}),
+  getNotificationRules: () => request('/notifications/rules/list'),
+  createNotificationRule: data => request('/notifications/rules',{method:'POST',body:JSON.stringify(data)}),
+  updateNotificationRule: (id,data) => request(`/notifications/rules/${id}`,{method:'PUT',body:JSON.stringify(data)}),
+  deleteNotificationRule: id => request(`/notifications/rules/${id}`,{method:'DELETE'}),
 };
