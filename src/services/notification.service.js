@@ -1,9 +1,10 @@
 import prisma from '../database/client.js';
 import logger from '../utils/logger.js';
 import { decrypt } from '../utils/crypto.js';
-import { sendToAdmin } from './evolution.service.js';
+import { sendToAdmin, sendWhatsAppMessage } from './evolution.service.js';
 import { logAudit } from './audit.service.js';
 import { resolveNotificationRules } from './notification-rule.service.js';
+import { resolveOnCallContacts } from './on-call.service.js';
 
 const split = value => String(value || '').split(',').map(x => x.trim()).filter(Boolean);
 const number = (value, fallback) => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
@@ -59,7 +60,7 @@ async function recordStandalone(resourceId, event, channel, recipient, status, e
   catch(error){if(error.code==='P2002')return false;throw error;}
 }
 
-export async function notifyTask(task, event, { message = '', io = null, channelsOverride = null, recipientsOverride = null } = {}) {
+export async function notifyTask(task, event, { message = '', io = null, channelsOverride = null, recipientsOverride = null, whatsappRecipientsOverride = null } = {}) {
   const cfg = await getNotificationConfig();
   const text = format(task, event, message, cfg.baseUrl);
   const title=text.split('\n')[0];
@@ -70,13 +71,15 @@ export async function notifyTask(task, event, { message = '', io = null, channel
   const routing=await resolveNotificationRules(task,event);
   const channels=routing?.channels?.filter(channel=>channel!=='panel')||(channelsOverride||channelsFor(task,event,cfg));
   for (const channel of [...new Set(channels)]) {
-    const recipients = channel === 'telegram' ? (routing?.recipients?.length?routing.recipients:recipientsOverride?.length?recipientsOverride:cfg.telegramChats) : [null];
+    const recipients = channel === 'telegram'
+      ? (routing?.recipients?.length?routing.recipients:recipientsOverride?.length?recipientsOverride:cfg.telegramChats)
+      : channel === 'whatsapp'&&whatsappRecipientsOverride?.length ? whatsappRecipientsOverride : [null];
     for (const recipient of recipients) {
       const keyExists = await prisma.notificationLog.findUnique({ where: { dedupKey: `${task.id}:${task.occurrenceCount || 1}:${event}:${channel}:${recipient || 'default'}` } });
       if (keyExists) continue;
       try {
         if (channel === 'telegram') await sendTelegramMessage(recipient, text, cfg.telegramToken);
-        else if (channel === 'whatsapp') { const sent = await sendToAdmin(text); if (!sent) throw new Error('WhatsApp Admin não configurado'); }
+        else if (channel === 'whatsapp') { const sent = recipient?await sendWhatsAppMessage(recipient,text):await sendToAdmin(text); if (!sent) throw new Error('WhatsApp Admin não configurado'); }
         else continue;
         await record(task, event, channel, recipient, 'sent',null,{title,message:text}); results.push({ channel, recipient, status: 'sent' });
       } catch (error) {
@@ -119,20 +122,22 @@ export async function runCriticalEscalations(io = null) {
     where: { priority: 'critical', acknowledgedAt: null, status: { notIn: ['resolved','completed','validated','closed','cancelled'] } },
     include: { device: true },
   });
+  const onCall=await resolveOnCallContacts();
   const results = [];
   for (const task of tasks) {
     const openedAt = task.incidentOpenedAt || task.createdAt;
     const targetLevel = evaluateCriticalEscalation(openedAt, task.criticalEscalationLevel, thresholds);
     if (!targetLevel) continue;
     const minutes = thresholds[targetLevel - 1];
-    const message = `Incidente crítico sem reconhecimento há ${Math.floor((Date.now() - new Date(openedAt).getTime()) / 60_000)} minutos. Escalonamento automático nível ${targetLevel} (limite: ${minutes} min).`;
+    const onCallNames=onCall.members.map(member=>`${member.name} — ${member.teamName}`);
+    const message = `Incidente crítico sem reconhecimento há ${Math.floor((Date.now() - new Date(openedAt).getTime()) / 60_000)} minutos. Escalonamento automático nível ${targetLevel} (limite: ${minutes} min).${onCallNames.length?`\nPlantão acionado: ${onCallNames.join(', ')}`:''}`;
     await prisma.$transaction([
       prisma.task.update({ where: { id: task.id }, data: { criticalEscalationLevel: targetLevel } }),
       prisma.taskMessage.create({ data: { taskId: task.id, role: 'system', content: `🚨 ${message}` } }),
     ]);
     const channels = split(settings[`critical_escalation_level${targetLevel}_channels`] || (targetLevel === 1 ? 'telegram' : 'telegram,whatsapp'));
-    const recipients = split(settings[`critical_escalation_level${targetLevel}_recipients`]);
-    const delivery = await notifyTask({ ...task, criticalEscalationLevel: targetLevel }, `critical_escalation_level_${targetLevel}`, { message, io, channelsOverride: channels, recipientsOverride: recipients });
+    const recipients = [...new Set([...split(settings[`critical_escalation_level${targetLevel}_recipients`]),...onCall.telegram])];
+    const delivery = await notifyTask({ ...task, criticalEscalationLevel: targetLevel }, `critical_escalation_level_${targetLevel}`, { message, io, channelsOverride: channels, recipientsOverride: recipients, whatsappRecipientsOverride:onCall.whatsapp });
     io?.emit('task:escalation', { taskId: task.id, taskNumber: task.taskNumber, level: targetLevel, message });
     results.push({ taskId: task.id, taskNumber: task.taskNumber, level: targetLevel, delivery });
   }

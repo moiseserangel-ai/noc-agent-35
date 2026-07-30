@@ -25,6 +25,9 @@ model User {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   sessions            AuthSession[]
+  onCallMemberships   OnCallMember[]
+  onCallShifts        OnCallShift[]
+  onCallOverrides     OnCallOverride[]
 }
 
 model AuthSession {
@@ -109,6 +112,70 @@ model NotificationRule {
   updatedAt   DateTime @updatedAt
 
   @@index([enabled, sortOrder])
+}
+
+model OnCallTeam {
+  id          String           @id @default(uuid())
+  name        String
+  description String?
+  timezone    String           @default("America/Porto_Velho")
+  enabled     Boolean          @default(true)
+  createdBy   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  members     OnCallMember[]
+  shifts      OnCallShift[]
+  overrides   OnCallOverride[]
+
+  @@index([enabled, name])
+}
+
+model OnCallMember {
+  id             String     @id @default(uuid())
+  teamId         String
+  team           OnCallTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  telegramChatId String?
+  whatsappNumber String?
+  priority       Int        @default(100)
+  enabled        Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([teamId, userId])
+  @@index([teamId, enabled, priority])
+}
+
+model OnCallShift {
+  id        String     @id @default(uuid())
+  teamId    String
+  team      OnCallTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  enabled   Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([teamId, dayOfWeek, enabled])
+}
+
+model OnCallOverride {
+  id        String     @id @default(uuid())
+  teamId    String
+  team      OnCallTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startsAt  DateTime
+  endsAt    DateTime
+  reason    String?
+  createdBy String
+  createdAt DateTime   @default(now())
+
+  @@index([teamId, startsAt, endsAt])
 }
 
 model Device {

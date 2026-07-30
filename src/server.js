@@ -34,6 +34,7 @@ import capacityRoutes from './routes/capacity.routes.js';
 import topologyRoutes from './routes/topology.routes.js';
 import runbookRoutes from './routes/runbook.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
+import onCallRoutes from './routes/on-call.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -98,6 +99,7 @@ app.use('/api/capacity', authMiddleware, auditMutation, capacityRoutes);
 app.use('/api/topology', authMiddleware, auditMutation, topologyRoutes);
 app.use('/api/runbooks', authMiddleware, requireRoles('admin', 'operator'), auditMutation, runbookRoutes);
 app.use('/api/notifications', authMiddleware, auditMutation, notificationRoutes);
+app.use('/api/on-call', authMiddleware, requireRoles('admin'), auditMutation, onCallRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
