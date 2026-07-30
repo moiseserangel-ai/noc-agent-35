@@ -49,6 +49,7 @@ import { runCapacityScheduler } from './services/capacity.service.js';
 import { runRunbookScheduleScheduler } from './services/runbook-schedule.service.js';
 import { resumeInterruptedBatches } from './services/runbook-batch.service.js';
 import { syncStatusServices } from './services/status-page.service.js';
+import { runMonthlyReportScheduler } from './services/monthly-report.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -150,7 +151,9 @@ io.use(async (socket, next) => {
     const decoded = verifyToken(token);
     const [user,session]=await Promise.all([prisma.user.findUnique({where:{id:decoded.sub}}),prisma.authSession.findUnique({where:{id:decoded.jti}})]);
     if(!user?.isActive||!session||session.revokedAt||session.expiresAt<=new Date()||decoded.sessionVersion!==user.sessionVersion)throw new Error('Sessão inválida');
-    socket.user = { ...decoded,name:user.name,username:user.username,role:user.role };
+    if(session.userId!==user.id)throw new Error('Sessão inválida');
+    if(user.tenantId&&!await prisma.tenant.findFirst({where:{id:user.tenantId,isActive:true},select:{id:true}}))throw new Error('Cliente inativo');
+    socket.user = { ...decoded,name:user.name,username:user.username,role:user.role,tenantId:user.tenantId };
     next();
   } catch {
     next(new Error('Não autorizado'));
@@ -163,6 +166,7 @@ io.on('connection', (socket) => {
 
   socket.on('chat:message', async ({ sessionId, message, agentType = 'support' }) => {
     try {
+      if (socket.user.tenantId) throw new Error('Chat com agentes é restrito à equipe global do NOC');
       if (!['admin', 'operator'].includes(socket.user.role)) throw new Error('Sem permissão para usar agentes');
       if (typeof sessionId !== 'string' || typeof message !== 'string' || message.length > 4000) throw new Error('Mensagem inválida');
       const ownedSession = await prisma.chatSession.findUnique({ where: { id: sessionId } });
@@ -405,6 +409,12 @@ const criticalEscalationMonitor = setInterval(() => {
 }, 60_000);
 criticalEscalationMonitor.unref();
 runCriticalEscalations(io).catch(err => logger.error(`Initial critical escalation error: ${err.message}`));
+
+const monthlyReportMonitor = setInterval(() => {
+  runMonthlyReportScheduler().catch(err => logger.error(`Monthly report scheduler error: ${err.message}`));
+}, 60 * 60_000);
+monthlyReportMonitor.unref();
+runMonthlyReportScheduler().catch(err => logger.error(`Initial monthly report scheduler error: ${err.message}`));
 
 const statusPageMonitor=setInterval(()=>syncStatusServices().catch(err=>logger.error(`Status Page sync error: ${err.message}`)),60_000);
 statusPageMonitor.unref();

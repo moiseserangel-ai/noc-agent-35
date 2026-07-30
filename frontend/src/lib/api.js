@@ -48,6 +48,14 @@ export const api = {
   getAuditLogs: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/audit${qs ? `?${qs}` : ''}`); },
   getAuditOptions: () => request('/audit/options'),
   getIncidentReport: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/reports/incidents${qs ? `?${qs}` : ''}`); },
+  getMonthlyReports: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/reports/monthly${qs ? `?${qs}` : ''}`); },
+  saveMonthlyReportConfig: (tenantId, data) => request(`/reports/monthly/tenants/${tenantId}`, { method:'PUT', body:JSON.stringify(data) }),
+  runMonthlyReport: tenantId => request(`/reports/monthly/tenants/${tenantId}/run`, { method:'POST' }),
+  downloadMonthlyReport: async id => {
+    const res=await fetch(`${BASE}/reports/monthly/${encodeURIComponent(id)}/pdf`,{headers:{Authorization:`Bearer ${getToken()}`}});
+    if(!res.ok){let data={};try{data=await res.json();}catch{}throw new Error(data.error||'Falha ao baixar relatório mensal');}
+    return {blob:await res.blob(),filename:res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||'relatorio-mensal.pdf'};
+  },
   getAiUsage: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/ai-usage${qs ? `?${qs}` : ''}`); },
   unblockAiProvider: provider => request(`/ai-usage/${provider}/unblock`, { method: 'POST' }),
   getBackups: () => request('/backups'),

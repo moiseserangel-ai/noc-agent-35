@@ -158,7 +158,7 @@ router.post('/:id/reprocess', async (req, res, next) => {
 
     const deviceId = req.body.deviceId || task.deviceId;
     if (!deviceId) return res.status(400).json({ success: false, error: 'Selecione um equipamento para reprocessar' });
-    const device = await prisma.device.findUnique({ where: { id: deviceId } });
+    const device = await prisma.device.findFirst({ where: { id: deviceId, ...(req.user.tenantId && { tenantId: req.user.tenantId }) } });
     if (!device || !device.isActive) return res.status(404).json({ success: false, error: 'Equipamento não encontrado ou inativo' });
 
     const agent = specialistAgents[device.type] || null;
@@ -261,7 +261,9 @@ router.get('/:id', async (req, res, next) => {
 
 router.get('/number/:taskNumber', async (req, res, next) => {
   try {
-    const task = await taskService.getTaskByNumber(parseInt(req.params.taskNumber));
+    const task = req.user.tenantId
+      ? await prisma.task.findFirst({ where: { taskNumber: parseInt(req.params.taskNumber), tenantId: req.user.tenantId }, include: { device: true, messages: { orderBy: { createdAt: 'asc' } } } })
+      : await taskService.getTaskByNumber(parseInt(req.params.taskNumber));
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' });
     res.json({ success: true, data: task });
   } catch (err) { next(err); }

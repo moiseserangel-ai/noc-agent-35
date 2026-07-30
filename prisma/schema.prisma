@@ -63,6 +63,15 @@ model Tenant {
   notificationRules NotificationRule[]
   knowledgeDocuments KnowledgeDocument[]
   knowledgeImportJobs KnowledgeImportJob[]
+  monthlyReportEnabled Boolean @default(false)
+  monthlyReportDay Int @default(1)
+  monthlyReportHour Int @default(8)
+  monthlyReportTimezone String @default("America/Porto_Velho")
+  monthlyReportChannels String @default("panel")
+  monthlyReportRecipients String?
+  monthlyReportTelegramRecipients String?
+  monthlyReportWhatsappRecipients String?
+  monthlyReportRuns MonthlyReportRun[]
 
   @@index([isActive, name])
 }
@@ -1130,6 +1139,27 @@ model KnowledgeImportJob {
 
   @@index([status, createdAt])
   @@index([tenantId, createdAt])
+}
+
+model MonthlyReportRun {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  periodKey   String
+  periodFrom  DateTime
+  periodTo    DateTime
+  status      String   @default("pending") // pending|sent|partial|failed
+  reportData  String
+  channels    String
+  recipients  String?
+  deliveryLog String?
+  error       String?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@unique([tenantId, periodKey])
+  @@index([tenantId, createdAt])
+  @@index([status, createdAt])
 }
 
 model CliSession {
