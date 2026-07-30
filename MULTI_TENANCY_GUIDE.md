@@ -28,3 +28,7 @@ Cada cliente pode definir prazos de reconhecimento e resolução para as priorid
 ## Status Page individual
 
 Serviços vinculados a equipamentos de cliente são publicados separadamente em `/status/identificador-do-cliente`. O título, a descrição e a cor primária pertencem ao cliente. A página global não mistura serviços de clientes, e a página individual nunca retorna serviços ou incidentes de outro cliente.
+
+## Notificações e plantão
+
+Cada equipe de plantão possui um escopo: global ou um cliente específico. Configure em **Escopos de Plantão**. Durante o escalonamento, o sistema consulta somente equipes com o mesmo `tenantId` da Task; contatos de outros clientes nunca entram na lista de entrega. Regras de notificação seguem o mesmo isolamento.

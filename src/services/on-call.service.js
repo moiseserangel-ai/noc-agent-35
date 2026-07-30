@@ -39,8 +39,9 @@ export async function getOnCallOverview(now=new Date()){
   });
 }
 
-export async function resolveOnCallContacts(now=new Date()){
-  const teams=(await getOnCallOverview(now)).filter(team=>team.enabled);
+export const teamsForTenant=(teams,tenantId=null)=>teams.filter(team=>team.enabled&&(tenantId?team.tenantId===tenantId:team.tenantId===null));
+export async function resolveOnCallContacts(now=new Date(),tenantId=null){
+  const teams=teamsForTenant(await getOnCallOverview(now),tenantId);
   const members=teams.flatMap(team=>team.activeMembers.map(member=>({...member,teamId:team.id,teamName:team.name})));
   return{
     members,

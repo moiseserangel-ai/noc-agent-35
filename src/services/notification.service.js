@@ -122,9 +122,9 @@ export async function runCriticalEscalations(io = null) {
     where: { priority: 'critical', acknowledgedAt: null, status: { notIn: ['resolved','completed','validated','closed','cancelled'] } },
     include: { device: true },
   });
-  const onCall=await resolveOnCallContacts();
   const results = [];
   for (const task of tasks) {
+    const onCall=await resolveOnCallContacts(new Date(),task.tenantId||null);
     const openedAt = task.incidentOpenedAt || task.createdAt;
     const targetLevel = evaluateCriticalEscalation(openedAt, task.criticalEscalationLevel, thresholds);
     if (!targetLevel) continue;

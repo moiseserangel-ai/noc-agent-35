@@ -9,23 +9,23 @@ const bad=message=>Object.assign(new Error(message),{statusCode:400});
 const audit=(req,action,id,details)=>logAudit({...requestIdentity(req),action,resource:'on_call',resourceId:id,details});
 
 router.get('/',async(_req,res,next)=>{try{
-  const [teams,users]=await Promise.all([getOnCallOverview(),prisma.user.findMany({where:{isActive:true,role:{in:['admin','operator']}},orderBy:{name:'asc'},select:{id:true,name:true,username:true,role:true}})]);
-  res.json({success:true,data:{teams,users,now:new Date()}});
+  const [teams,users,tenants]=await Promise.all([getOnCallOverview(),prisma.user.findMany({where:{isActive:true,role:{in:['admin','operator']}},orderBy:{name:'asc'},select:{id:true,name:true,username:true,role:true,tenantId:true}}),prisma.tenant.findMany({where:{isActive:true},orderBy:{name:'asc'},select:{id:true,name:true}})]);
+  res.json({success:true,data:{teams,users,tenants,now:new Date()}});
 }catch(error){next(error);}});
 
 router.post('/teams',async(req,res,next)=>{try{
   const name=String(req.body.name||'').trim();if(name.length<3)throw bad('Informe o nome da equipe');
-  const row=await prisma.onCallTeam.create({data:{name:name.slice(0,100),description:String(req.body.description||'').trim().slice(0,300)||null,timezone:validateTimezone(req.body.timezone),createdBy:actor(req)}});
+  const row=await prisma.onCallTeam.create({data:{name:name.slice(0,100),tenantId:req.body.tenantId||null,description:String(req.body.description||'').trim().slice(0,300)||null,timezone:validateTimezone(req.body.timezone),createdBy:actor(req)}});
   await audit(req,'create',row.id,{name:row.name});res.status(201).json({success:true,data:row,message:'Equipe criada'});
 }catch(error){next(error);}});
 router.put('/teams/:id',async(req,res,next)=>{try{
-  const data={};if(req.body.name!==undefined)data.name=String(req.body.name).trim().slice(0,100);if(req.body.description!==undefined)data.description=String(req.body.description).trim().slice(0,300)||null;if(req.body.timezone!==undefined)data.timezone=validateTimezone(req.body.timezone);if(typeof req.body.enabled==='boolean')data.enabled=req.body.enabled;
+  const data={};if(req.body.name!==undefined)data.name=String(req.body.name).trim().slice(0,100);if(req.body.tenantId!==undefined)data.tenantId=req.body.tenantId||null;if(req.body.description!==undefined)data.description=String(req.body.description).trim().slice(0,300)||null;if(req.body.timezone!==undefined)data.timezone=validateTimezone(req.body.timezone);if(typeof req.body.enabled==='boolean')data.enabled=req.body.enabled;
   const row=await prisma.onCallTeam.update({where:{id:req.params.id},data});await audit(req,'update',row.id,data);res.json({success:true,data:row,message:'Equipe atualizada'});
 }catch(error){next(error);}});
 router.delete('/teams/:id',async(req,res,next)=>{try{await prisma.onCallTeam.delete({where:{id:req.params.id}});await audit(req,'delete',req.params.id,{});res.json({success:true,message:'Equipe excluída'});}catch(error){next(error);}});
 
 router.post('/teams/:id/members',async(req,res,next)=>{try{
-  const user=await prisma.user.findFirst({where:{id:String(req.body.userId),isActive:true}});if(!user)throw bad('Usuário inválido');
+  const team=await prisma.onCallTeam.findUnique({where:{id:req.params.id}}),user=await prisma.user.findFirst({where:{id:String(req.body.userId),isActive:true}});if(!user||!team)throw bad('Usuário ou equipe inválida');if(team.tenantId&&user.tenantId&&user.tenantId!==team.tenantId)throw bad('Usuário pertence a outro cliente');
   const telegram=String(req.body.telegramChatId||'').trim()||null,whatsapp=String(req.body.whatsappNumber||'').replace(/\D/g,'')||null;
   if(!telegram&&!whatsapp)throw bad('Informe Telegram ou WhatsApp do plantonista');
   const row=await prisma.onCallMember.upsert({where:{teamId_userId:{teamId:req.params.id,userId:user.id}},update:{telegramChatId:telegram,whatsappNumber:whatsapp,priority:Number(req.body.priority)||100,enabled:req.body.enabled!==false},create:{teamId:req.params.id,userId:user.id,telegramChatId:telegram,whatsappNumber:whatsapp,priority:Number(req.body.priority)||100}});

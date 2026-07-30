@@ -4,7 +4,7 @@ import {api} from '../lib/api.js';
 import {useToast} from '../App.jsx';
 
 const DAYS=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
-const teamEmpty={name:'',description:'',timezone:'America/Porto_Velho'};
+const teamEmpty={name:'',description:'',timezone:'America/Porto_Velho',tenantId:''};
 const memberEmpty={userId:'',telegramChatId:'',whatsappNumber:'',priority:100};
 const shiftEmpty={userId:'',dayOfWeek:1,startTime:'08:00',endTime:'18:00'};
 const overrideEmpty={userId:'',startsAt:'',endsAt:'',reason:''};

@@ -16,7 +16,7 @@ export function ruleMatches(rule,{task,event,now=new Date()}){
   }catch{return false;}
 }
 export async function resolveNotificationRules(task,event){
-  const rules=await prisma.notificationRule.findMany({where:{enabled:true},orderBy:{sortOrder:'asc'}});
+  const rules=await prisma.notificationRule.findMany({where:{enabled:true,tenantId:task.tenantId||null},orderBy:{sortOrder:'asc'}});
   const matched=rules.filter(rule=>ruleMatches(rule,{task,event}));
   if(!matched.length)return null;
   return{ruleIds:matched.map(rule=>rule.id),channels:[...new Set(matched.flatMap(rule=>split(rule.channels)))],recipients:[...new Set(matched.flatMap(rule=>split(rule.recipients)))]};

@@ -59,6 +59,8 @@ model Tenant {
   devices     Device[]
   tasks       Task[]
   statusServices StatusService[]
+  onCallTeams OnCallTeam[]
+  notificationRules NotificationRule[]
 
   @@index([isActive, name])
 }
@@ -142,6 +144,8 @@ model NotificationLog {
 model NotificationRule {
   id          String   @id @default(uuid())
   name        String
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   enabled     Boolean  @default(true)
   sortOrder   Int      @default(100)
   priorities  String   @default("") // comma-separated
@@ -164,6 +168,8 @@ model NotificationRule {
 model OnCallTeam {
   id          String           @id @default(uuid())
   name        String
+  tenantId    String?
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   description String?
   timezone    String           @default("America/Porto_Velho")
   enabled     Boolean          @default(true)
