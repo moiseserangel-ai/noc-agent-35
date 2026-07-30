@@ -117,6 +117,7 @@ model Device {
   topologyNeighborsLocal   TopologyNeighbor[]     @relation("TopologyNeighborLocal")
   topologyNeighborsMatched TopologyNeighbor[]     @relation("TopologyNeighborMatched")
   runbookExecutions        RunbookExecution[]
+  runbookSchedules         RunbookSchedule[]
 }
 
 model Runbook {
@@ -145,6 +146,7 @@ model Runbook {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   executions  RunbookExecution[]
+  schedules   RunbookSchedule[]
 
   @@index([status, category])
   @@index([deviceType, status])
@@ -158,6 +160,8 @@ model RunbookExecution {
   device        Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   taskId        String?
   task          Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  scheduleId    String?
+  schedule      RunbookSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   mode          String // simulation|execution|rollback
   status        String    @default("queued") // queued|running|completed|failed|blocked
   inputHash     String
@@ -174,7 +178,36 @@ model RunbookExecution {
   @@index([runbookId, createdAt])
   @@index([deviceId, createdAt])
   @@index([taskId, createdAt])
+  @@index([scheduleId, createdAt])
   @@index([inputHash, mode, status])
+}
+
+model RunbookSchedule {
+  id          String    @id @default(uuid())
+  name        String
+  runbookId   String
+  runbook     Runbook   @relation(fields: [runbookId], references: [id], onDelete: Cascade)
+  deviceId    String
+  device      Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  mode        String    @default("simulation") // simulation|execution
+  frequency   String    // daily|weekly
+  hour        Int
+  minute      Int
+  dayOfWeek   Int?
+  timezone    String    @default("America/Porto_Velho")
+  variables   String    @default("{}") // encrypted JSON
+  enabled     Boolean   @default(true)
+  nextRunAt   DateTime?
+  lastRunAt   DateTime?
+  lastStatus  String?
+  lastError   String?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  executions  RunbookExecution[]
+
+  @@index([enabled, nextRunAt])
+  @@index([runbookId, deviceId])
 }
 
 model DeviceChange {

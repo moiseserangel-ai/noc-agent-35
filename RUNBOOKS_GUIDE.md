@@ -48,3 +48,9 @@ Runbooks podem estar em `draft`, `published` ou `archived`. Cada simulação, ex
 Ao abrir uma Task de incidente vinculada a um equipamento, o sistema procura Runbooks publicados compatíveis com o fabricante. A classificação considera o texto do alerta, o diagnóstico, a categoria e termos como interface, rota, firewall, latência, CPU, memória, disco e serviço.
 
 O operador pode preencher variáveis e simular diretamente na Task. A simulação não executa comandos e fica registrada na linha do tempo. Um administrador pode confirmar a execução dos mesmos valores durante 30 minutos; a Task permanece aberta até que um usuário valide a recuperação e conclua o incidente.
+
+## Agendamentos e recorrência
+
+Administradores podem criar agendas diárias ou semanais para um Runbook publicado e um equipamento ativo. O horário usa um fuso IANA explícito, por padrão `America/Porto_Velho`, e cada execução fica vinculada ao agendamento.
+
+O modo **Somente simular** é permitido para qualquer Runbook publicado. O modo **Simular e executar automaticamente** exige confirmação administrativa no cadastro e é limitado a Runbooks de baixo risco. Runbooks de alto risco ou críticos nunca executam mudanças de forma autônoma. Agendas podem ser pausadas, reativadas ou excluídas.

@@ -136,6 +136,10 @@ export const api = {
   executeRunbook: (id,data) => request(`/runbooks/${id}/execute`,{method:'POST',body:JSON.stringify({...data,confirmed:true})}),
   getRunbookExecutions: (params={}) => request(`/runbooks/executions?${new URLSearchParams(params)}`),
   rollbackRunbook: id => request(`/runbooks/executions/${id}/rollback`,{method:'POST',body:JSON.stringify({confirmed:true})}),
+  getRunbookSchedules: () => request('/runbooks/schedules'),
+  createRunbookSchedule: data => request('/runbooks/schedules',{method:'POST',body:JSON.stringify(data)}),
+  setRunbookScheduleEnabled: (id,enabled) => request(`/runbooks/schedules/${id}`,{method:'PATCH',body:JSON.stringify({enabled})}),
+  deleteRunbookSchedule: id => request(`/runbooks/schedules/${id}`,{method:'DELETE'}),
 
   // Devices
   getDevices: () => request('/devices'),

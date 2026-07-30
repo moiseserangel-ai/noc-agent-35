@@ -42,6 +42,7 @@ import { resumeKnowledgeImportJobs } from './services/knowledge.service.js';
 import { runDeviceBackupScheduler } from './services/device-backup.service.js';
 import { runComplianceEscalations, runComplianceExceptionReminders, runComplianceScheduler } from './services/compliance.service.js';
 import { runCapacityScheduler } from './services/capacity.service.js';
+import { runRunbookScheduleScheduler } from './services/runbook-schedule.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -427,6 +428,10 @@ const capacityMonitor = setInterval(() => {
 capacityMonitor.unref();
 runCapacityScheduler().catch(err => logger.error(`Initial capacity scheduler error: ${err.message}`));
 
+const runbookScheduleMonitor = setInterval(runRunbookScheduleScheduler,60_000);
+runbookScheduleMonitor.unref();
+runRunbookScheduleScheduler();
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   clearInterval(slaMonitor);
@@ -437,6 +442,7 @@ process.on('SIGTERM', async () => {
   clearInterval(complianceExceptionMonitor);
   clearInterval(complianceEscalationMonitor);
   clearInterval(capacityMonitor);
+  clearInterval(runbookScheduleMonitor);
   logger.info('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();
@@ -452,6 +458,7 @@ process.on('SIGINT', async () => {
   clearInterval(complianceExceptionMonitor);
   clearInterval(complianceEscalationMonitor);
   clearInterval(capacityMonitor);
+  clearInterval(runbookScheduleMonitor);
   logger.info('SIGINT received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();

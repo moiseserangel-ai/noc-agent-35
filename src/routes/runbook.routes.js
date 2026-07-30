@@ -3,6 +3,7 @@ import prisma from '../database/client.js';
 import { logAudit, requestIdentity } from '../services/audit.service.js';
 import { assessRunbookRisk, createSimulation, executeRunbook, publicExecution, publicRunbook, renderRunbook, rollbackRunbook, runbookInputHash, validateRunbookDefinition } from '../services/runbook.service.js';
 import { getRunbookTemplate, listRunbookTemplates } from '../services/runbook-template.service.js';
+import { nextScheduleRun, protectScheduleVariables, publicSchedule, validateTimezone } from '../services/runbook-schedule.service.js';
 
 const router=Router();
 const actor=req=>req.user?.name||req.user?.username||'Sistema';
@@ -33,6 +34,50 @@ router.get('/',async(req,res,next)=>{try{
 router.get('/executions',async(req,res,next)=>{try{
   const rows=await prisma.runbookExecution.findMany({where:{...(req.query.runbookId&&{runbookId:String(req.query.runbookId)}),...(req.query.deviceId&&{deviceId:String(req.query.deviceId)})},include:{runbook:{select:{name:true,version:true}},device:{select:{name:true,type:true}}},orderBy:{createdAt:'desc'},take:Math.min(Number(req.query.limit)||100,300)});
   res.json({success:true,data:rows.map(publicExecution)});
+}catch(error){next(error);}});
+
+router.get('/schedules',async(req,res,next)=>{try{
+  const rows=await prisma.runbookSchedule.findMany({include:{runbook:{select:{name:true,version:true,riskLevel:true,status:true}},device:{select:{name:true,type:true,hostname:true}},executions:{select:{id:true,mode:true,status:true,error:true,createdAt:true},orderBy:{createdAt:'desc'},take:5}},orderBy:[{enabled:'desc'},{nextRunAt:'asc'}]});
+  res.json({success:true,data:rows.map(publicSchedule)});
+}catch(error){next(error);}});
+
+router.post('/schedules',async(req,res,next)=>{try{
+  if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem criar agendamentos'});
+  const [runbook,device]=await Promise.all([prisma.runbook.findUnique({where:{id:String(req.body.runbookId||'')}}),prisma.device.findFirst({where:{id:String(req.body.deviceId||''),isActive:true}})]);
+  if(!runbook||runbook.status!=='published')return res.status(404).json({success:false,error:'Runbook publicado não encontrado'});
+  if(!device)return res.status(404).json({success:false,error:'Equipamento ativo não encontrado'});
+  if(runbook.deviceType!=='any'&&runbook.deviceType!==device.type)return res.status(400).json({success:false,error:'Runbook incompatível com o equipamento'});
+  const mode=req.body.mode==='execution'?'execution':'simulation';
+  if(mode==='execution'&&runbook.riskLevel!=='low')return res.status(409).json({success:false,error:'Agendamento automático de execução é permitido somente para Runbooks de baixo risco'});
+  if(mode==='execution'&&req.body.confirmed!==true)return res.status(400).json({success:false,error:'Confirmação explícita obrigatória para execução automática'});
+  const frequency=req.body.frequency==='weekly'?'weekly':'daily';
+  const hour=Number(req.body.hour),minute=Number(req.body.minute),dayOfWeek=frequency==='weekly'?Number(req.body.dayOfWeek):null;
+  const timezone=validateTimezone(req.body.timezone);
+  const variables=req.body.variables||{};
+  renderRunbook({...runbook,...definition(runbook)},variables,device);
+  const nextRunAt=nextScheduleRun({frequency,hour,minute,dayOfWeek,timezone});
+  const row=await prisma.runbookSchedule.create({data:{name:String(req.body.name||`${runbook.name} · ${device.name}`).trim().slice(0,120),runbookId:runbook.id,deviceId:device.id,mode,frequency,hour,minute,dayOfWeek,timezone,variables:protectScheduleVariables(variables),enabled:req.body.enabled!==false,nextRunAt,createdBy:actor(req)},include:{runbook:{select:{name:true,version:true,riskLevel:true,status:true}},device:{select:{name:true,type:true,hostname:true}}}});
+  await logAudit({...requestIdentity(req),action:'create',resource:'runbook_schedule',resourceId:row.id,details:{runbookId:runbook.id,deviceId:device.id,mode,frequency,nextRunAt}});
+  res.status(201).json({success:true,data:publicSchedule(row),message:'Agendamento criado'});
+}catch(error){next(error);}});
+
+router.patch('/schedules/:scheduleId',async(req,res,next)=>{try{
+  if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem alterar agendamentos'});
+  const current=await prisma.runbookSchedule.findUnique({where:{id:req.params.scheduleId}});
+  if(!current)return res.status(404).json({success:false,error:'Agendamento não encontrado'});
+  const enabled=req.body.enabled===true;
+  const row=await prisma.runbookSchedule.update({where:{id:current.id},data:{enabled,nextRunAt:enabled?nextScheduleRun(current):current.nextRunAt}});
+  await logAudit({...requestIdentity(req),action:enabled?'enable':'disable',resource:'runbook_schedule',resourceId:row.id});
+  res.json({success:true,data:publicSchedule(row),message:enabled?'Agendamento ativado':'Agendamento pausado'});
+}catch(error){next(error);}});
+
+router.delete('/schedules/:scheduleId',async(req,res,next)=>{try{
+  if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem excluir agendamentos'});
+  const current=await prisma.runbookSchedule.findUnique({where:{id:req.params.scheduleId}});
+  if(!current)return res.status(404).json({success:false,error:'Agendamento não encontrado'});
+  await prisma.runbookSchedule.delete({where:{id:current.id}});
+  await logAudit({...requestIdentity(req),action:'delete',resource:'runbook_schedule',resourceId:current.id,details:{name:current.name}});
+  res.json({success:true,message:'Agendamento excluído'});
 }catch(error){next(error);}});
 
 router.get('/:id',async(req,res,next)=>{try{
