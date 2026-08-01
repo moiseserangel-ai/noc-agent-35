@@ -38,7 +38,7 @@ export async function normalizeCmdbAsset(input, actor, current = null) {
   };
 }
 
-export const cmdbInclude = { tenant: { select: { id: true, name: true } }, site: { select: { id: true, name: true, city: true, state: true } }, device: { select: { id: true, name: true, type: true, hostname: true, isActive: true, osVersion: true } } };
+export const cmdbInclude = { tenant: { select: { id: true, name: true } }, site: { select: { id: true, name: true, city: true, state: true } }, device: { select: { id: true, name: true, type: true, hostname: true, isActive: true, osVersion: true } }, inventoryPolicy:true, inventorySnapshots:{select:{id:true,status:true,error:true,collectedBy:true,createdAt:true,manufacturer:true,model:true,serialNumber:true,hostname:true,osVersion:true,uptime:true},orderBy:{createdAt:'desc'},take:5} };
 
 export async function listCmdbAssets(query = {}) {
   const where = {};

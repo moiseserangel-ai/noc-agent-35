@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../database/client.js';
 import { cmdbInclude, cmdbSummary, listCmdbAssets, normalizeCmdbAsset } from '../services/cmdb.service.js';
 import { logAudit, requestIdentity } from '../services/audit.service.js';
+import { collectCmdbInventory, saveInventoryPolicy } from '../services/cmdb-inventory.service.js';
 
 const router = Router();
 const actor = req => String(req.user?.name || req.user?.username || 'Administrador').slice(0, 100);
@@ -21,6 +22,11 @@ router.post('/sync-devices', async (req,res,next) => {
     res.json({success:true,data:{created:created.length},message:`${created.length} equipamento(s) importado(s) para a CMDB`});
   } catch(error) { next(error); }
 });
+
+router.post('/inventory/collect-all',async(req,res,next)=>{try{const assets=await prisma.cmdbAsset.findMany({where:{device:{isActive:true}},select:{id:true}}),results=[];for(const asset of assets){try{await collectCmdbInventory(asset.id,{username:actor(req)});results.push({id:asset.id,status:'success'});}catch(error){results.push({id:asset.id,status:'failed',error:error.message});}}res.json({success:true,data:{total:results.length,success:results.filter(x=>x.status==='success').length,failed:results.filter(x=>x.status==='failed').length,results},message:'Coleta geral finalizada'});}catch(error){next(error);}});
+router.get('/:id/inventory',async(req,res,next)=>{try{const rows=await prisma.cmdbInventorySnapshot.findMany({where:{assetId:req.params.id},orderBy:{createdAt:'desc'},take:Math.min(Number(req.query.limit)||50,200)});res.json({success:true,data:rows.map(row=>({...row,inventoryData:row.inventoryData?JSON.parse(row.inventoryData):null}))});}catch(error){next(error);}});
+router.post('/:id/inventory/collect',async(req,res,next)=>{try{const row=await collectCmdbInventory(req.params.id,{username:actor(req)});res.json({success:true,data:row,message:'Inventário coletado com sucesso'});}catch(error){next(error);}});
+router.put('/:id/inventory/policy',async(req,res,next)=>{try{const row=await saveInventoryPolicy(req.params.id,req.body);await logAudit({...requestIdentity(req),action:'update',resource:'cmdb_inventory_policy',resourceId:row.id,details:{assetId:req.params.id,enabled:row.enabled,frequency:row.frequency,nextRunAt:row.nextRunAt}});res.json({success:true,data:row,message:'Agenda de inventário atualizada'});}catch(error){next(error);}});
 
 router.get('/:id',async(req,res,next)=>{try{const row=await prisma.cmdbAsset.findUnique({where:{id:req.params.id},include:cmdbInclude});if(!row)return res.status(404).json({success:false,error:'Ativo não encontrado'});res.json({success:true,data:row});}catch(error){next(error);}});
 router.post('/',async(req,res,next)=>{try{const data=await normalizeCmdbAsset(req.body,actor(req));const row=await prisma.cmdbAsset.create({data:{...data,createdBy:actor(req)},include:cmdbInclude});await logAudit({...requestIdentity(req),action:'create',resource:'cmdb_asset',resourceId:row.id,details:{assetTag:row.assetTag,name:row.name,tenantId:row.tenantId}});res.status(201).json({success:true,data:row,message:'Ativo cadastrado na CMDB'});}catch(error){next(error);}});

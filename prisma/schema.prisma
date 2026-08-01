@@ -325,12 +325,57 @@ model CmdbAsset {
   updatedBy      String
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+  lastInventoryAt DateTime?
+  lastInventoryStatus String?
+  lastInventoryError String?
+  inventoryData  String?
+  inventoryPolicy CmdbInventoryPolicy?
+  inventorySnapshots CmdbInventorySnapshot[]
 
   @@index([tenantId, status])
   @@index([siteId, category])
   @@index([category, status])
   @@index([warrantyUntil])
   @@index([supportUntil])
+}
+
+model CmdbInventoryPolicy {
+  id        String    @id @default(uuid())
+  assetId   String    @unique
+  asset     CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  enabled   Boolean   @default(false)
+  frequency String    @default("weekly")
+  hour      Int       @default(3)
+  weekday   Int       @default(1)
+  nextRunAt DateTime?
+  lastRunAt DateTime?
+  lastStatus String?
+  lastError String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([enabled, nextRunAt])
+}
+
+model CmdbInventorySnapshot {
+  id           String    @id @default(uuid())
+  assetId      String
+  asset        CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  deviceId     String
+  status       String
+  manufacturer String?
+  model        String?
+  serialNumber String?
+  hostname     String?
+  osVersion    String?
+  uptime       String?
+  inventoryData String?
+  error        String?
+  collectedBy  String
+  createdAt    DateTime  @default(now())
+
+  @@index([assetId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Runbook {

@@ -51,6 +51,7 @@ import { runRunbookScheduleScheduler } from './services/runbook-schedule.service
 import { resumeInterruptedBatches } from './services/runbook-batch.service.js';
 import { syncStatusServices } from './services/status-page.service.js';
 import { runMonthlyReportScheduler } from './services/monthly-report.service.js';
+import { runCmdbInventoryScheduler } from './services/cmdb-inventory.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -417,6 +418,10 @@ const monthlyReportMonitor = setInterval(() => {
 }, 60 * 60_000);
 monthlyReportMonitor.unref();
 runMonthlyReportScheduler().catch(err => logger.error(`Initial monthly report scheduler error: ${err.message}`));
+
+const cmdbInventoryMonitor=setInterval(()=>runCmdbInventoryScheduler().catch(err=>logger.error(`CMDB inventory scheduler error: ${err.message}`)),60_000);
+cmdbInventoryMonitor.unref();
+runCmdbInventoryScheduler().catch(err=>logger.error(`Initial CMDB inventory scheduler error: ${err.message}`));
 
 const statusPageMonitor=setInterval(()=>syncStatusServices().catch(err=>logger.error(`Status Page sync error: ${err.message}`)),60_000);
 statusPageMonitor.unref();
