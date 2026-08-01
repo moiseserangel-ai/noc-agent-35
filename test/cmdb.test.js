@@ -6,6 +6,7 @@ import { nextInventoryAt, parseInventoryOutput } from '../src/services/cmdb-inve
 import { calculateImpact, CMDB_RELATIONSHIP_TYPES, relationshipImpactEdges } from '../src/services/cmdb-relationship.service.js';
 import { assessCmdbAsset } from '../src/services/cmdb-governance.service.js';
 import { buildOperationalContext } from '../src/services/cmdb-operational-context.service.js';
+import { topologySuggestionCandidate } from '../src/services/cmdb-discovery.service.js';
 
 test('catálogo CMDB cobre ativos, ciclo de vida e criticidade', () => {
   assert.ok(CMDB_CATEGORIES.includes('network'));
@@ -101,4 +102,16 @@ test('contexto operacional relaciona equipamento e elimina impactos duplicados',
   const context=buildOperationalContext(['d1'],assets,relationships);
   assert.equal(context.summary.mapped,1);assert.equal(context.summary.impacted,2);assert.equal(context.summary.critical,1);assert.equal(context.summary.maxDepth,2);
   assert.deepEqual(context.impacted.map(item=>item.asset.id),['app','client']);
+});
+
+test('descoberta converte conexão de topologia em sugestão CMDB',()=>{
+  const link={id:'link1',sourceDeviceId:'d2',targetDeviceId:'d1',source:'lldp',linkType:'fiber',label:'SFP1 ↔ GE0/0/1',sourceDevice:{name:'A'},targetDevice:{name:'B'}},assets=[{id:'asset-a',deviceId:'d1',tenantId:'tenant'},{id:'asset-b',deviceId:'d2',tenantId:'tenant'}];
+  const result=topologySuggestionCandidate(link,assets,[]);
+  assert.equal(result.suggestedType,'connected_to');assert.equal(result.confidence,90);assert.equal(result.sourceAssetId,'asset-a');assert.match(result.evidence,/SFP1/);
+  assert.equal(topologySuggestionCandidate(link,assets,[{sourceAssetId:'asset-b',targetAssetId:'asset-a',type:'connected_to'}]),null);
+});
+
+test('descoberta não sugere relação entre clientes diferentes',()=>{
+  const link={id:'link1',sourceDeviceId:'d1',targetDeviceId:'d2'},assets=[{id:'a',deviceId:'d1',tenantId:'one'},{id:'b',deviceId:'d2',tenantId:'two'}];
+  assert.equal(topologySuggestionCandidate(link,assets,[]),null);
 });

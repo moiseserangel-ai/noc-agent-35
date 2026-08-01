@@ -333,6 +333,8 @@ model CmdbAsset {
   inventorySnapshots CmdbInventorySnapshot[]
   relationshipsFrom CmdbRelationship[] @relation("CmdbRelationshipSource")
   relationshipsTo   CmdbRelationship[] @relation("CmdbRelationshipTarget")
+  suggestionsFrom   CmdbRelationshipSuggestion[] @relation("CmdbSuggestionSource")
+  suggestionsTo     CmdbRelationshipSuggestion[] @relation("CmdbSuggestionTarget")
 
   @@index([tenantId, status])
   @@index([siteId, category])
@@ -358,6 +360,28 @@ model CmdbRelationship {
   @@unique([sourceAssetId, targetAssetId, type])
   @@index([sourceAssetId, type])
   @@index([targetAssetId, type])
+}
+
+model CmdbRelationshipSuggestion {
+  id            String    @id @default(uuid())
+  originKey     String    @unique
+  sourceAssetId String
+  sourceAsset   CmdbAsset @relation("CmdbSuggestionSource", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  targetAssetId String
+  targetAsset   CmdbAsset @relation("CmdbSuggestionTarget", fields: [targetAssetId], references: [id], onDelete: Cascade)
+  suggestedType String    @default("connected_to")
+  evidence      String?
+  protocol      String?
+  confidence    Int       @default(80)
+  status        String    @default("suggested")
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  relationshipId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, confidence])
+  @@index([sourceAssetId, targetAssetId])
 }
 
 model CmdbInventoryPolicy {
