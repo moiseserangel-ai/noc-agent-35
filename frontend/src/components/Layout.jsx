@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow, Bell, CalendarClock, RadioTower, Building2
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow, Bell, CalendarClock, RadioTower, Building2, Boxes
 } from 'lucide-react';
 import ThemeSelector from './ThemeSelector.jsx';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/devices', label: 'Equipamentos', icon: Server },
+  { path: '/cmdb', label: 'CMDB e Inventário', icon: Boxes, roles: ['admin'] },
   { path: '/discovery', label: 'Descoberta de rede', icon: Radar, roles: ['admin'] },
   { path: '/capacity', label: 'Capacidade', icon: Gauge },
   { path: '/topology', label: 'Mapa de rede', icon: Network },

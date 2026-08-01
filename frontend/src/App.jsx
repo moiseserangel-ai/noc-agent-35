@@ -31,6 +31,7 @@ import PublicStatus from './pages/PublicStatus.jsx';
 import Clients from './pages/Clients.jsx';
 import TenantContracts from './pages/TenantContracts.jsx';
 import OnCallScopes from './pages/OnCallScopes.jsx';
+import Cmdb from './pages/Cmdb.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
 
@@ -195,6 +196,7 @@ export default function App() {
               <Route path="on-call" element={user?.role==='admin' ? <OnCall /> : <Navigate to="/" replace />} />
               <Route path="clients" element={user?.role==='admin'&&!user?.tenantId ? <Clients /> : <Navigate to="/" replace />} />
               <Route path="tenant-contracts" element={user?.role==='admin'&&!user?.tenantId ? <TenantContracts /> : <Navigate to="/" replace />} />
+              <Route path="cmdb" element={user?.role==='admin'&&!user?.tenantId ? <Cmdb /> : <Navigate to="/" replace />} />
               <Route path="on-call-scopes" element={user?.role==='admin'&&!user?.tenantId ? <OnCallScopes /> : <Navigate to="/" replace />} />
               <Route path="status-page" element={user?.role==='admin' ? <StatusPage /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />

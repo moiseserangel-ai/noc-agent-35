@@ -37,6 +37,7 @@ import notificationRoutes from './routes/notification.routes.js';
 import onCallRoutes from './routes/on-call.routes.js';
 import statusAdminRoutes,{publicStatusRouter} from './routes/status-page.routes.js';
 import tenantRoutes from './routes/tenant.routes.js';
+import cmdbRoutes from './routes/cmdb.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -107,6 +108,7 @@ app.use('/api/runbooks', authMiddleware,globalOnly, requireRoles('admin', 'opera
 app.use('/api/notifications', authMiddleware,globalOnly, auditMutation, notificationRoutes);
 app.use('/api/on-call', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, onCallRoutes);
 app.use('/api/status-page', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, statusAdminRoutes);
+app.use('/api/cmdb',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,cmdbRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
