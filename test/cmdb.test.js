@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { CMDB_CATEGORIES, CMDB_CRITICALITIES, CMDB_STATUSES, normalizeCmdbAsset } from '../src/services/cmdb.service.js';
 import { nextInventoryAt, parseInventoryOutput } from '../src/services/cmdb-inventory.service.js';
 import { calculateImpact, CMDB_RELATIONSHIP_TYPES, relationshipImpactEdges } from '../src/services/cmdb-relationship.service.js';
+import { assessCmdbAsset } from '../src/services/cmdb-governance.service.js';
 
 test('catálogo CMDB cobre ativos, ciclo de vida e criticidade', () => {
   assert.ok(CMDB_CATEGORIES.includes('network'));
@@ -76,4 +77,19 @@ test('calcula impacto direto e em cascata sem repetir ativos',()=>{
 test('traduz relações direcionais em fluxo de impacto',()=>{
   const rows=[{id:'a',sourceAssetId:'app',targetAssetId:'db',type:'depends_on'},{id:'b',sourceAssetId:'core',targetAssetId:'access',type:'provides_service_to'}];
   assert.deepEqual(relationshipImpactEdges(rows).map(([from,to])=>[from,to]),[['db','app'],['core','access']]);
+});
+
+test('governança sinaliza cadastro incompleto e inventário vencido',()=>{
+  const now=new Date('2026-08-01T12:00:00Z');
+  const result=assessCmdbAsset({status:'active',criticality:'critical',deviceId:'device-1',lastInventoryAt:new Date('2026-06-01T12:00:00Z'),lastInventoryStatus:'success',serialNumber:null,managementIp:'10.0.0.1',hostname:null,manufacturer:'MikroTik',model:'CCR',owner:null,location:'POP',siteId:null,warrantyUntil:new Date('2026-07-01T12:00:00Z'),supportUntil:null,_count:{relationshipsFrom:0,relationshipsTo:0}},now);
+  assert.ok(result.score<75);
+  assert.ok(result.issues.some(row=>row.code==='inventory_stale'));
+  assert.ok(result.issues.some(row=>row.code==='warrantyUntil_expired'));
+  assert.ok(result.issues.some(row=>row.code==='critical_unmapped'));
+});
+
+test('governança reconhece ativo completo e atualizado',()=>{
+  const now=new Date('2026-08-01T12:00:00Z');
+  const result=assessCmdbAsset({status:'active',criticality:'high',deviceId:'device-1',lastInventoryAt:new Date('2026-07-30T12:00:00Z'),lastInventoryStatus:'success',serialNumber:'ABC',managementIp:'10.0.0.1',manufacturer:'Cisco',model:'C8300',owner:'NOC',location:'POP',_count:{relationshipsFrom:1,relationshipsTo:0}},now);
+  assert.equal(result.score,100);assert.equal(result.grade,'excellent');assert.equal(result.issues.length,0);
 });

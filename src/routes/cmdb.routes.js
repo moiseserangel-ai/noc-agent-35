@@ -4,11 +4,13 @@ import { cmdbInclude, cmdbSummary, listCmdbAssets, normalizeCmdbAsset } from '..
 import { logAudit, requestIdentity } from '../services/audit.service.js';
 import { collectCmdbInventory, saveInventoryPolicy } from '../services/cmdb-inventory.service.js';
 import { cmdbImpact, validateCmdbRelationship } from '../services/cmdb-relationship.service.js';
+import { cmdbGovernance } from '../services/cmdb-governance.service.js';
 
 const router = Router();
 const actor = req => String(req.user?.name || req.user?.username || 'Administrador').slice(0, 100);
 
 router.get('/summary', async (req,res,next) => { try { res.json({ success:true, data:await cmdbSummary(req.query.tenantId || null) }); } catch(error) { next(error); } });
+router.get('/governance', async (req,res,next) => { try { res.json({ success:true, data:await cmdbGovernance(req.query.tenantId || null) }); } catch(error) { next(error); } });
 router.get('/', async (req,res,next) => { try { res.json({ success:true, data:await listCmdbAssets(req.query) }); } catch(error) { next(error); } });
 
 router.post('/sync-devices', async (req,res,next) => {

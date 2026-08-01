@@ -47,6 +47,7 @@ export const api = {
   deleteTenantSite: id => request(`/tenants/sites/${id}`,{method:'DELETE'}),
   getCmdbAssets: (params={}) => request(`/cmdb?${new URLSearchParams(params)}`),
   getCmdbSummary: (params={}) => request(`/cmdb/summary?${new URLSearchParams(params)}`),
+  getCmdbGovernance: (params={}) => request(`/cmdb/governance?${new URLSearchParams(params)}`),
   getCmdbAsset: id => request(`/cmdb/${id}`),
   createCmdbAsset: data => request('/cmdb',{method:'POST',body:JSON.stringify(data)}),
   updateCmdbAsset: (id,data) => request(`/cmdb/${id}`,{method:'PUT',body:JSON.stringify(data)}),
