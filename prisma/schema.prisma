@@ -73,6 +73,7 @@ model Tenant {
   monthlyReportWhatsappRecipients String?
   monthlyReportRuns MonthlyReportRun[]
   cmdbAssets CmdbAsset[]
+  ipamSubnets IpamSubnet[]
 
   @@index([isActive, name])
 }
@@ -88,6 +89,7 @@ model TenantSite {
   updatedAt DateTime @updatedAt
   devices   Device[]
   cmdbAssets CmdbAsset[]
+  ipamSubnets IpamSubnet[]
 
   @@unique([tenantId, name])
 }
@@ -338,12 +340,54 @@ model CmdbAsset {
   suggestionsTo     CmdbRelationshipSuggestion[] @relation("CmdbSuggestionTarget")
   history           CmdbHistory[]
   lifecycleAlerts   CmdbLifecycleAlert[]
+  ipAssignments     IpamAddress[]
 
   @@index([tenantId, status])
   @@index([siteId, category])
   @@index([category, status])
   @@index([warrantyUntil])
   @@index([supportUntil])
+}
+
+model IpamSubnet {
+  id          String      @id @default(uuid())
+  name        String
+  cidr        String      @unique
+  network     String
+  prefix      Int
+  gateway     String?
+  vlanId      Int?
+  tenantId    String?
+  tenant      Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  siteId      String?
+  site        TenantSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  description String?
+  createdBy   String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  addresses   IpamAddress[]
+
+  @@index([tenantId, vlanId])
+  @@index([siteId, name])
+}
+
+model IpamAddress {
+  id          String     @id @default(uuid())
+  subnetId    String
+  subnet      IpamSubnet @relation(fields: [subnetId], references: [id], onDelete: Cascade)
+  address     String
+  status      String     @default("assigned")
+  assetId     String?
+  asset       CmdbAsset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  hostname    String?
+  description String?
+  createdBy   String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([subnetId, address])
+  @@index([assetId])
+  @@index([address, status])
 }
 
 model CmdbRelationship {
