@@ -12,6 +12,18 @@ const BLOCKED_COMMANDS_MIKROTIK = [
   'format',
 ];
 
+export const MIKROTIK_KEX_ALGORITHMS = [
+  'curve25519-sha256',
+  'curve25519-sha256@libssh.org',
+  'ecdh-sha2-nistp256',
+  'ecdh-sha2-nistp384',
+  'ecdh-sha2-nistp521',
+  'diffie-hellman-group16-sha512',
+  'diffie-hellman-group14-sha256',
+  'diffie-hellman-group14-sha1',
+  'diffie-hellman-group1-sha1',
+];
+
 function isBlockedCommand(command) {
   const cmd = command.toLowerCase().trim();
   return BLOCKED_COMMANDS_MIKROTIK.some(blocked => cmd.includes(blocked));
@@ -122,11 +134,7 @@ export async function sshMikrotikExec({ deviceId, command, changeComment }) {
       password: device.password,
       readyTimeout: 10000,
       algorithms: {
-        kex: [
-          'diffie-hellman-group14-sha256',
-          'diffie-hellman-group14-sha1',
-          'diffie-hellman-group1-sha1',
-        ],
+        kex: MIKROTIK_KEX_ALGORITHMS,
       },
     });
   });

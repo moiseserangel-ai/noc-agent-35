@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatChangeMarker, normalizeChangeComment } from '../src/services/device-change.service.js';
-import { ensureMikrotikObjectComments } from '../src/tools/ssh-mikrotik.tool.js';
+import { ensureMikrotikObjectComments, MIKROTIK_KEX_ALGORITHMS } from '../src/tools/ssh-mikrotik.tool.js';
 import { ensureHuaweiNativeDescriptions } from '../src/tools/ssh-huawei-vrp.tool.js';
 
 test('normaliza e identifica comentário de mudança', () => {
@@ -21,6 +21,12 @@ test('injeta comment nativo em objetos RouterOS compatíveis', () => {
 test('preserva comment RouterOS já informado e não comenta comandos singleton', () => {
   assert.equal(ensureMikrotikObjectComments('/ip route add dst-address=10.0.0.0/24 gateway=1.1.1.1 comment="Link filial"', 'Nova rota filial'), '/ip route add dst-address=10.0.0.0/24 gateway=1.1.1.1 comment="Link filial"');
   assert.equal(ensureMikrotikObjectComments('/system identity set name=CORE', 'Identidade do core'), '/system identity set name=CORE');
+});
+
+test('cliente MikroTik negocia algoritmos modernos e mantém compatibilidade legada', () => {
+  assert.ok(MIKROTIK_KEX_ALGORITHMS.includes('curve25519-sha256'));
+  assert.ok(MIKROTIK_KEX_ALGORITHMS.includes('diffie-hellman-group14-sha256'));
+  assert.ok(MIKROTIK_KEX_ALGORITHMS.indexOf('curve25519-sha256') < MIKROTIK_KEX_ALGORITHMS.indexOf('diffie-hellman-group14-sha1'));
 });
 
 test('injeta description nativa em interface, rota e peer Huawei', () => {

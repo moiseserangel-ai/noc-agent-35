@@ -331,7 +331,7 @@ export async function runComplianceScan(deviceId, { type='manual', username='sys
     const profile = scope?.profile || policy?.complianceProfile || await prisma.complianceProfile.findFirst({where:{deviceType:device.type,isSystem:true,isActive:true},include:{rules:{orderBy:{position:'asc'}}}});
     scan = await prisma.complianceScan.create({ data:{deviceId,type,profile:profile?.name || COMPLIANCE_PROFILE,status:'running',createdBy:username,validationTaskId} });
     const capture = await captureDeviceConfiguration(device);
-    if (!capture.success) throw new Error(capture.output || 'Falha ao consultar configuração');
+    if (!capture.success) throw Object.assign(new Error(capture.output || 'Falha ao consultar configuração'), { statusCode: 502 });
     const configurationSha256 = crypto.createHash('sha256').update(String(capture.output)).digest('hex');
     const baseline = device.type === 'mikrotik' ? evaluateMikrotikCompliance(capture.output) : device.type === 'cisco_ios' ? evaluateCiscoCompliance(capture.output) : device.type === 'juniper_junos' ? evaluateJuniperCompliance(capture.output) : device.type === 'fortigate_fortios' ? evaluateFortiGateCompliance(capture.output) : device.type === 'ubiquiti_edgeos' ? evaluateEdgeOsCompliance(capture.output) : device.type === 'datacom_dmos' ? evaluateDatacomCompliance(capture.output) : device.type === 'nokia_sros' ? evaluateNokiaCompliance(capture.output) : device.type === 'linux' ? evaluateLinuxCompliance(capture.output) : evaluateHuaweiCompliance(capture.output);
     const evaluated = applyComplianceProfile(baseline,profile?.rules,capture.output);
@@ -366,6 +366,7 @@ export async function runComplianceScan(deviceId, { type='manual', username='sys
     if (scan) await prisma.complianceScan.update({where:{id:scan.id},data:{status:'failed',error:error.message.slice(0,2000),completedAt:new Date()}}).catch(()=>{});
     const policy = device ? await prisma.compliancePolicy.findUnique({where:{deviceId}}) : null;
     if (policy) await prisma.compliancePolicy.update({where:{deviceId},data:{lastRunAt:new Date(),lastStatus:'failed',lastError:error.message.slice(0,1000),...(type==='automatic'&&{nextRunAt:nextComplianceAt(policy,new Date(Date.now()+60_000))})}});
+    if (!error.statusCode && /conexão SSH|Handshake failed|timed out|ECONN/i.test(error.message)) error.statusCode = 502;
     throw error;
   } finally { running.delete(deviceId); }
 }
