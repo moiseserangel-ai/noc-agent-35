@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { CMDB_CATEGORIES, CMDB_CRITICALITIES, CMDB_STATUSES, normalizeCmdbAsset } from '../src/services/cmdb.service.js';
 import { nextInventoryAt, parseInventoryOutput } from '../src/services/cmdb-inventory.service.js';
+import { calculateImpact, CMDB_RELATIONSHIP_TYPES, relationshipImpactEdges } from '../src/services/cmdb-relationship.service.js';
 
 test('catálogo CMDB cobre ativos, ciclo de vida e criticidade', () => {
   assert.ok(CMDB_CATEGORIES.includes('network'));
@@ -52,4 +53,27 @@ test('coleta utiliza somente comandos de consulta permitidos',()=>{
   const source=fs.readFileSync(new URL('../src/services/cmdb-inventory.service.js',import.meta.url),'utf8');
   assert.doesNotMatch(source,/configure terminal|system-view|\/system reset|write memory/);
   assert.match(source,/display version/);assert.match(source,/show version/);assert.match(source,/\/system resource print/);
+});
+
+test('catálogo de relações cobre dependência, conectividade e hospedagem',()=>{
+  assert.ok(CMDB_RELATIONSHIP_TYPES.includes('depends_on'));
+  assert.ok(CMDB_RELATIONSHIP_TYPES.includes('connected_to'));
+  assert.ok(CMDB_RELATIONSHIP_TYPES.includes('hosted_on'));
+});
+
+test('calcula impacto direto e em cascata sem repetir ativos',()=>{
+  const assets=[{id:'host',name:'Hypervisor',criticality:'critical'},{id:'vm',name:'Zabbix',criticality:'high'},{id:'noc',name:'NOC Agent',criticality:'high'}];
+  const relationships=[
+    {id:'r1',sourceAssetId:'vm',targetAssetId:'host',type:'hosted_on',critical:true},
+    {id:'r2',sourceAssetId:'noc',targetAssetId:'vm',type:'depends_on',critical:false},
+    {id:'r3',sourceAssetId:'host',targetAssetId:'noc',type:'connected_to',critical:false},
+  ];
+  const impacted=calculateImpact('host',assets,relationships);
+  assert.deepEqual(impacted.map(item=>item.asset.id),['vm','noc']);
+  assert.deepEqual(impacted.map(item=>item.depth),[1,1]);
+});
+
+test('traduz relações direcionais em fluxo de impacto',()=>{
+  const rows=[{id:'a',sourceAssetId:'app',targetAssetId:'db',type:'depends_on'},{id:'b',sourceAssetId:'core',targetAssetId:'access',type:'provides_service_to'}];
+  assert.deepEqual(relationshipImpactEdges(rows).map(([from,to])=>[from,to]),[['db','app'],['core','access']]);
 });

@@ -331,12 +331,33 @@ model CmdbAsset {
   inventoryData  String?
   inventoryPolicy CmdbInventoryPolicy?
   inventorySnapshots CmdbInventorySnapshot[]
+  relationshipsFrom CmdbRelationship[] @relation("CmdbRelationshipSource")
+  relationshipsTo   CmdbRelationship[] @relation("CmdbRelationshipTarget")
 
   @@index([tenantId, status])
   @@index([siteId, category])
   @@index([category, status])
   @@index([warrantyUntil])
   @@index([supportUntil])
+}
+
+model CmdbRelationship {
+  id            String    @id @default(uuid())
+  sourceAssetId String
+  sourceAsset   CmdbAsset @relation("CmdbRelationshipSource", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  targetAssetId String
+  targetAsset   CmdbAsset @relation("CmdbRelationshipTarget", fields: [targetAssetId], references: [id], onDelete: Cascade)
+  type          String
+  label         String?
+  notes         String?
+  critical      Boolean   @default(false)
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([sourceAssetId, targetAssetId, type])
+  @@index([sourceAssetId, type])
+  @@index([targetAssetId, type])
 }
 
 model CmdbInventoryPolicy {
