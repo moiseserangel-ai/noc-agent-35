@@ -335,6 +335,7 @@ model CmdbAsset {
   relationshipsTo   CmdbRelationship[] @relation("CmdbRelationshipTarget")
   suggestionsFrom   CmdbRelationshipSuggestion[] @relation("CmdbSuggestionSource")
   suggestionsTo     CmdbRelationshipSuggestion[] @relation("CmdbSuggestionTarget")
+  history           CmdbHistory[]
 
   @@index([tenantId, status])
   @@index([siteId, category])
@@ -382,6 +383,22 @@ model CmdbRelationshipSuggestion {
 
   @@index([status, confidence])
   @@index([sourceAssetId, targetAssetId])
+}
+
+model CmdbHistory {
+  id        String    @id @default(uuid())
+  assetId   String
+  asset     CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  eventType String
+  source    String
+  actor     String
+  summary   String
+  changes   String?
+  metadata  String?
+  createdAt DateTime  @default(now())
+
+  @@index([assetId, createdAt])
+  @@index([eventType, createdAt])
 }
 
 model CmdbInventoryPolicy {

@@ -56,6 +56,7 @@ export const api = {
   collectCmdbInventory: id => request(`/cmdb/${id}/inventory/collect`,{method:'POST'}),
   collectAllCmdbInventory: () => request('/cmdb/inventory/collect-all',{method:'POST'}),
   getCmdbInventory: (id,limit=50) => request(`/cmdb/${id}/inventory?limit=${limit}`),
+  getCmdbHistory: (id,limit=100) => request(`/cmdb/${id}/history?limit=${limit}`),
   saveCmdbInventoryPolicy: (id,data) => request(`/cmdb/${id}/inventory/policy`,{method:'PUT',body:JSON.stringify(data)}),
   getCmdbImpact: id => request(`/cmdb/${id}/impact`),
   createCmdbRelationship: data => request('/cmdb/relationships',{method:'POST',body:JSON.stringify(data)}),

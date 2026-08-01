@@ -7,6 +7,7 @@ import { calculateImpact, CMDB_RELATIONSHIP_TYPES, relationshipImpactEdges } fro
 import { assessCmdbAsset } from '../src/services/cmdb-governance.service.js';
 import { buildOperationalContext } from '../src/services/cmdb-operational-context.service.js';
 import { topologySuggestionCandidate } from '../src/services/cmdb-discovery.service.js';
+import { diffCmdbValues } from '../src/services/cmdb-history.service.js';
 
 test('catálogo CMDB cobre ativos, ciclo de vida e criticidade', () => {
   assert.ok(CMDB_CATEGORIES.includes('network'));
@@ -114,4 +115,14 @@ test('descoberta converte conexão de topologia em sugestão CMDB',()=>{
 test('descoberta não sugere relação entre clientes diferentes',()=>{
   const link={id:'link1',sourceDeviceId:'d1',targetDeviceId:'d2'},assets=[{id:'a',deviceId:'d1',tenantId:'one'},{id:'b',deviceId:'d2',tenantId:'two'}];
   assert.equal(topologySuggestionCandidate(link,assets,[]),null);
+});
+
+test('histórico registra somente diferenças reais e normaliza datas',()=>{
+  const before={name:'Roteador',serialNumber:'ABC',warrantyUntil:new Date('2027-01-01T00:00:00Z')},after={name:'Roteador',serialNumber:'XYZ',warrantyUntil:new Date('2027-01-01T00:00:00Z')};
+  assert.deepEqual(diffCmdbValues(before,after,['name','serialNumber','warrantyUntil']),[{field:'serialNumber',before:'ABC',after:'XYZ'}]);
+});
+
+test('schema mantém histórico vinculado ao ciclo de vida do ativo',()=>{
+  const schema=fs.readFileSync(new URL('../prisma/schema.prisma',import.meta.url),'utf8');
+  assert.match(schema,/model CmdbHistory/);assert.match(schema,/asset\s+CmdbAsset.+onDelete: Cascade/);
 });

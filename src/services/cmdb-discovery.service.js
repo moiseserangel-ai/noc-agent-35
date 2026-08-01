@@ -1,4 +1,5 @@
 import prisma from '../database/client.js';
+import { recordCmdbHistory } from './cmdb-history.service.js';
 
 const assetSummary={select:{id:true,assetTag:true,name:true,criticality:true,tenantId:true,deviceId:true}};
 
@@ -34,7 +35,7 @@ export async function approveCmdbSuggestion(id,input,username){
   if(!suggestion||suggestion.status!=='suggested')throw Object.assign(new Error('Sugestão não encontrada ou já revisada'),{statusCode:409});
   const type=['connected_to','depends_on','hosted_on','powered_by','protected_by','provides_service_to','contains','licensed_by'].includes(input.type)?input.type:suggestion.suggestedType;
   const sourceAssetId=input.reverse===true?suggestion.targetAssetId:suggestion.sourceAssetId,targetAssetId=input.reverse===true?suggestion.sourceAssetId:suggestion.targetAssetId;
-  return prisma.$transaction(async tx=>{const relationship=await tx.cmdbRelationship.create({data:{sourceAssetId,targetAssetId,type,label:String(input.label||suggestion.evidence||'').slice(0,120)||null,critical:input.critical===true,createdBy:username}});await tx.cmdbRelationshipSuggestion.update({where:{id},data:{status:'approved',reviewedBy:username,reviewedAt:new Date(),relationshipId:relationship.id,suggestedType:type}});return relationship;});
+  return prisma.$transaction(async tx=>{const relationship=await tx.cmdbRelationship.create({data:{sourceAssetId,targetAssetId,type,label:String(input.label||suggestion.evidence||'').slice(0,120)||null,critical:input.critical===true,createdBy:username}});await tx.cmdbRelationshipSuggestion.update({where:{id},data:{status:'approved',reviewedBy:username,reviewedAt:new Date(),relationshipId:relationship.id,suggestedType:type}});for(const assetId of [sourceAssetId,targetAssetId])await recordCmdbHistory({assetId,eventType:'relationship_created',source:'topology_discovery',actor:username,summary:`Relacionamento ${type} aprovado a partir da topologia`,metadata:{relationshipId:relationship.id,suggestionId:id,confidence:suggestion.confidence}},tx);return relationship;});
 }
 
 export async function ignoreCmdbSuggestion(id,username){const row=await prisma.cmdbRelationshipSuggestion.findFirst({where:{id,status:'suggested'}});if(!row)throw Object.assign(new Error('Sugestão não encontrada ou já revisada'),{statusCode:409});return prisma.cmdbRelationshipSuggestion.update({where:{id},data:{status:'ignored',reviewedBy:username,reviewedAt:new Date()}});}
