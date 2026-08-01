@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { CMDB_CATEGORIES, CMDB_CRITICALITIES, CMDB_STATUSES, normalizeCmdbAsset } from '../src/services/cmdb.service.js';
-import { nextInventoryAt, parseInventoryOutput } from '../src/services/cmdb-inventory.service.js';
+import { isUsableMikrotikInventoryOutput, nextInventoryAt, parseInventoryOutput } from '../src/services/cmdb-inventory.service.js';
 import { calculateImpact, CMDB_RELATIONSHIP_TYPES, relationshipImpactEdges } from '../src/services/cmdb-relationship.service.js';
 import { assessCmdbAsset } from '../src/services/cmdb-governance.service.js';
 import { buildOperationalContext } from '../src/services/cmdb-operational-context.service.js';
@@ -46,6 +46,12 @@ test('interpreta inventário MikroTik, Huawei e Cisco sem IA', () => {
   assert.equal(huawei.model,'NE8000');assert.equal(huawei.serialNumber,'2102ABC');
   const cisco=parseInventoryOutput('cisco_ios','Cisco IOS XE Software, Version 17.09.04a\nCisco C8300-1N1S-6T (1RU) processor\nProcessor board ID FDO1234\nR1 uptime is 4 days');
   assert.equal(cisco.model,'C8300-1N1S-6T');assert.equal(cisco.serialNumber,'FDO1234');
+});
+
+test('aceita inventário parcial de MikroTik CHR sem menu routerboard',()=>{
+  const output='uptime: 50m\nversion: 7.20.6\nboard-name: CHR QEMU\nplatform: MikroTik\nbad command name routerboard\nname: CPE-CHR';
+  assert.equal(isUsableMikrotikInventoryOutput(output),true);
+  const row=parseInventoryOutput('mikrotik',output);assert.equal(row.model,'CHR QEMU');assert.equal(row.hostname,'CPE-CHR');
 });
 
 test('agenda coleta diária e semanal sempre no futuro',()=>{

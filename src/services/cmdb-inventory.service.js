@@ -25,7 +25,7 @@ const first=(source,patterns)=>{for(const pattern of patterns){const match=sourc
 export function parseInventoryOutput(type,output,device={}){
   const source=String(output||'').replace(/\r/g,'');
   const base={manufacturer:device.manufacturer||null,model:device.model||null,serialNumber:null,hostname:device.name||device.hostname||null,osVersion:device.osVersion||null,uptime:null};
-  if(type==='mikrotik')Object.assign(base,{manufacturer:'MikroTik',model:first(source,[/model:\s*([^\n]+)/i,/board-name:\s*([^\n]+)/i]),serialNumber:first(source,[/serial-number:\s*([^\n]+)/i,/system-id:\s*([^\n]+)/i]),hostname:first(source,[/name:\s*([^\n]+)/i]),osVersion:first(source,[/version:\s*([^\s\n]+)/i]),uptime:first(source,[/uptime:\s*([^\n]+)/i])});
+  if(type==='mikrotik')Object.assign(base,{manufacturer:'MikroTik',model:first(source,[/^\s*model:\s*([^\n]+)/mi,/^\s*board-name:\s*([^\n]+)/mi]),serialNumber:first(source,[/^\s*serial-number:\s*([^\n]+)/mi,/^\s*system-id:\s*([^\n]+)/mi]),hostname:first(source,[/^\s*name:\s*([^\n]+)/mi]),osVersion:first(source,[/^\s*version:\s*([^\s\n]+)/mi]),uptime:first(source,[/^\s*uptime:\s*([^\n]+)/mi])});
   else if(type==='huawei_vrp')Object.assign(base,{manufacturer:'Huawei',model:first(source,[/HUAWEI\s+((?:NE|AR|CE|ME|ATN|S)\d[A-Z0-9-]*)\s+(?:Routing|uptime|version)/i,/\b((?:NetEngine|NE|AR|CE|ME|ATN|S)\d[A-Z0-9-]*)\s+uptime/i]),serialNumber:first(source,[/(?:ESN|Serial Number|BarCode)\s*[:=]\s*(\S+)/i]),osVersion:first(source,[/VRP.*?Version\s+([^\s,)]+)/i,/Version\s*:\s*([^\n]+)/i]),uptime:first(source,[/uptime is\s+([^\n]+)/i])});
   else if(type==='cisco_ios')Object.assign(base,{manufacturer:'Cisco',model:first(source,[/Cisco\s+(\S+)\s+\([^)]*\)\s+processor/i,/NAME:\s*"Chassis"[^\n]*PID:\s*([^,\s]+)/i]),serialNumber:first(source,[/Processor board ID\s+(\S+)/i,/SN:\s*([^,\s]+)/i]),hostname:first(source,[/^([^\s#]+) uptime is /mi]),osVersion:first(source,[/Cisco IOS(?: XE)? Software[^\n]*Version\s+([^,\s]+)/i]),uptime:first(source,[/uptime is\s+([^\n]+)/i])});
   else if(type==='juniper_junos')Object.assign(base,{manufacturer:'Juniper',model:first(source,[/^Model:\s*(\S+)/mi,/Chassis\s+(\S+)\s+/mi]),serialNumber:first(source,[/^Chassis\s+(\S+)\s+/mi]),hostname:first(source,[/^Hostname:\s*(\S+)/mi]),osVersion:first(source,[/^Junos:\s*(\S+)/mi])});
@@ -43,7 +43,9 @@ export function nextInventoryAt(policy,from=new Date()){
   const weekday=Math.max(0,Math.min(6,Number(policy.weekday)||0));let days=(weekday-next.getDay()+7)%7;if(days===0&&next<=from)days=7;next.setDate(next.getDate()+days);return next;
 }
 
-async function executeInventory(device){const exec=executors[device.type];if(!exec)throw new Error('Fabricante ainda não possui coleta automática de inventário');const result=await exec({deviceId:device.id,command:commands[device.type]});if(!result.success)throw new Error(result.output||'Falha na consulta de inventário');return parseInventoryOutput(device.type,result.output,device);}
+export const isUsableMikrotikInventoryOutput=output=>/\bversion:\s*\S+/i.test(String(output||''))&&/\bname:\s*[^\r\n]+/i.test(String(output||''));
+
+async function executeInventory(device){const exec=executors[device.type];if(!exec)throw Object.assign(new Error('Fabricante ainda não possui coleta automática de inventário'),{statusCode:400});const result=await exec({deviceId:device.id,command:commands[device.type]});const partialChr=device.type==='mikrotik'&&isUsableMikrotikInventoryOutput(result.output);if(!result.success&&!partialChr)throw Object.assign(new Error(result.output||'Falha na consulta de inventário'),{statusCode:502});return parseInventoryOutput(device.type,result.output,device);}
 
 export async function collectCmdbInventory(assetId,{username='system',type='manual'}={}){
   if(running.has(assetId))throw Object.assign(new Error('Já existe uma coleta em andamento para este ativo'),{statusCode:409});running.add(assetId);let asset;
@@ -59,6 +61,7 @@ export async function collectCmdbInventory(assetId,{username='system',type='manu
     await logAudit({username,displayName:username==='system'?'Coletor CMDB':username,role:username==='system'?'system':'admin',action:'collect',resource:'cmdb_inventory',resourceId:snapshot.id,status:'success',details:{assetId:asset.id,deviceId:asset.device.id,type}});return snapshot;
   }catch(error){
     if(asset){const now=new Date();await prisma.cmdbInventorySnapshot.create({data:{assetId:asset.id,deviceId:asset.deviceId||'unlinked',status:'failed',error:error.message.slice(0,2000),collectedBy:username}}).catch(()=>{});await prisma.cmdbAsset.update({where:{id:asset.id},data:{lastInventoryAt:now,lastInventoryStatus:'failed',lastInventoryError:error.message.slice(0,1000),updatedBy:username}}).catch(()=>{});await recordCmdbHistory({assetId:asset.id,eventType:'inventory_failed',source:type==='automatic'?'automatic_inventory':'manual_inventory',actor:username,summary:`Falha na coleta de inventário: ${error.message}`,metadata:{deviceId:asset.deviceId}}).catch(()=>{});if(type==='automatic'&&asset.inventoryPolicy)await prisma.cmdbInventoryPolicy.update({where:{assetId:asset.id},data:{lastRunAt:now,lastStatus:'failed',lastError:error.message.slice(0,1000),nextRunAt:nextInventoryAt(asset.inventoryPolicy,new Date(now.getTime()+60000))}}).catch(()=>{});}
+    if(!error.statusCode&&/conexão SSH|Handshake failed|timed out|ECONN/i.test(error.message))error.statusCode=502;
     throw error;
   }finally{running.delete(assetId);}
 }
