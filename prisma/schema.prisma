@@ -74,6 +74,7 @@ model Tenant {
   monthlyReportRuns MonthlyReportRun[]
   cmdbAssets CmdbAsset[]
   ipamSubnets IpamSubnet[]
+  businessServices BusinessService[]
 
   @@index([isActive, name])
 }
@@ -341,6 +342,7 @@ model CmdbAsset {
   history           CmdbHistory[]
   lifecycleAlerts   CmdbLifecycleAlert[]
   ipAssignments     IpamAddress[]
+  businessServices  BusinessServiceAsset[]
 
   @@index([tenantId, status])
   @@index([siteId, category])
@@ -388,6 +390,41 @@ model IpamAddress {
   @@unique([subnetId, address])
   @@index([assetId])
   @@index([address, status])
+}
+
+model BusinessService {
+  id          String    @id @default(uuid())
+  name        String
+  code        String    @unique
+  description String?
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  criticality String    @default("medium")
+  status      String    @default("active")
+  owner       String?
+  contact     String?
+  slaMinutes  Int?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  assets      BusinessServiceAsset[]
+
+  @@index([tenantId, status])
+  @@index([criticality, status])
+}
+
+model BusinessServiceAsset {
+  id        String          @id @default(uuid())
+  serviceId String
+  service   BusinessService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  assetId   String
+  asset     CmdbAsset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  role      String          @default("dependency")
+  critical  Boolean         @default(false)
+  createdAt DateTime        @default(now())
+
+  @@unique([serviceId, assetId])
+  @@index([assetId, critical])
 }
 
 model CmdbRelationship {
