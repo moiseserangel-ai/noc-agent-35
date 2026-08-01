@@ -65,6 +65,8 @@ export const api = {
   refreshCmdbSuggestions: () => request('/cmdb/suggestions/refresh',{method:'POST'}),
   approveCmdbSuggestion: (id,data) => request(`/cmdb/suggestions/${id}/approve`,{method:'POST',body:JSON.stringify(data)}),
   ignoreCmdbSuggestion: id => request(`/cmdb/suggestions/${id}/ignore`,{method:'POST'}),
+  getCmdbLifecycleAlerts: (status='active') => request(`/cmdb/lifecycle-alerts?status=${status}`),
+  scanCmdbLifecycle: () => request('/cmdb/lifecycle-alerts/scan',{method:'POST'}),
   getAuditLogs: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/audit${qs ? `?${qs}` : ''}`); },
   getAuditOptions: () => request('/audit/options'),
   getIncidentReport: (params = {}) => { const qs = new URLSearchParams(params).toString(); return request(`/reports/incidents${qs ? `?${qs}` : ''}`); },

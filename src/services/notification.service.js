@@ -60,6 +60,15 @@ async function recordStandalone(resourceId, event, channel, recipient, status, e
   catch(error){if(error.code==='P2002')return false;throw error;}
 }
 
+export async function notifyCmdbLifecycleAlert(alert,io=null){
+  const cfg=await getNotificationConfig(),event=`cmdb_${alert.type}_${alert.stage}`,text=[alert.severity==='critical'?'🚨 CMDB — ciclo de vida':'⚠️ CMDB — ciclo de vida',alert.title,alert.message,cfg.baseUrl?`Revisar: ${cfg.baseUrl}/cmdb`:null].filter(Boolean).join('\n'),meta={title:alert.title,message:text,priority:alert.severity,resourceType:'cmdb_lifecycle_alert',resourceId:alert.id},results=[];
+  if(await recordStandalone(`cmdb-alert:${alert.id}`,event,'panel',null,'sent',null,meta)){io?.emit('cmdb:notification',{alertId:alert.id,event,message:text});results.push({channel:'panel',status:'sent'});}
+  if(!cfg.enabled||!['high','critical'].includes(alert.severity))return results;
+  const channels=alert.severity==='critical'?cfg.criticalChannels:cfg.highChannels;
+  for(const channel of [...new Set(channels)])for(const recipient of channel==='telegram'?cfg.telegramChats:[null]){const key=`cmdb-alert:${alert.id}:${event}:${channel}:${recipient||'default'}`;if(await prisma.notificationLog.findUnique({where:{dedupKey:key}}))continue;try{if(channel==='telegram')await sendTelegramMessage(recipient,text,cfg.telegramToken);else if(channel==='whatsapp'){const sent=await sendToAdmin(text);if(!sent)throw new Error('WhatsApp Admin não configurado');}else continue;await recordStandalone(`cmdb-alert:${alert.id}`,event,channel,recipient,'sent',null,meta);results.push({channel,status:'sent'});}catch(error){await recordStandalone(`cmdb-alert:${alert.id}`,event,channel,recipient,'failed',error.message,meta);results.push({channel,status:'failed'});}}
+  return results;
+}
+
 export async function notifyTask(task, event, { message = '', io = null, channelsOverride = null, recipientsOverride = null, whatsappRecipientsOverride = null } = {}) {
   const cfg = await getNotificationConfig();
   const text = format(task, event, message, cfg.baseUrl);

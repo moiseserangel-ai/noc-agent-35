@@ -8,6 +8,7 @@ import { assessCmdbAsset } from '../src/services/cmdb-governance.service.js';
 import { buildOperationalContext } from '../src/services/cmdb-operational-context.service.js';
 import { topologySuggestionCandidate } from '../src/services/cmdb-discovery.service.js';
 import { diffCmdbValues } from '../src/services/cmdb-history.service.js';
+import { evaluateLifecycleAsset } from '../src/services/cmdb-lifecycle.service.js';
 
 test('catálogo CMDB cobre ativos, ciclo de vida e criticidade', () => {
   assert.ok(CMDB_CATEGORIES.includes('network'));
@@ -125,4 +126,15 @@ test('histórico registra somente diferenças reais e normaliza datas',()=>{
 test('schema mantém histórico vinculado ao ciclo de vida do ativo',()=>{
   const schema=fs.readFileSync(new URL('../prisma/schema.prisma',import.meta.url),'utf8');
   assert.match(schema,/model CmdbHistory/);assert.match(schema,/asset\s+CmdbAsset.+onDelete: Cascade/);
+});
+
+test('ciclo de vida classifica vencimentos nos marcos 90, 30, 7 e expirado',()=>{
+  const now=new Date('2026-08-01T12:00:00Z'),base={id:'a',name:'Router',assetTag:'AT-1',status:'active',criticality:'high',owner:'NOC',deviceId:null,_count:{relationshipsFrom:1,relationshipsTo:0}};
+  const alerts=evaluateLifecycleAsset({...base,warrantyUntil:new Date('2026-08-06T12:00:00Z'),supportUntil:new Date('2026-07-01T12:00:00Z'),licenseUntil:new Date('2026-10-15T12:00:00Z')},now);
+  assert.equal(alerts.find(item=>item.type==='warranty').stage,'7d');assert.equal(alerts.find(item=>item.type==='support').stage,'expired');assert.equal(alerts.find(item=>item.type==='license').stage,'90d');
+});
+
+test('ciclo de vida sinaliza inventário e dependência ausentes',()=>{
+  const asset={name:'Core',assetTag:'AT-2',status:'active',criticality:'critical',owner:null,deviceId:'d1',lastInventoryAt:null,lastInventoryStatus:null,_count:{relationshipsFrom:0,relationshipsTo:0},updatedAt:new Date()};
+  const types=evaluateLifecycleAsset(asset).map(item=>item.type);assert.ok(types.includes('inventory'));assert.ok(types.includes('owner'));assert.ok(types.includes('dependency'));
 });

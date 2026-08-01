@@ -1,6 +1,6 @@
 import prisma from '../database/client.js';
 
-export const CMDB_TRACKED_FIELDS=['assetTag','name','category','status','criticality','tenantId','siteId','deviceId','manufacturer','model','serialNumber','hostname','managementIp','location','rack','rackUnit','purchaseDate','warrantyUntil','supportUntil','cost','currency','owner','contact','tags','notes'];
+export const CMDB_TRACKED_FIELDS=['assetTag','name','category','status','criticality','tenantId','siteId','deviceId','manufacturer','model','serialNumber','hostname','managementIp','location','rack','rackUnit','purchaseDate','warrantyUntil','supportUntil','licenseUntil','cost','currency','owner','contact','tags','notes'];
 const value=input=>input instanceof Date?input.toISOString():input===undefined?null:input;
 
 export function diffCmdbValues(before={},after={},fields=CMDB_TRACKED_FIELDS){

@@ -7,6 +7,7 @@ import { cmdbImpact, validateCmdbRelationship } from '../services/cmdb-relations
 import { cmdbGovernance } from '../services/cmdb-governance.service.js';
 import { approveCmdbSuggestion, ignoreCmdbSuggestion, listCmdbSuggestions, refreshCmdbSuggestions } from '../services/cmdb-discovery.service.js';
 import { diffCmdbValues, listCmdbHistory, recordCmdbHistory } from '../services/cmdb-history.service.js';
+import { listCmdbLifecycleAlerts, runCmdbLifecycleMonitor } from '../services/cmdb-lifecycle.service.js';
 
 const router = Router();
 const actor = req => String(req.user?.name || req.user?.username || 'Administrador').slice(0, 100);
@@ -14,6 +15,8 @@ const actor = req => String(req.user?.name || req.user?.username || 'Administrad
 router.get('/summary', async (req,res,next) => { try { res.json({ success:true, data:await cmdbSummary(req.query.tenantId || null) }); } catch(error) { next(error); } });
 router.get('/governance', async (req,res,next) => { try { res.json({ success:true, data:await cmdbGovernance(req.query.tenantId || null) }); } catch(error) { next(error); } });
 router.get('/suggestions',async(_req,res,next)=>{try{res.json({success:true,data:await listCmdbSuggestions()});}catch(error){next(error);}});
+router.get('/lifecycle-alerts',async(req,res,next)=>{try{res.json({success:true,data:await listCmdbLifecycleAlerts(req.query.status)});}catch(error){next(error);}});
+router.post('/lifecycle-alerts/scan',async(req,res,next)=>{try{const result=await runCmdbLifecycleMonitor(req.app.get('io'));await logAudit({...requestIdentity(req),action:'scan',resource:'cmdb_lifecycle',status:'success',details:result});res.json({success:true,data:result,message:`Verificação concluída: ${result.active} alerta(s) ativo(s)`});}catch(error){next(error);}});
 router.post('/suggestions/refresh',async(req,res,next)=>{try{const result=await refreshCmdbSuggestions();await logAudit({...requestIdentity(req),action:'discover',resource:'cmdb_relationship_suggestion',status:'success',details:result});res.json({success:true,data:result,message:`${result.created} nova(s) sugestão(ões) encontrada(s)`});}catch(error){next(error);}});
 router.post('/suggestions/:id/approve',async(req,res,next)=>{try{const row=await approveCmdbSuggestion(req.params.id,req.body,actor(req));await logAudit({...requestIdentity(req),action:'approve',resource:'cmdb_relationship_suggestion',resourceId:req.params.id,status:'success',details:{relationshipId:row.id,type:row.type}});res.json({success:true,data:row,message:'Relacionamento aprovado e adicionado ao CMDB'});}catch(error){if(error.code==='P2002')return res.status(409).json({success:false,error:'Este relacionamento já existe no CMDB'});next(error);}});
 router.post('/suggestions/:id/ignore',async(req,res,next)=>{try{await ignoreCmdbSuggestion(req.params.id,actor(req));await logAudit({...requestIdentity(req),action:'ignore',resource:'cmdb_relationship_suggestion',resourceId:req.params.id,status:'success'});res.json({success:true,message:'Sugestão ignorada'});}catch(error){next(error);}});

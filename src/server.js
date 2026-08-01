@@ -52,6 +52,7 @@ import { resumeInterruptedBatches } from './services/runbook-batch.service.js';
 import { syncStatusServices } from './services/status-page.service.js';
 import { runMonthlyReportScheduler } from './services/monthly-report.service.js';
 import { runCmdbInventoryScheduler } from './services/cmdb-inventory.service.js';
+import { runCmdbLifecycleMonitor } from './services/cmdb-lifecycle.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -422,6 +423,9 @@ runMonthlyReportScheduler().catch(err => logger.error(`Initial monthly report sc
 const cmdbInventoryMonitor=setInterval(()=>runCmdbInventoryScheduler().catch(err=>logger.error(`CMDB inventory scheduler error: ${err.message}`)),60_000);
 cmdbInventoryMonitor.unref();
 runCmdbInventoryScheduler().catch(err=>logger.error(`Initial CMDB inventory scheduler error: ${err.message}`));
+const cmdbLifecycleMonitor=setInterval(()=>runCmdbLifecycleMonitor(io).catch(err=>logger.error(`CMDB lifecycle monitor error: ${err.message}`)),60*60_000);
+cmdbLifecycleMonitor.unref();
+runCmdbLifecycleMonitor(io).catch(err=>logger.error(`Initial CMDB lifecycle monitor error: ${err.message}`));
 
 const statusPageMonitor=setInterval(()=>syncStatusServices().catch(err=>logger.error(`Status Page sync error: ${err.message}`)),60_000);
 statusPageMonitor.unref();

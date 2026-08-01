@@ -315,6 +315,7 @@ model CmdbAsset {
   purchaseDate   DateTime?
   warrantyUntil  DateTime?
   supportUntil   DateTime?
+  licenseUntil   DateTime?
   cost           Float?
   currency       String      @default("BRL")
   owner          String?
@@ -336,6 +337,7 @@ model CmdbAsset {
   suggestionsFrom   CmdbRelationshipSuggestion[] @relation("CmdbSuggestionSource")
   suggestionsTo     CmdbRelationshipSuggestion[] @relation("CmdbSuggestionTarget")
   history           CmdbHistory[]
+  lifecycleAlerts   CmdbLifecycleAlert[]
 
   @@index([tenantId, status])
   @@index([siteId, category])
@@ -399,6 +401,27 @@ model CmdbHistory {
 
   @@index([assetId, createdAt])
   @@index([eventType, createdAt])
+}
+
+model CmdbLifecycleAlert {
+  id                String    @id @default(uuid())
+  assetId           String
+  asset             CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  type              String
+  stage             String
+  severity          String
+  status            String    @default("active")
+  title             String
+  message           String
+  notificationStage String?
+  openedAt          DateTime  @default(now())
+  lastSeenAt        DateTime  @default(now())
+  resolvedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([assetId, type])
+  @@index([status, severity, updatedAt])
 }
 
 model CmdbInventoryPolicy {

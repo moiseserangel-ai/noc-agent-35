@@ -33,7 +33,7 @@ export async function normalizeCmdbAsset(input, actor, current = null) {
     name, category, status, criticality, tenantId, siteId, deviceId: device?.id || null,
     manufacturer: text(merged.manufacturer || device?.manufacturer, 100), model: text(merged.model || device?.model, 120), serialNumber: text(merged.serialNumber, 120),
     hostname: text(merged.hostname || device?.hostname, 255), managementIp: text(merged.managementIp, 255), location: text(merged.location, 180), rack: text(merged.rack, 60), rackUnit: text(merged.rackUnit, 30),
-    purchaseDate: date(merged.purchaseDate), warrantyUntil: date(merged.warrantyUntil), supportUntil: date(merged.supportUntil), cost, currency: text(merged.currency, 3)?.toUpperCase() || 'BRL',
+    purchaseDate: date(merged.purchaseDate), warrantyUntil: date(merged.warrantyUntil), supportUntil: date(merged.supportUntil), licenseUntil: date(merged.licenseUntil), cost, currency: text(merged.currency, 3)?.toUpperCase() || 'BRL',
     owner: text(merged.owner, 120), contact: text(merged.contact, 180), tags: text(merged.tags, 500), notes: text(merged.notes, 3000), updatedBy: actor,
   };
 }
@@ -57,7 +57,7 @@ export async function cmdbSummary(tenantId = null) {
   const [total, active, maintenance, critical, linked, expiring] = await Promise.all([
     prisma.cmdbAsset.count({ where: scope }), prisma.cmdbAsset.count({ where: { ...scope, status: 'active' } }), prisma.cmdbAsset.count({ where: { ...scope, status: 'maintenance' } }),
     prisma.cmdbAsset.count({ where: { ...scope, criticality: 'critical', status: { notIn: ['retired','disposed'] } } }), prisma.cmdbAsset.count({ where: { ...scope, deviceId: { not: null } } }),
-    prisma.cmdbAsset.count({ where: { ...scope, status: { notIn: ['retired','disposed'] }, OR: [{ warrantyUntil: { gte: new Date(), lte: new Date(Date.now() + 90 * 86400000) } }, { supportUntil: { gte: new Date(), lte: new Date(Date.now() + 90 * 86400000) } }] } }),
+    prisma.cmdbAsset.count({ where: { ...scope, status: { notIn: ['retired','disposed'] }, OR: [{ warrantyUntil: { gte: new Date(), lte: new Date(Date.now() + 90 * 86400000) } }, { supportUntil: { gte: new Date(), lte: new Date(Date.now() + 90 * 86400000) } },{ licenseUntil: { gte: new Date(), lte: new Date(Date.now() + 90 * 86400000) } }] } }),
   ]);
   return { total, active, maintenance, critical, linked, expiring };
 }
