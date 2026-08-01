@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, Eye, Play, Plus, RefreshCw, RotateCcw, Send, ShieldCheck, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, Eye, GitBranch, Play, Plus, RefreshCw, RotateCcw, Send, ShieldCheck, X, XCircle } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useToast } from '../App.jsx';
 
@@ -17,6 +17,7 @@ export default function Changes({isAdmin=false}){
   const [busy,setBusy]=useState(null);
   const [form,setForm]=useState(null);
   const [detail,setDetail]=useState(null);
+  const [cmdbContext,setCmdbContext]=useState(null);
   const toast=useToast();
 
   const load=async()=>{
@@ -28,7 +29,7 @@ export default function Changes({isAdmin=false}){
     finally{setLoading(false);}
   };
   useEffect(()=>{load();},[filter]);
-  const openDetail=async id=>{try{setDetail((await api.getChange(id)).data);}catch(error){toast(error.message,'error');}};
+  const openDetail=async id=>{try{const[change,context]=await Promise.all([api.getChange(id),api.getChangeCmdbImpact(id)]);setDetail(change.data);setCmdbContext(context.data);}catch(error){toast(error.message,'error');}};
   const save=async()=>{
     setBusy('save');
     try{const result=await api.createChange(form);toast(result.message,'success');setForm(null);await load();await openDetail(result.data.id);}
@@ -76,10 +77,11 @@ export default function Changes({isAdmin=false}){
       <div className="form-group"><label className="form-label">Responsável</label><input className="form-input" value={form.assignedTo} onChange={e=>setForm({...form,assignedTo:e.target.value})}/></div>
     </div><div className="modal-footer"><button className="btn btn-secondary" onClick={()=>setForm(null)}>Cancelar</button><button className="btn btn-primary" disabled={busy==='save'} onClick={save}>{busy==='save'?<span className="spinner"/>:<Plus size={15}/>} Criar RFC</button></div></div></div>}
 
-    {detail&&<div className="modal-overlay" onClick={()=>setDetail(null)}><div className="modal change-detail-modal" onClick={e=>e.stopPropagation()}><div className="modal-header"><div><h3>RFC-{String(detail.number).padStart(5,'0')} · {detail.title}</h3><p>{typeLabel[detail.changeType]} · solicitada por {detail.requestedBy}</p></div><button className="btn btn-ghost" onClick={()=>setDetail(null)}><X size={18}/></button></div>
+    {detail&&<div className="modal-overlay" onClick={()=>{setDetail(null);setCmdbContext(null);}}><div className="modal change-detail-modal" onClick={e=>e.stopPropagation()}><div className="modal-header"><div><h3>RFC-{String(detail.number).padStart(5,'0')} · {detail.title}</h3><p>{typeLabel[detail.changeType]} · solicitada por {detail.requestedBy}</p></div><button className="btn btn-ghost" onClick={()=>{setDetail(null);setCmdbContext(null);}}><X size={18}/></button></div>
       <div className="change-detail-head"><div className={`change-risk-panel risk-${detail.riskLevel}`}><strong>{riskLabel[detail.riskLevel]}</strong><span>Risco calculado {detail.riskScore}/100</span></div><div><span className={`status-badge change-status-${detail.status}`}>{statusLabel[detail.status]}</span><small>Janela: {detail.changeType==='emergency'?'emergencial':`${fmt(detail.windowStart)} — ${fmt(detail.windowEnd)}`}</small></div></div>
       <div className="change-detail-grid">{[['Objetivo',detail.description],['Motivo',detail.reason],['Impacto',detail.impact],['Plano de execução',detail.executionPlan],['Plano de validação',detail.validationPlan],['Plano de rollback',detail.rollbackPlan]].map(([label,value])=><section key={label}><h4>{label}</h4><pre>{value}</pre></section>)}</div>
       <h4 className="change-section-title">Equipamentos e evidências</h4><div className="change-device-results">{detail.devices.map(item=><div key={item.id}><div><strong>{item.device.name}</strong><span>{item.device.hostname} · {item.device.type}</span></div><small>Antes: {item.beforeBackupId?'capturado':'pendente'} · Depois: {item.afterBackupId?'capturado':'pendente'} · Compliance: {item.validationStatus||'pendente'}</small>{item.validationDetail&&<p>{item.validationDetail}</p>}</div>)}</div>
+      <h4 className="change-section-title"><GitBranch size={16}/> Impacto CMDB</h4><div className="change-cmdb-impact"><div className="change-cmdb-numbers"><span><strong>{cmdbContext?.summary?.mapped||0}</strong> ativos mapeados</span><span><strong>{cmdbContext?.summary?.impacted||0}</strong> dependentes afetados</span><span><strong>{cmdbContext?.summary?.critical||0}</strong> impactos críticos</span></div>{cmdbContext?.impacted?.map(item=><div className="change-cmdb-item" key={item.asset.id}><span>Nível {item.depth}</span><div><strong>{item.asset.assetTag} · {item.asset.name}</strong><small>Dependência de {item.rootAssetName} · criticidade {item.asset.criticality}</small></div></div>)}{!cmdbContext?.summary?.impacted&&<small className="knowledge-muted">Nenhum impacto adicional encontrado nas dependências cadastradas.</small>}{Boolean(cmdbContext?.unmappedDeviceIds?.length)&&<small className="change-cmdb-warning">{cmdbContext.unmappedDeviceIds.length} equipamento(s) ainda não possui(em) ativo correspondente no CMDB.</small>}</div>
       {detail.validationSummary&&<div className={`change-validation-summary ${detail.status==='completed'?'success':'danger'}`}><strong>Resultado da validação</strong><pre>{detail.validationSummary}</pre></div>}
       <h4 className="change-section-title">Linha do tempo</h4><div className="change-timeline">{detail.events.map(event=><div key={event.id}><i/><div><strong>{event.action.replaceAll('_',' ')}</strong><span>{event.actor} · {fmt(event.createdAt)}</span></div></div>)}</div>
       <div className="modal-footer change-actions">

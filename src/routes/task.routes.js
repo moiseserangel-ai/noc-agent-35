@@ -9,6 +9,7 @@ import { logAudit } from '../services/audit.service.js';
 import { runComplianceScan } from '../services/compliance.service.js';
 import { recommendRunbooksForTask } from '../services/incident-runbook.service.js';
 import { createSimulation, executeRunbook, publicExecution, renderRunbook, runbookInputHash } from '../services/runbook.service.js';
+import { cmdbOperationalContext } from '../services/cmdb-operational-context.service.js';
 
 const router = Router();
 const specialistAgents = createSpecialistAgents();
@@ -209,6 +210,8 @@ router.get('/:id/runbooks',async(req,res,next)=>{
     res.json({success:true,data:{suggestions,executions:executions.map(publicExecution)}});
   }catch(error){next(error);}
 });
+
+router.get('/:id/cmdb-impact',async(req,res,next)=>{try{const task=await taskService.getTaskById(req.params.id);if(!task)return res.status(404).json({success:false,error:'Task não encontrada'});res.json({success:true,data:await cmdbOperationalContext(task.deviceId?[task.deviceId]:[])});}catch(error){next(error);}});
 
 router.post('/:id/runbooks/:runbookId/simulate',async(req,res,next)=>{
   try{

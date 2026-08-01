@@ -17,3 +17,10 @@ test('valida janela de manutenção e rejeita ordem inválida',()=>{
   assert.equal(window.start.getTime(),start.getTime());
   assert.throws(()=>validateChangeWindow(end,start),/posterior/);
 });
+
+test('impacto crítico do CMDB aumenta o risco da mudança',()=>{
+  const input={changeType:'standard',impact:'Ajuste controlado',executionPlan:'Alteração local planejada',rollbackPlan:'Restaurar toda a configuração anterior',windowStart:new Date(),windowEnd:new Date(Date.now()+3600000)};
+  const base=calculateChangeRisk(input,1);
+  const mapped=calculateChangeRisk(input,1,{impacted:4,critical:2});
+  assert.ok(mapped.score>base.score);assert.ok(['high','critical'].includes(mapped.level));
+});

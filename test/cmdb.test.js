@@ -5,6 +5,7 @@ import { CMDB_CATEGORIES, CMDB_CRITICALITIES, CMDB_STATUSES, normalizeCmdbAsset 
 import { nextInventoryAt, parseInventoryOutput } from '../src/services/cmdb-inventory.service.js';
 import { calculateImpact, CMDB_RELATIONSHIP_TYPES, relationshipImpactEdges } from '../src/services/cmdb-relationship.service.js';
 import { assessCmdbAsset } from '../src/services/cmdb-governance.service.js';
+import { buildOperationalContext } from '../src/services/cmdb-operational-context.service.js';
 
 test('catálogo CMDB cobre ativos, ciclo de vida e criticidade', () => {
   assert.ok(CMDB_CATEGORIES.includes('network'));
@@ -92,4 +93,12 @@ test('governança reconhece ativo completo e atualizado',()=>{
   const now=new Date('2026-08-01T12:00:00Z');
   const result=assessCmdbAsset({status:'active',criticality:'high',deviceId:'device-1',lastInventoryAt:new Date('2026-07-30T12:00:00Z'),lastInventoryStatus:'success',serialNumber:'ABC',managementIp:'10.0.0.1',manufacturer:'Cisco',model:'C8300',owner:'NOC',location:'POP',_count:{relationshipsFrom:1,relationshipsTo:0}},now);
   assert.equal(result.score,100);assert.equal(result.grade,'excellent');assert.equal(result.issues.length,0);
+});
+
+test('contexto operacional relaciona equipamento e elimina impactos duplicados',()=>{
+  const assets=[{id:'core',deviceId:'d1',name:'Core',criticality:'critical'},{id:'app',deviceId:null,name:'Aplicação',criticality:'high'},{id:'client',deviceId:null,name:'Cliente',criticality:'medium'}];
+  const relationships=[{id:'r1',sourceAssetId:'app',targetAssetId:'core',type:'depends_on',critical:true},{id:'r2',sourceAssetId:'client',targetAssetId:'app',type:'depends_on',critical:false}];
+  const context=buildOperationalContext(['d1'],assets,relationships);
+  assert.equal(context.summary.mapped,1);assert.equal(context.summary.impacted,2);assert.equal(context.summary.critical,1);assert.equal(context.summary.maxDepth,2);
+  assert.deepEqual(context.impacted.map(item=>item.asset.id),['app','client']);
 });

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../database/client.js';
 import { calculateChangeRisk, changeInclude, createRollbackTasks, nextChangeNumber, prepareChange, recordChangeEvent, validateChangeWindow, validateExecutedChange } from '../services/change-request.service.js';
 import { logAudit, requestIdentity } from '../services/audit.service.js';
+import { cmdbOperationalContext } from '../services/cmdb-operational-context.service.js';
 
 const router = Router();
 const actor = req => req.user?.name || req.user?.username || 'Sistema';
@@ -27,6 +28,8 @@ router.get('/:id',async(req,res,next)=>{
   }catch(error){next(error);}
 });
 
+router.get('/:id/cmdb-impact',async(req,res,next)=>{try{const row=await prisma.changeRequest.findUnique({where:{id:req.params.id},select:{devices:{select:{deviceId:true}}}});if(!row)return res.status(404).json({success:false,error:'Mudança não encontrada'});res.json({success:true,data:await cmdbOperationalContext(row.devices.map(item=>item.deviceId))});}catch(error){next(error);}});
+
 router.post('/',async(req,res,next)=>{
   try{
     const deviceIds=[...new Set((Array.isArray(req.body.deviceIds)?req.body.deviceIds:[]).map(String))];
@@ -42,7 +45,7 @@ router.post('/',async(req,res,next)=>{
     if(input.title.length<5||input.description.length<10||input.reason.length<10||input.impact.length<10||input.executionPlan.length<20||input.validationPlan.length<15||input.rollbackPlan.length<20)return res.status(400).json({success:false,error:'Preencha objetivo, motivo, impacto e os planos com detalhes suficientes'});
     const window=validateChangeWindow(input.windowStart,input.windowEnd);
     if(input.changeType!=='emergency'&&!window.start)return res.status(400).json({success:false,error:'Mudanças normais e padrão exigem janela de manutenção'});
-    const risk=calculateChangeRisk(input,devices.length);
+    const cmdbContext=await cmdbOperationalContext(deviceIds),risk=calculateChangeRisk(input,devices.length,cmdbContext.summary);
     const task=req.body.taskId?await prisma.task.findUnique({where:{id:String(req.body.taskId)}}):null;
     const row=await prisma.changeRequest.create({data:{
       number:await nextChangeNumber(),title:input.title,description:input.description,reason:input.reason,changeType:input.changeType,
@@ -50,8 +53,8 @@ router.post('/',async(req,res,next)=>{
       rollbackPlan:input.rollbackPlan,windowStart:window.start,windowEnd:window.end,requestedBy:actor(req),assignedTo:clean(req.body.assignedTo,100)||null,
       taskId:task?.id||null,devices:{create:devices.map(device=>({deviceId:device.id}))},
     },include:changeInclude});
-    await recordChangeEvent(row.id,'created',actor(req),{risk,deviceIds});
-    await logAudit({...requestIdentity(req),action:'create',resource:'change_request',resourceId:row.id,status:'success',details:{number:row.number,risk,deviceIds}});
+    await recordChangeEvent(row.id,'created',actor(req),{risk,deviceIds,cmdbImpact:cmdbContext.summary});
+    await logAudit({...requestIdentity(req),action:'create',resource:'change_request',resourceId:row.id,status:'success',details:{number:row.number,risk,deviceIds,cmdbImpact:cmdbContext.summary}});
     res.status(201).json({success:true,data:row,message:`RFC-${String(row.number).padStart(5,'0')} criada`});
   }catch(error){next(error);}
 });
@@ -66,9 +69,9 @@ router.put('/:id',async(req,res,next)=>{
     if(req.body.changeType!==undefined)data.changeType=allowedTypes.includes(req.body.changeType)?req.body.changeType:current.changeType;
     const window=validateChangeWindow(req.body.windowStart??current.windowStart,req.body.windowEnd??current.windowEnd);
     data.windowStart=window.start;data.windowEnd=window.end;
-    const risk=calculateChangeRisk({...current,...data},current.devices.length);Object.assign(data,{riskScore:risk.score,riskLevel:risk.level,status:'draft',rejectedBy:null,rejectedAt:null,rejectionReason:null});
+    const cmdbContext=await cmdbOperationalContext(current.devices.map(item=>item.deviceId)),risk=calculateChangeRisk({...current,...data},current.devices.length,cmdbContext.summary);Object.assign(data,{riskScore:risk.score,riskLevel:risk.level,status:'draft',rejectedBy:null,rejectedAt:null,rejectionReason:null});
     const row=await prisma.changeRequest.update({where:{id:current.id},data,include:changeInclude});
-    await recordChangeEvent(row.id,'updated',actor(req),{risk});
+    await recordChangeEvent(row.id,'updated',actor(req),{risk,cmdbImpact:cmdbContext.summary});
     await logAudit({...requestIdentity(req),action:'update',resource:'change_request',resourceId:row.id,status:'success',details:{number:row.number,risk}});
     res.json({success:true,data:row});
   }catch(error){next(error);}

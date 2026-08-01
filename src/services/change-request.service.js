@@ -6,7 +6,7 @@ import { remediationNeedsPlanning } from './compliance.service.js';
 
 export const CHANGE_STATUSES = ['draft','awaiting_approval','approved','in_progress','validating','completed','failed_validation','rollback_requested','rolled_back','rejected','cancelled'];
 
-export function calculateChangeRisk(input, deviceCount = 1) {
+export function calculateChangeRisk(input, deviceCount = 1, cmdbImpact = null) {
   let score = 0;
   if (input.changeType === 'emergency') score += 30;
   else if (input.changeType === 'normal') score += 15;
@@ -16,6 +16,9 @@ export function calculateChangeRisk(input, deviceCount = 1) {
   if (/indispon|interrup|downtime|queda|reinici|reboot/.test(text)) score += 20;
   if (!input.windowStart || !input.windowEnd) score += 10;
   if (String(input.rollbackPlan || '').trim().length < 30) score += 15;
+  if (cmdbImpact?.critical) score += Math.min(20,cmdbImpact.critical*8);
+  if (cmdbImpact?.impacted) score += Math.min(15,cmdbImpact.impacted*3);
+  if (cmdbImpact?.critical) score = Math.max(score,45);
   score = Math.min(score, 100);
   return { score, level:score >= 70 ? 'critical' : score >= 45 ? 'high' : score >= 20 ? 'medium' : 'low' };
 }

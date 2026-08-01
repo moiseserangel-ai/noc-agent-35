@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle, Workflow, Eye } from 'lucide-react';
+import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle, Workflow, Eye, GitBranch } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -31,6 +31,7 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
   const [processing, setProcessing] = useState(null);
   const [workflowForms, setWorkflowForms] = useState({});
   const [taskRunbooks,setTaskRunbooks]=useState({});
+  const [cmdbContexts,setCmdbContexts]=useState({});
   const toast = useToast();
 
   useEffect(() => { api.getDevices().then(r => setDevices(r.data)).catch(() => {}); }, []);
@@ -63,8 +64,9 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
     setExpanded(expanded === id ? null : id);
     if (expanded === id) return;
     try {
-      const r = await api.getTask(id);
+      const [r,context] = await Promise.all([api.getTask(id),api.getTaskCmdbImpact(id)]);
       setTasks(items => items.map(item => item.id === id ? r.data : item));
+      setCmdbContexts(items=>({...items,[id]:context.data}));
       setWorkflowForms(forms => ({ ...forms, [id]: { assignedTo: r.data.assignedTo || '', dueAt: r.data.dueAt ? new Date(r.data.dueAt).toISOString().slice(0, 16) : '', note: '' } }));
       if(r.data.deviceId&&r.data.workType==='incident')loadRunbooks(r.data);
     } catch (e) { toast(e.message, 'error'); }
@@ -191,6 +193,7 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>DURAÇÃO</div><strong>{formatDuration(t.durationSeconds)}</strong></div>
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>RESOLVIDO EM</div><strong>{t.resolvedAt ? new Date(t.resolvedAt).toLocaleString('pt-BR') : '—'}</strong></div>
                 </div>}
+                {t.deviceId&&<div className="task-cmdb-context"><div className="task-cmdb-title"><GitBranch size={16}/><strong>Contexto CMDB e impacto</strong></div><div className="task-cmdb-summary"><span><strong>{cmdbContexts[t.id]?.summary?.mapped||0}</strong> ativo relacionado</span><span><strong>{cmdbContexts[t.id]?.summary?.impacted||0}</strong> dependentes</span><span><strong>{cmdbContexts[t.id]?.summary?.critical||0}</strong> críticos</span></div>{cmdbContexts[t.id]?.roots?.map(asset=><div className="task-cmdb-root" key={asset.id}><strong>{asset.assetTag} · {asset.name}</strong><small>{asset.manufacturer} {asset.model} · criticidade {asset.criticality}</small></div>)}{cmdbContexts[t.id]?.impacted?.map(item=><div className="task-cmdb-dependent" key={item.asset.id}><span>Nível {item.depth}</span><div><strong>{item.asset.assetTag} · {item.asset.name}</strong><small>Pode ser afetado por este incidente</small></div></div>)}{Boolean(cmdbContexts[t.id]?.unmappedDeviceIds?.length)&&<small className="change-cmdb-warning">Este equipamento ainda não está vinculado a um ativo do CMDB.</small>}</div>}
                 <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>MENSAGEM</div>
                   <pre style={{ fontSize: '0.8rem', whiteSpace: 'pre-wrap', background: 'var(--bg-primary)', padding: 12, borderRadius: 8 }}>{t.originalMessage}</pre>
