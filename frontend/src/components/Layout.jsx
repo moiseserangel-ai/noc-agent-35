@@ -33,6 +33,7 @@ const NAV_ITEMS = [
   { path: '/backups', label: 'Backup e restauração', icon: DatabaseBackup, roles: ['admin'] },
   { path: '/device-backups', label: 'Backup de equipamentos', icon: ArchiveRestore, roles: ['admin'] },
   { path: '/compliance', label: 'Compliance', icon: ClipboardCheck, roles: ['admin'] },
+  { path: '/vulnerabilities', label: 'Vulnerabilidades', icon: Shield, roles: ['admin'] },
   { path: '/changes', label: 'Mudanças', icon: ClipboardList, roles: ['admin','operator'] },
   { path: '/security', label: 'Minha segurança', icon: Shield },
 ];

@@ -276,6 +276,8 @@ model Device {
   backupPolicy             DeviceBackupPolicy?
   configBackups            DeviceConfigBackup[]
   configDrifts             ConfigDrift[]
+  vulnerabilityFindings    VulnerabilityFinding[]
+  vulnerabilityScans       VulnerabilityScan[]
   compliancePolicy         CompliancePolicy?
   complianceScans          ComplianceScan[]
   complianceExceptions     ComplianceException[]
@@ -815,6 +817,53 @@ model ConfigDrift {
   @@index([status, detectedAt])
   @@index([deviceId, detectedAt])
   @@index([taskId])
+}
+
+model VulnerabilityScan {
+  id          String   @id @default(uuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  status      String   @default("running")
+  query       String?
+  found       Int      @default(0)
+  created     Int      @default(0)
+  updated     Int      @default(0)
+  error       String?
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([deviceId, startedAt])
+  @@index([status, startedAt])
+}
+
+model VulnerabilityFinding {
+  id             String   @id @default(uuid())
+  deviceId       String
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  cveId          String
+  status         String   @default("open") // open|acknowledged|accepted|resolved
+  severity       String
+  cvssScore      Float?
+  description    String
+  knownExploited Boolean  @default(false)
+  kevDueDate     DateTime?
+  requiredAction String?
+  publishedAt    DateTime?
+  modifiedAt     DateTime?
+  sourceUrl      String
+  matchedCpe     String?
+  taskId         String?
+  firstSeenAt    DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  resolution     String?
+  updatedAt      DateTime @updatedAt
+
+  @@unique([deviceId, cveId])
+  @@index([status, severity])
+  @@index([knownExploited, status])
+  @@index([deviceId, lastSeenAt])
 }
 
 model CompliancePolicy {
