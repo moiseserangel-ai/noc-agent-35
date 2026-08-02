@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import prisma from '../database/client.js';
 import { classifyCliCommand, executeManagedDeviceCommand } from './cli.service.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
+import { runDeviceBackup } from './device-backup.service.js';
 
 const safeJson=(value,fallback)=>{try{return JSON.parse(value);}catch{return fallback;}};
 const protectedJson=(value,fallback)=>safeJson(decrypt(value),fallback);
@@ -85,6 +86,8 @@ export function createSimulation({runbook,device,rendered,requestedBy,taskId=nul
 export async function executeRunbook({runbook,device,rendered,requestedBy,approvedBy,taskId=null,scheduleId=null,batchId=null}){
   const hash=runbookInputHash(runbook.id,device.id,rendered.variables);
   const execution=await prisma.runbookExecution.create({data:{runbookId:runbook.id,deviceId:device.id,taskId,scheduleId,batchId,mode:'execution',status:'running',inputHash:hash,variables:encrypt(JSON.stringify(rendered.variables)),renderedSteps:encrypt(JSON.stringify(rendered.steps)),requestedBy,approvedBy,startedAt:new Date()}});
+  let beforeBackup;
+  try{beforeBackup=await runDeviceBackup(device.id,{type:'pre_runbook',username:requestedBy});await prisma.runbookExecution.update({where:{id:execution.id},data:{beforeBackupId:beforeBackup.id}});}catch(error){return prisma.runbookExecution.update({where:{id:execution.id},data:{status:'blocked',completedAt:new Date(),error:`Execução bloqueada: backup anterior falhou — ${error.message}`.slice(0,2000)}});}
   const results=[];let failed=false;
   for(const step of rendered.steps){
     const startedAt=new Date();
@@ -95,18 +98,24 @@ export async function executeRunbook({runbook,device,rendered,requestedBy,approv
     results.push({stepId:step.id,name:step.name,commandType:step.commandType,success:passed,output:String(result.output||'').slice(0,20000),validation:validation?{success:validation.success,output:String(validation.output||'').slice(0,20000)}:null,startedAt,completedAt:new Date()});
     if(!passed){failed=true;if(!step.continueOnError)break;}
   }
-  return prisma.runbookExecution.update({where:{id:execution.id},data:{status:failed?'failed':'completed',results:encrypt(JSON.stringify(results)),completedAt:new Date(),error:failed?'Uma ou mais etapas falharam':null}});
+  let afterBackup;let snapshotError=null;
+  try{afterBackup=await runDeviceBackup(device.id,{type:'post_runbook',username:requestedBy});}catch(error){snapshotError=error.message;}
+  return prisma.runbookExecution.update({where:{id:execution.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?beforeBackup.sha256!==afterBackup.sha256:null,completedAt:new Date(),error:failed?'Uma ou mais etapas falharam':snapshotError?`Configuração aplicada, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
 }
 
 export async function rollbackRunbook({execution,device,requestedBy}){
   const steps=protectedJson(execution.renderedSteps,[]).filter(step=>step.rollback).reverse();
   if(!steps.length)throw Object.assign(new Error('Esta execução não possui etapas de rollback'),{statusCode:400});
   const rollback=await prisma.runbookExecution.create({data:{runbookId:execution.runbookId,deviceId:device.id,mode:'rollback',status:'running',inputHash:execution.inputHash,variables:execution.variables,renderedSteps:encrypt(JSON.stringify(steps)),requestedBy,approvedBy:requestedBy,startedAt:new Date()}});
+  let beforeBackup;
+  try{beforeBackup=await runDeviceBackup(device.id,{type:'pre_rollback',username:requestedBy});await prisma.runbookExecution.update({where:{id:rollback.id},data:{beforeBackupId:beforeBackup.id}});}catch(error){return prisma.runbookExecution.update({where:{id:rollback.id},data:{status:'blocked',completedAt:new Date(),error:`Rollback bloqueado: backup anterior falhou — ${error.message}`.slice(0,2000)}});}
   const results=[];let failed=false;
   for(const step of steps){
     const result=await executeManagedDeviceCommand({device,command:step.rollback,changeComment:`Rollback do runbook: ${step.name}`,approved:true,agentName:'runbook:rollback'});
     results.push({stepId:step.id,name:step.name,success:result.success,output:String(result.output||'').slice(0,20000)});
     if(!result.success){failed=true;break;}
   }
-  return prisma.runbookExecution.update({where:{id:rollback.id},data:{status:failed?'failed':'completed',results:encrypt(JSON.stringify(results)),completedAt:new Date(),error:failed?'Rollback falhou':null}});
+  let afterBackup;let snapshotError=null;
+  try{afterBackup=await runDeviceBackup(device.id,{type:'post_rollback',username:requestedBy});}catch(error){snapshotError=error.message;}
+  return prisma.runbookExecution.update({where:{id:rollback.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?beforeBackup.sha256!==afterBackup.sha256:null,completedAt:new Date(),error:failed?'Rollback falhou':snapshotError?`Rollback aplicado, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
 }

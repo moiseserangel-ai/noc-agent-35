@@ -638,6 +638,11 @@ model RunbookExecution {
   results       String    @default("[]") // JSON
   requestedBy   String
   approvedBy    String?
+  beforeBackupId String?
+  beforeBackup   DeviceConfigBackup? @relation("RunbookBeforeBackup", fields: [beforeBackupId], references: [id], onDelete: SetNull)
+  afterBackupId  String?
+  afterBackup    DeviceConfigBackup? @relation("RunbookAfterBackup", fields: [afterBackupId], references: [id], onDelete: SetNull)
+  configurationChanged Boolean?
   error         String?
   startedAt     DateTime?
   completedAt   DateTime?
@@ -648,6 +653,8 @@ model RunbookExecution {
   @@index([taskId, createdAt])
   @@index([scheduleId, createdAt])
   @@index([batchId, createdAt])
+  @@index([beforeBackupId])
+  @@index([afterBackupId])
   @@index([inputHash, mode, status])
 }
 
@@ -777,6 +784,8 @@ model DeviceConfigBackup {
   error        String?
   createdBy    String
   createdAt    DateTime @default(now())
+  runbookExecutionsBefore RunbookExecution[] @relation("RunbookBeforeBackup")
+  runbookExecutionsAfter  RunbookExecution[] @relation("RunbookAfterBackup")
 
   @@index([deviceId, createdAt])
   @@index([status, createdAt])

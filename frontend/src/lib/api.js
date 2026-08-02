@@ -188,6 +188,7 @@ export const api = {
   simulateRunbook: (id,data) => request(`/runbooks/${id}/simulate`,{method:'POST',body:JSON.stringify(data)}),
   executeRunbook: (id,data) => request(`/runbooks/${id}/execute`,{method:'POST',body:JSON.stringify({...data,confirmed:true})}),
   getRunbookExecutions: (params={}) => request(`/runbooks/executions?${new URLSearchParams(params)}`),
+  compareRunbookExecution: id => request(`/runbooks/executions/${id}/config-diff`),
   rollbackRunbook: id => request(`/runbooks/executions/${id}/rollback`,{method:'POST',body:JSON.stringify({confirmed:true})}),
   getRunbookSchedules: () => request('/runbooks/schedules'),
   createRunbookSchedule: data => request('/runbooks/schedules',{method:'POST',body:JSON.stringify(data)}),

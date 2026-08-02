@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { assessRunbookRisk, renderRunbook, runbookInputHash, validateRunbookDefinition } from '../src/services/runbook.service.js';
 import { listRunbookTemplates } from '../src/services/runbook-template.service.js';
 
@@ -54,4 +55,11 @@ test('classifica risco conforme alteração e disponibilidade de rollback',()=>{
   assert.equal(assessRunbookRisk(high),'high');
   const critical=validateRunbookDefinition({...base,steps:[{name:'Desabilitar porta',command:'configure terminal\ninterface {{interface}}\nshutdown'}]});
   assert.equal(assessRunbookRisk(critical),'critical');
+});
+
+test('execuções mantêm snapshots anterior e posterior para comparação',()=>{
+  const schema=fs.readFileSync(new URL('../prisma/schema.prisma',import.meta.url),'utf8');
+  assert.match(schema,/beforeBackup\s+DeviceConfigBackup\?/);
+  assert.match(schema,/afterBackup\s+DeviceConfigBackup\?/);
+  assert.match(schema,/configurationChanged\s+Boolean\?/);
 });

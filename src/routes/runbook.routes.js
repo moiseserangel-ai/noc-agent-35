@@ -6,6 +6,7 @@ import { getRunbookTemplate, listRunbookTemplates } from '../services/runbook-te
 import { nextScheduleRun, protectScheduleVariables, publicSchedule, validateTimezone } from '../services/runbook-schedule.service.js';
 import { createRunbookBatch, getRunbookBatch, listRunbookBatches, publicBatch, simulateRunbookBatch, startRunbookBatch } from '../services/runbook-batch.service.js';
 import { notifyRunbookEvent } from '../services/notification.service.js';
+import { compareConfigurations, decryptSnapshot } from '../services/device-backup.service.js';
 
 const router=Router();
 const actor=req=>req.user?.name||req.user?.username||'Sistema';
@@ -37,6 +38,16 @@ router.get('/',async(req,res,next)=>{try{
 router.get('/executions',async(req,res,next)=>{try{
   const rows=await prisma.runbookExecution.findMany({where:{...(req.query.runbookId&&{runbookId:String(req.query.runbookId)}),...(req.query.deviceId&&{deviceId:String(req.query.deviceId)})},include:{runbook:{select:{name:true,version:true}},device:{select:{name:true,type:true}}},orderBy:{createdAt:'desc'},take:Math.min(Number(req.query.limit)||100,300)});
   res.json({success:true,data:rows.map(publicExecution)});
+}catch(error){next(error);}});
+
+router.get('/executions/:executionId/config-diff',async(req,res,next)=>{try{
+  const execution=await prisma.runbookExecution.findUnique({where:{id:req.params.executionId},include:{beforeBackup:true,afterBackup:true,device:{select:{name:true,hostname:true}}}});
+  if(!execution)return res.status(404).json({success:false,error:'Execução não encontrada'});
+  if(!execution.beforeBackup||!execution.afterBackup)return res.status(409).json({success:false,error:'Esta execução não possui snapshots anterior e posterior'});
+  const diff=compareConfigurations(decryptSnapshot(execution.beforeBackup),decryptSnapshot(execution.afterBackup));
+  await logAudit({...requestIdentity(req),action:'compare_configuration',resource:'runbook_execution',resourceId:execution.id,details:{deviceId:execution.deviceId,beforeBackupId:execution.beforeBackupId,afterBackupId:execution.afterBackupId}});
+  const meta=row=>({id:row.id,sha256:row.sha256,size:row.size,createdAt:row.createdAt,type:row.type});
+  res.json({success:true,data:{executionId:execution.id,device:execution.device,changed:execution.configurationChanged,before:meta(execution.beforeBackup),after:meta(execution.afterBackup),diff}});
 }catch(error){next(error);}});
 
 router.get('/metrics',async(req,res,next)=>{try{
