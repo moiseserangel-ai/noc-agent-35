@@ -5,7 +5,7 @@ import { CMDB_CATEGORIES, CMDB_CRITICALITIES, CMDB_STATUSES, normalizeCmdbAsset 
 import { isUsableMikrotikInventoryOutput, nextInventoryAt, parseInventoryOutput } from '../src/services/cmdb-inventory.service.js';
 import { calculateImpact, CMDB_RELATIONSHIP_TYPES, relationshipImpactEdges } from '../src/services/cmdb-relationship.service.js';
 import { assessCmdbAsset } from '../src/services/cmdb-governance.service.js';
-import { buildOperationalContext } from '../src/services/cmdb-operational-context.service.js';
+import { buildOperationalContext, elevatedPriority, formatBusinessImpact } from '../src/services/cmdb-operational-context.service.js';
 import { topologySuggestionCandidate } from '../src/services/cmdb-discovery.service.js';
 import { diffCmdbValues } from '../src/services/cmdb-history.service.js';
 import { evaluateLifecycleAsset } from '../src/services/cmdb-lifecycle.service.js';
@@ -110,6 +110,13 @@ test('contexto operacional relaciona equipamento e elimina impactos duplicados',
   const context=buildOperationalContext(['d1'],assets,relationships);
   assert.equal(context.summary.mapped,1);assert.equal(context.summary.impacted,2);assert.equal(context.summary.critical,1);assert.equal(context.summary.maxDepth,2);
   assert.deepEqual(context.impacted.map(item=>item.asset.id),['app','client']);
+});
+
+test('serviço de negócio eleva prioridade e gera resumo para notificação',()=>{
+  const services=[{name:'Internet Corporativa',criticality:'critical',tenant:{name:'Empresa ABC'}}];
+  assert.equal(elevatedPriority('medium',services),'critical');
+  assert.equal(elevatedPriority('critical',[{criticality:'high'}]),'critical');
+  assert.match(formatBusinessImpact({services,summary:{clients:1}}),/Internet Corporativa \(critical\).*Empresa ABC/);
 });
 
 test('descoberta converte conexão de topologia em sugestão CMDB',()=>{

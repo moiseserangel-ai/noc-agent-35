@@ -2,6 +2,7 @@ import prisma from '../database/client.js';
 import logger from '../utils/logger.js';
 import { buildSlaFields } from './sla.service.js';
 import { inferWorkType } from './work-type.service.js';
+import { cmdbOperationalContext, elevatedPriority } from './cmdb-operational-context.service.js';
 
 export async function createTask({ source, originalMessage, deviceId, priority, workType, incident = {} }) {
   const lastTask = await prisma.task.findFirst({ orderBy: { taskNumber: 'desc' } });
@@ -9,7 +10,9 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
 
   const openedAt = incident.incidentOpenedAt || new Date();
   const scopedDevice=deviceId?await prisma.device.findUnique({where:{id:deviceId},select:{tenantId:true}}):null;
-  const sla = await buildSlaFields(priority || 'medium', openedAt,scopedDevice?.tenantId);
+  const businessContext=deviceId?await cmdbOperationalContext([deviceId]):null;
+  const effectivePriority=elevatedPriority(priority||'medium',businessContext?.services||[]);
+  const sla = await buildSlaFields(effectivePriority, openedAt,scopedDevice?.tenantId);
   const task = await prisma.task.create({
     data: {
       taskNumber,
@@ -18,7 +21,7 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
       originalMessage,
       deviceId: deviceId || null,
       tenantId:scopedDevice?.tenantId||null,
-      priority: priority || 'medium',
+      priority: effectivePriority,
       ...sla,
       ...incident,
     },
@@ -29,6 +32,8 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
   logger.info(`Task #${taskNumber} created from ${source}`);
   return task;
 }
+
+export async function attachTaskDeviceWithBusinessImpact(task,deviceId){const device=await prisma.device.findUnique({where:{id:deviceId},select:{id:true,tenantId:true,type:true}});if(!device)throw Object.assign(new Error('Equipamento não encontrado'),{statusCode:404});const context=await cmdbOperationalContext([device.id]),priority=elevatedPriority(task.priority,context.services),openedAt=task.incidentOpenedAt||task.createdAt||new Date(),sla=priority!==task.priority?await buildSlaFields(priority,openedAt,device.tenantId):{};const updated=await prisma.task.update({where:{id:task.id},data:{deviceId:device.id,tenantId:device.tenantId,agentUsed:device.type,priority,...sla},include:{device:true}});return{task:updated,context};}
 
 export async function updateTask(id, data) {
   return prisma.task.update({

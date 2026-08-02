@@ -5,6 +5,7 @@ import { sendToAdmin, sendWhatsAppMessage } from './evolution.service.js';
 import { logAudit } from './audit.service.js';
 import { resolveNotificationRules } from './notification-rule.service.js';
 import { resolveOnCallContacts } from './on-call.service.js';
+import { cmdbOperationalContext, formatBusinessImpact } from './cmdb-operational-context.service.js';
 
 const split = value => String(value || '').split(',').map(x => x.trim()).filter(Boolean);
 const number = (value, fallback) => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
@@ -71,7 +72,8 @@ export async function notifyCmdbLifecycleAlert(alert,io=null){
 
 export async function notifyTask(task, event, { message = '', io = null, channelsOverride = null, recipientsOverride = null, whatsappRecipientsOverride = null } = {}) {
   const cfg = await getNotificationConfig();
-  const text = format(task, event, message, cfg.baseUrl);
+  const businessImpact=task.deviceId?formatBusinessImpact(await cmdbOperationalContext([task.deviceId])):'';
+  const text = format(task, event, [message,businessImpact].filter(Boolean).join('\n\n'), cfg.baseUrl);
   const title=text.split('\n')[0];
   const results = [];
   const panelRecorded = await record(task, event, 'panel', null, 'sent',null,{title,message:text});

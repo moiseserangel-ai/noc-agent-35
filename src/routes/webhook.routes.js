@@ -268,8 +268,6 @@ router.post('/zabbix', async (req, res) => {
       await taskService.addTaskMessage(task.id, 'system', `Alerta Zabbix: ${alert.trigger}`);
     }
 
-    await notifyTask(task, related ? 'reopened' : 'opened', { message: formatAlertMessage(alert), io: req.app.get('io') });
-
     // Try to find the device by hostname or zabbixHostId
     const classificationMsg = `Alerta do Zabbix:
 Host: ${alert.host}
@@ -286,6 +284,9 @@ Identifique o dispositivo e encaminhe para diagnóstico.`;
       device.name.toLowerCase() === alert.host.toLowerCase() ||
       device.hostname.toLowerCase() === alert.host.toLowerCase()
     );
+    const impactDeviceId=directDevice?.id||task.deviceId;
+    if(impactDeviceId){const enriched=await taskService.attachTaskDeviceWithBusinessImpact(task,impactDeviceId);task=enriched.task;}
+    await notifyTask(task, related ? 'reopened' : 'opened', { message: formatAlertMessage(alert), io: req.app.get('io') });
     const automationMode = await getIncidentAutomationMode();
     const autoDiagnose = shouldAutoDiagnoseIncident(alert.priority, automationMode);
     await taskService.addTaskMessage(task.id, 'system', describeIncidentPolicy(automationMode, alert.priority));
