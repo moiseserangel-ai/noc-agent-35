@@ -1,4 +1,5 @@
 import { Client } from 'ssh2';
+import { MIKROTIK_KEX_ALGORITHMS } from '../tools/ssh-mikrotik.tool.js';
 import prisma from '../database/client.js';
 import { getDeviceDecrypted } from './device.service.js';
 import { classifyCliCommand } from './cli.service.js';
@@ -173,7 +174,7 @@ export function registerInteractiveCli(socket) {
         password: device.password,
         readyTimeout: 12000,
         algorithms: device.type === 'mikrotik' ? {
-          kex: ['curve25519-sha256', 'ecdh-sha2-nistp256', 'diffie-hellman-group14-sha256', 'diffie-hellman-group14-sha1', 'diffie-hellman-group1-sha1'],
+          kex: MIKROTIK_KEX_ALGORITHMS,
         } : undefined,
       });
     } catch (error) {

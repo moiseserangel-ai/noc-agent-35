@@ -26,6 +26,7 @@ test('preserva comment RouterOS já informado e não comenta comandos singleton'
 test('cliente MikroTik negocia algoritmos modernos e mantém compatibilidade legada', () => {
   assert.ok(MIKROTIK_KEX_ALGORITHMS.includes('curve25519-sha256'));
   assert.ok(MIKROTIK_KEX_ALGORITHMS.includes('diffie-hellman-group14-sha256'));
+  assert.ok(MIKROTIK_KEX_ALGORITHMS.includes('diffie-hellman-group-exchange-sha256'));
   assert.ok(MIKROTIK_KEX_ALGORITHMS.indexOf('curve25519-sha256') < MIKROTIK_KEX_ALGORITHMS.indexOf('diffie-hellman-group14-sha1'));
 });
 

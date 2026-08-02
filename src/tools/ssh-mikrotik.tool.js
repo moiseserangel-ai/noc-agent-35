@@ -18,6 +18,8 @@ export const MIKROTIK_KEX_ALGORITHMS = [
   'ecdh-sha2-nistp256',
   'ecdh-sha2-nistp384',
   'ecdh-sha2-nistp521',
+  // RouterOS 6 com strong-crypto=yes anuncia somente este KEX.
+  'diffie-hellman-group-exchange-sha256',
   'diffie-hellman-group16-sha512',
   'diffie-hellman-group14-sha256',
   'diffie-hellman-group14-sha1',
