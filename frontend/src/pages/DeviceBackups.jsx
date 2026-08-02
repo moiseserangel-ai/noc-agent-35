@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArchiveRestore, CalendarClock, CheckCircle, Clock, Download, FileDiff, HardDrive, History, Play, RefreshCw, Save, ShieldCheck, Trash2, X, XCircle } from 'lucide-react';
+import { AlertTriangle, ArchiveRestore, CalendarClock, CheckCircle, Clock, Download, FileDiff, HardDrive, History, Play, RefreshCw, Save, ShieldCheck, Trash2, X, XCircle } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useToast } from '../App.jsx';
 
@@ -18,11 +18,12 @@ export default function DeviceBackups() {
   const [snapshots, setSnapshots] = useState([]);
   const [compare, setCompare] = useState({ before: '', after: '' });
   const [diff, setDiff] = useState(null);
+  const [drifts,setDrifts]=useState({rows:[],summary:{}});
   const toast = useToast();
 
   const load = async () => {
     setLoading(true);
-    try { setData((await api.getDeviceBackups()).data); }
+    try { const [backups,driftRows]=await Promise.all([api.getDeviceBackups(),api.getConfigurationDrifts()]);setData(backups.data);setDrifts(driftRows.data); }
     catch (error) { toast(error.message, 'error'); }
     finally { setLoading(false); }
   };
@@ -69,6 +70,7 @@ export default function DeviceBackups() {
     try { await api.deleteDeviceBackup(snapshot.id); toast('Backup removido.', 'success'); openHistory(historyDevice); load(); }
     catch (error) { toast(error.message, 'error'); }
   };
+  const decideDrift=async(drift,action)=>{let resolution='';if(action==='resolve'){resolution=window.prompt('Informe como o drift foi resolvido:')||'';if(!resolution.trim())return;}if(action==='ignore'&&!window.confirm('Aceitar esta configuração como novo baseline?'))return;try{await api.decideConfigurationDrift(drift.id,action,resolution);toast(action==='acknowledge'?'Drift reconhecido.':'Drift concluído.','success');await load();}catch(error){toast(error.message,'error');}};
 
   const summary = data.summary || {};
   return <div>
@@ -78,6 +80,7 @@ export default function DeviceBackups() {
       ['Com agendamento ativo', summary.protected || 0, CalendarClock],
       ['Backups armazenados', summary.backups || 0, ArchiveRestore],
       ['Falhas em 30 dias', summary.failures30d || 0, XCircle],
+      ['Drifts abertos', (drifts.summary.open||0)+(drifts.summary.acknowledged||0), AlertTriangle],
     ].map(([label,value,Icon])=><div className="stat-card" key={label}><div className="stat-icon"><Icon size={20}/></div><div><div className="stat-value">{value}</div><div className="stat-label">{label}</div></div></div>)}</div>
 
     <div className="card device-backup-notice"><ShieldCheck size={20}/><div><strong>Proteção de configuração</strong><span>Conteúdo criptografado com AES-256-GCM, integridade SHA-256 e acesso exclusivo para administradores. Esta versão não realiza restauração automática.</span></div></div>
@@ -91,6 +94,8 @@ export default function DeviceBackups() {
       })}
       {!data.devices.length&&<tr><td colSpan="6"><div className="empty-state"><HardDrive size={38}/><p>Nenhum equipamento MikroTik ou Huawei ativo.</p></div></td></tr>}
     </tbody></table></div>}
+
+    <div className="card config-drift-panel"><div className="page-header page-header-actions"><div><h3>Detecção de drift</h3><p>Alterações encontradas fora de Runbooks, mudanças e rollbacks controlados</p></div><span className="status-badge status-pending">{(drifts.summary.open||0)+(drifts.summary.acknowledged||0)} pendente(s)</span></div>{!drifts.rows.length?<div className="empty-state"><ShieldCheck size={34}/><p>Nenhum drift detectado.</p></div>:<div className="table-container"><table><thead><tr><th>Equipamento</th><th>Detectado</th><th>Diferenças</th><th>Status</th><th>Task</th><th>Ações</th></tr></thead><tbody>{drifts.rows.map(item=><tr key={item.id}><td><strong>{item.device.name}</strong><br/><span className="knowledge-muted">{item.device.hostname}</span></td><td>{date(item.detectedAt)}</td><td><span className="diff-added">+{item.addedCount}</span> <span className="diff-removed">−{item.removedCount}</span></td><td><span className={`status-badge drift-${item.status}`}>{item.status}</span></td><td>{item.taskId?'Criada':'—'}</td><td><div className="table-actions">{item.status==='open'&&<button className="btn btn-secondary btn-sm" onClick={()=>decideDrift(item,'acknowledge')}>Reconhecer</button>}{['open','acknowledged'].includes(item.status)&&<button className="btn btn-primary btn-sm" onClick={()=>decideDrift(item,'resolve')}>Resolver</button>}{['open','acknowledged'].includes(item.status)&&<button className="btn btn-ghost btn-sm" onClick={()=>decideDrift(item,'ignore')}>Aceitar baseline</button>}</div></td></tr>)}</tbody></table></div>}</div>
 
     {policyDevice&&<div className="modal-overlay" onClick={()=>setPolicyDevice(null)}><div className="modal device-backup-modal" onClick={event=>event.stopPropagation()}><div className="modal-header"><div><h3>Política de backup</h3><p>{policyDevice.name} · {policyDevice.hostname}</p></div><button className="btn btn-ghost" onClick={()=>setPolicyDevice(null)}><X size={18}/></button></div><div className="form-row"><div className="form-group"><label className="form-label">Agendamento</label><select className="form-select" value={String(policy.enabled)} onChange={e=>setPolicy({...policy,enabled:e.target.value==='true'})}><option value="true">Ativado</option><option value="false">Desativado</option></select></div><div className="form-group"><label className="form-label">Frequência</label><select className="form-select" value={policy.frequency} onChange={e=>setPolicy({...policy,frequency:e.target.value})}><option value="daily">Diário</option><option value="weekly">Semanal</option></select></div></div><div className="form-row"><div className="form-group"><label className="form-label">Horário</label><input className="form-input" type="number" min="0" max="23" value={policy.hour} onChange={e=>setPolicy({...policy,hour:Number(e.target.value)})}/></div>{policy.frequency==='weekly'&&<div className="form-group"><label className="form-label">Dia da semana</label><select className="form-select" value={policy.weekday} onChange={e=>setPolicy({...policy,weekday:Number(e.target.value)})}>{week.map((label,index)=><option key={label} value={index}>{label}</option>)}</select></div>}<div className="form-group"><label className="form-label">Versões mantidas</label><input className="form-input" type="number" min="1" max="365" value={policy.retention} onChange={e=>setPolicy({...policy,retention:Number(e.target.value)})}/></div></div><div className="modal-footer"><button className="btn btn-secondary" onClick={()=>setPolicyDevice(null)}>Cancelar</button><button className="btn btn-primary" onClick={savePolicy} disabled={busyId===policyDevice.id}><Save size={15}/>Salvar política</button></div></div></div>}
 

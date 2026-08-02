@@ -275,6 +275,7 @@ model Device {
   changes                  DeviceChange[]
   backupPolicy             DeviceBackupPolicy?
   configBackups            DeviceConfigBackup[]
+  configDrifts             ConfigDrift[]
   compliancePolicy         CompliancePolicy?
   complianceScans          ComplianceScan[]
   complianceExceptions     ComplianceException[]
@@ -789,6 +790,31 @@ model DeviceConfigBackup {
 
   @@index([deviceId, createdAt])
   @@index([status, createdAt])
+}
+
+model ConfigDrift {
+  id             String   @id @default(uuid())
+  deviceId       String
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  beforeBackupId String
+  afterBackupId  String   @unique
+  status         String   @default("open") // open|acknowledged|resolved|ignored
+  addedCount     Int      @default(0)
+  removedCount   Int      @default(0)
+  unchangedCount Int      @default(0)
+  evidence       String
+  taskId         String?
+  detectedAt     DateTime @default(now())
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  resolution     String?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, detectedAt])
+  @@index([deviceId, detectedAt])
+  @@index([taskId])
 }
 
 model CompliancePolicy {

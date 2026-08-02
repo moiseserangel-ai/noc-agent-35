@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { compareConfigurations, nextDeviceBackupAt } from '../src/services/device-backup.service.js';
 
 test('calcula o próximo backup diário sem repetir o horário vencido', () => {
@@ -27,4 +28,12 @@ test('ignora o cabeçalho dinâmico de data do export RouterOS',()=>{
   const diff=compareConfigurations(before,after);
   assert.equal(diff.addedCount,0);
   assert.equal(diff.removedCount,0);
+});
+
+test('schema registra drift com snapshots, evidência e Task',()=>{
+  const schema=fs.readFileSync(new URL('../prisma/schema.prisma',import.meta.url),'utf8');
+  assert.match(schema,/model ConfigDrift/);
+  assert.match(schema,/afterBackupId\s+String\s+@unique/);
+  assert.match(schema,/evidence\s+String/);
+  assert.match(schema,/taskId\s+String\?/);
 });

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../database/client.js';
 import { compareConfigurations, decryptSnapshot, runDeviceBackup, saveDeviceBackupPolicy, SUPPORTED_BACKUP_TYPES } from '../services/device-backup.service.js';
 import { logAudit, requestIdentity } from '../services/audit.service.js';
+import { decideConfigurationDrift, publicDrift } from '../services/config-drift.service.js';
 
 const router = Router();
 const snapshotSelect = {
@@ -39,6 +40,10 @@ router.get('/snapshots', async (req, res, next) => {
     res.json({ success: true, data: snapshots });
   } catch (error) { next(error); }
 });
+
+router.get('/drifts',async(req,res,next)=>{try{const where=req.query.status&&req.query.status!=='all'?{status:String(req.query.status)}:{};const rows=await prisma.configDrift.findMany({where,include:{device:{select:{id:true,name:true,hostname:true,type:true}},},orderBy:{detectedAt:'desc'},take:300});const summary=await prisma.configDrift.groupBy({by:['status'],_count:{_all:true}});res.json({success:true,data:{rows:rows.map(publicDrift),summary:Object.fromEntries(summary.map(item=>[item.status,item._count._all]))}});}catch(error){next(error);}});
+
+router.post('/drifts/:id/decision',async(req,res,next)=>{try{if(!['acknowledge','resolve','ignore'].includes(req.body.action))return res.status(400).json({success:false,error:'Decisão inválida'});const row=await decideConfigurationDrift(req.params.id,{action:req.body.action,actor:req.user.username,resolution:req.body.resolution});res.json({success:true,data:publicDrift(row),message:req.body.action==='acknowledge'?'Drift reconhecido':'Drift concluído'});}catch(error){next(error);}});
 
 router.put('/policies/:deviceId', async (req, res, next) => {
   try {

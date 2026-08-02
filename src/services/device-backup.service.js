@@ -13,6 +13,10 @@ import { sshLinuxExec } from '../tools/ssh-linux.tool.js';
 import { getNotificationConfig, sendTelegramMessage } from './notification.service.js';
 import { sendToAdmin } from './evolution.service.js';
 import { logAudit } from './audit.service.js';
+import { compareConfigurations } from './configuration-diff.service.js';
+import { detectConfigurationDrift } from './config-drift.service.js';
+
+export { compareConfigurations } from './configuration-diff.service.js';
 
 const running = new Set();
 export const SUPPORTED_BACKUP_TYPES = ['mikrotik', 'huawei_vrp', 'cisco_ios', 'juniper_junos', 'fortigate_fortios', 'ubiquiti_edgeos', 'datacom_dmos', 'nokia_sros', 'linux'];
@@ -117,6 +121,7 @@ export async function runDeviceBackup(deviceId, { type = 'manual', username = 's
       });
     }
     await logAudit({ username, displayName: username === 'system' ? 'Agendador de backup' : username, role: username === 'system' ? 'system' : 'admin', action: 'create', resource: 'device_backup', resourceId: snapshot.id, status: 'success', details: { deviceId, deviceName: device.name, type, sha256, size: snapshot.size } });
+    if(['automatic','manual'].includes(type))await detectConfigurationDrift(snapshot.id).catch(error=>logger.error(`Drift ${device.name}: ${error.message}`));
     return { ...snapshot, content: undefined };
   } catch (error) {
     if (device) {
@@ -167,15 +172,4 @@ export function decryptSnapshot(snapshot) {
   const hash = crypto.createHash('sha256').update(content).digest('hex');
   if (hash !== snapshot.sha256) throw new Error('Falha na verificação de integridade do backup');
   return content;
-}
-
-export function compareConfigurations(before, after) {
-  const stableLines=value=>String(value).split(/\r?\n/).filter(line=>!/^#\s+[a-z]{3}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}\s+by RouterOS\b/i.test(line.trim()));
-  const a = stableLines(before);
-  const b = stableLines(after);
-  const aSet = new Set(a);
-  const bSet = new Set(b);
-  const removed = a.filter(line => line.trim() && !bSet.has(line));
-  const added = b.filter(line => line.trim() && !aSet.has(line));
-  return { added: added.slice(0, 2000), removed: removed.slice(0, 2000), addedCount: added.length, removedCount: removed.length, unchangedCount: b.filter(line => aSet.has(line)).length };
 }

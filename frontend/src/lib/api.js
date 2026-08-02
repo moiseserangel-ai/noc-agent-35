@@ -111,6 +111,8 @@ export const api = {
   saveDeviceBackupPolicy: (deviceId, data) => request(`/device-backups/policies/${deviceId}`, { method: 'PUT', body: JSON.stringify(data) }),
   runDeviceBackup: deviceId => request(`/device-backups/run/${deviceId}`, { method: 'POST' }),
   compareDeviceBackups: (before, after) => request(`/device-backups/compare?before=${encodeURIComponent(before)}&after=${encodeURIComponent(after)}`),
+  getConfigurationDrifts: (status='all') => request(`/device-backups/drifts?status=${encodeURIComponent(status)}`),
+  decideConfigurationDrift: (id,action,resolution='') => request(`/device-backups/drifts/${id}/decision`,{method:'POST',body:JSON.stringify({action,resolution})}),
   deleteDeviceBackup: id => request(`/device-backups/snapshots/${id}`, { method: 'DELETE' }),
   downloadDeviceBackup: async id => {
     const res = await fetch(`${BASE}/device-backups/snapshots/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${getToken()}` } });
