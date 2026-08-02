@@ -26,5 +26,6 @@ export async function cmdbOperationalContext(deviceIds){
 
 const rank={low:0,medium:1,high:2,critical:3};
 export function elevatedPriority(current='medium',services=[]){const servicePriority=services.reduce((value,row)=>rank[row.criticality]>rank[value]?row.criticality:value,'low');return rank[servicePriority]>rank[current]?servicePriority:current;}
+export function businessServiceSlaMinutes(services=[]){const values=services.map(row=>Number(row.slaMinutes)).filter(value=>Number.isInteger(value)&&value>0);return values.length?Math.min(...values):null;}
 
 export function formatBusinessImpact(context){if(!context?.services?.length)return'';const lines=context.services.slice(0,8).map(row=>`- ${row.name} (${row.criticality})${row.tenant?.name?` — ${row.tenant.name}`:''}`);return[`Impacto de negócio: ${context.services.length} serviço(s), ${context.summary.clients} cliente(s)`,...lines].join('\n');}

@@ -5,7 +5,7 @@ import { CMDB_CATEGORIES, CMDB_CRITICALITIES, CMDB_STATUSES, normalizeCmdbAsset 
 import { isUsableMikrotikInventoryOutput, nextInventoryAt, parseInventoryOutput } from '../src/services/cmdb-inventory.service.js';
 import { calculateImpact, CMDB_RELATIONSHIP_TYPES, relationshipImpactEdges } from '../src/services/cmdb-relationship.service.js';
 import { assessCmdbAsset } from '../src/services/cmdb-governance.service.js';
-import { buildOperationalContext, elevatedPriority, formatBusinessImpact } from '../src/services/cmdb-operational-context.service.js';
+import { buildOperationalContext, businessServiceSlaMinutes, elevatedPriority, formatBusinessImpact } from '../src/services/cmdb-operational-context.service.js';
 import { topologySuggestionCandidate } from '../src/services/cmdb-discovery.service.js';
 import { diffCmdbValues } from '../src/services/cmdb-history.service.js';
 import { evaluateLifecycleAsset } from '../src/services/cmdb-lifecycle.service.js';
@@ -112,10 +112,12 @@ test('contexto operacional relaciona equipamento e elimina impactos duplicados',
   assert.deepEqual(context.impacted.map(item=>item.asset.id),['app','client']);
 });
 
-test('serviço de negócio eleva prioridade e gera resumo para notificação',()=>{
-  const services=[{name:'Internet Corporativa',criticality:'critical',tenant:{name:'Empresa ABC'}}];
+test('serviço de negócio eleva prioridade, restringe SLA e gera resumo para notificação',()=>{
+  const services=[{name:'Internet Corporativa',criticality:'critical',slaMinutes:60,tenant:{name:'Empresa ABC'}},{name:'ERP',criticality:'high',slaMinutes:120}];
   assert.equal(elevatedPriority('medium',services),'critical');
   assert.equal(elevatedPriority('critical',[{criticality:'high'}]),'critical');
+  assert.equal(businessServiceSlaMinutes(services),60);
+  assert.equal(businessServiceSlaMinutes([{slaMinutes:null}]),null);
   assert.match(formatBusinessImpact({services,summary:{clients:1}}),/Internet Corporativa \(critical\).*Empresa ABC/);
 });
 

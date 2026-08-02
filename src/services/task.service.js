@@ -2,7 +2,9 @@ import prisma from '../database/client.js';
 import logger from '../utils/logger.js';
 import { buildSlaFields } from './sla.service.js';
 import { inferWorkType } from './work-type.service.js';
-import { cmdbOperationalContext, elevatedPriority } from './cmdb-operational-context.service.js';
+import { businessServiceSlaMinutes, cmdbOperationalContext, elevatedPriority } from './cmdb-operational-context.service.js';
+
+async function buildBusinessSlaFields(priority,openedAt,tenantId,services=[]){const sla=await buildSlaFields(priority,openedAt,tenantId),minutes=businessServiceSlaMinutes(services);if(minutes){const serviceDueAt=new Date(openedAt.getTime()+minutes*60_000);if(!sla.slaResolveDueAt||serviceDueAt<sla.slaResolveDueAt)sla.slaResolveDueAt=serviceDueAt;}return sla;}
 
 export async function createTask({ source, originalMessage, deviceId, priority, workType, incident = {} }) {
   const lastTask = await prisma.task.findFirst({ orderBy: { taskNumber: 'desc' } });
@@ -12,7 +14,7 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
   const scopedDevice=deviceId?await prisma.device.findUnique({where:{id:deviceId},select:{tenantId:true}}):null;
   const businessContext=deviceId?await cmdbOperationalContext([deviceId]):null;
   const effectivePriority=elevatedPriority(priority||'medium',businessContext?.services||[]);
-  const sla = await buildSlaFields(effectivePriority, openedAt,scopedDevice?.tenantId);
+  const sla = await buildBusinessSlaFields(effectivePriority,openedAt,scopedDevice?.tenantId,businessContext?.services);
   const task = await prisma.task.create({
     data: {
       taskNumber,
@@ -33,7 +35,7 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
   return task;
 }
 
-export async function attachTaskDeviceWithBusinessImpact(task,deviceId){const device=await prisma.device.findUnique({where:{id:deviceId},select:{id:true,tenantId:true,type:true}});if(!device)throw Object.assign(new Error('Equipamento não encontrado'),{statusCode:404});const context=await cmdbOperationalContext([device.id]),priority=elevatedPriority(task.priority,context.services),openedAt=task.incidentOpenedAt||task.createdAt||new Date(),sla=priority!==task.priority?await buildSlaFields(priority,openedAt,device.tenantId):{};const updated=await prisma.task.update({where:{id:task.id},data:{deviceId:device.id,tenantId:device.tenantId,agentUsed:device.type,priority,...sla},include:{device:true}});return{task:updated,context};}
+export async function attachTaskDeviceWithBusinessImpact(task,deviceId){const device=await prisma.device.findUnique({where:{id:deviceId},select:{id:true,tenantId:true,type:true}});if(!device)throw Object.assign(new Error('Equipamento não encontrado'),{statusCode:404});const context=await cmdbOperationalContext([device.id]),priority=elevatedPriority(task.priority,context.services),openedAt=task.incidentOpenedAt||task.createdAt||new Date(),sla=await buildBusinessSlaFields(priority,openedAt,device.tenantId,context.services);const updated=await prisma.task.update({where:{id:task.id},data:{deviceId:device.id,tenantId:device.tenantId,agentUsed:device.type,priority,...sla},include:{device:true}});return{task:updated,context};}
 
 export async function updateTask(id, data) {
   return prisma.task.update({
