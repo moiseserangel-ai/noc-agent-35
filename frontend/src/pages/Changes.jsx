@@ -29,6 +29,12 @@ export default function Changes({isAdmin=false}){
     finally{setLoading(false);}
   };
   useEffect(()=>{load();},[filter]);
+  useEffect(()=>{
+    const stored=sessionStorage.getItem('noc_change_draft');
+    if(!stored)return;
+    sessionStorage.removeItem('noc_change_draft');
+    try{setForm({...initial,...JSON.parse(stored)});}catch{toast('Não foi possível carregar o plano de remediação.','error');}
+  },[]);
   const openDetail=async id=>{try{const[change,context]=await Promise.all([api.getChange(id),api.getChangeCmdbImpact(id)]);setDetail(change.data);setCmdbContext(context.data);}catch(error){toast(error.message,'error');}};
   const save=async()=>{
     setBusy('save');
