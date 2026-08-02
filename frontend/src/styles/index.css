@@ -1746,7 +1746,7 @@ a.executive-health-card:hover { transform:translateY(-2px); border-color:var(--b
 .capacity-stats .stat-card > svg { color:var(--primary); }
 .capacity-collected { margin:-.35rem 0 .8rem; color:var(--text-muted); font-size:.65rem; text-align:right; }
 .capacity-collected strong { color:var(--text-secondary); }
-.capacity-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(390px,1fr)); gap:.75rem; }
+.capacity-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr)); gap:.75rem; }
 .capacity-card { padding:0 !important; overflow:hidden; }
 .capacity-card.offline { border-color:color-mix(in srgb,var(--danger) 40%,var(--border-primary)) !important; }
 .capacity-card > header { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:.6rem; padding:.75rem .85rem; border-bottom:1px solid var(--border-primary); cursor:pointer; }
@@ -1757,11 +1757,11 @@ a.executive-health-card:hover { transform:translateY(-2px); border-color:var(--b
 .capacity-device-state { display:flex; width:32px; height:32px; align-items:center; justify-content:center; border-radius:9px; background:var(--bg-tertiary); color:var(--text-muted); }
 .capacity-device-state.online { background:var(--success-dim); color:var(--success); }
 .capacity-device-state.offline { background:var(--danger-dim); color:var(--danger); }
-.capacity-metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:.45rem; padding:.75rem .85rem; }
+.capacity-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.55rem; padding:.75rem .85rem; }
 .capacity-metrics > div { min-width:0; padding:.55rem; border:1px solid var(--border-primary); border-radius:var(--radius-sm); background:var(--bg-primary); }
 .capacity-metrics > div > div:first-child { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:.3rem; }
-.capacity-metrics span { color:var(--text-muted); font-size:.58rem; }
-.capacity-metrics strong { font-size:.72rem; }
+.capacity-metrics span { min-width:0; overflow:hidden; color:var(--text-muted); font-size:.58rem; text-overflow:ellipsis; white-space:nowrap; }
+.capacity-metrics strong { flex:none; font-size:.72rem; white-space:nowrap; }
 .capacity-metrics .success > div:first-child svg,.capacity-metrics .success strong { color:var(--success); }
 .capacity-metrics .warning > div:first-child svg,.capacity-metrics .warning strong { color:var(--warning); }
 .capacity-metrics .danger > div:first-child svg,.capacity-metrics .danger strong { color:var(--danger); }
@@ -1769,7 +1769,8 @@ a.executive-health-card:hover { transform:translateY(-2px); border-color:var(--b
 .capacity-bar i { display:block; height:100%; border-radius:inherit; background:var(--success); }
 .capacity-metrics .warning .capacity-bar i { background:var(--warning); }
 .capacity-metrics .danger .capacity-bar i { background:var(--danger); }
-.capacity-metrics small { display:flex; align-items:center; gap:.2rem; overflow:hidden; color:var(--text-muted); font-size:.53rem; text-overflow:ellipsis; white-space:nowrap; }
+.capacity-metrics small { display:flex; min-height:2.35em; align-items:flex-start; gap:.25rem; overflow-wrap:anywhere; color:var(--text-muted); font-size:.53rem; line-height:1.2; white-space:normal; }
+.capacity-metrics small svg { flex:none; margin-top:.05rem; }
 .capacity-traffic { display:flex; flex-wrap:wrap; justify-content:space-between; gap:.45rem; padding:.55rem .85rem; border-top:1px solid var(--border-primary); color:var(--text-muted); font-size:.58rem; }
 .capacity-traffic strong { color:var(--text-secondary); }
 .capacity-history { display:grid; grid-template-columns:repeat(3,1fr); gap:.45rem; padding:.65rem .85rem; border-top:1px solid var(--border-primary); background:var(--bg-primary); }
@@ -1781,10 +1782,13 @@ a.executive-health-card:hover { transform:translateY(-2px); border-color:var(--b
 
 @media (max-width:900px) {
   .capacity-stats { grid-template-columns:repeat(2,1fr); }
+  .capacity-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 @media (max-width:560px) {
   .capacity-grid { grid-template-columns:1fr; }
-  .capacity-metrics,.capacity-history { grid-template-columns:1fr; }
+  .capacity-metrics { grid-template-columns:1fr; }
+  .capacity-history { grid-template-columns:1fr; }
+  .capacity-metrics small { min-height:0; }
   .capacity-stats { grid-template-columns:1fr; }
 }
 
