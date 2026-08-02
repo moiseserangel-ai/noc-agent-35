@@ -2,13 +2,14 @@ import crypto from 'node:crypto';
 import prisma from '../database/client.js';
 import { classifyCliCommand, executeManagedDeviceCommand } from './cli.service.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
-import { runDeviceBackup } from './device-backup.service.js';
+import { compareConfigurations, decryptSnapshot, runDeviceBackup } from './device-backup.service.js';
 
 const safeJson=(value,fallback)=>{try{return JSON.parse(value);}catch{return fallback;}};
 const protectedJson=(value,fallback)=>safeJson(decrypt(value),fallback);
 const clean=(value,max=4000)=>String(value??'').trim().slice(0,max);
 const keyPattern=/^[a-z][a-z0-9_]{1,39}$/;
 const allowedCategories=['diagnostic','network','security','monitoring','maintenance','custom'];
+async function snapshotsDiffer(beforeId,afterId){const[before,after]=await Promise.all([prisma.deviceConfigBackup.findUnique({where:{id:beforeId}}),prisma.deviceConfigBackup.findUnique({where:{id:afterId}})]);if(!before||!after)return null;const diff=compareConfigurations(decryptSnapshot(before),decryptSnapshot(after));return diff.addedCount>0||diff.removedCount>0;}
 
 export function validateRunbookDefinition(input){
   const variables=Array.isArray(input.variables)?input.variables:[];
@@ -100,7 +101,7 @@ export async function executeRunbook({runbook,device,rendered,requestedBy,approv
   }
   let afterBackup;let snapshotError=null;
   try{afterBackup=await runDeviceBackup(device.id,{type:'post_runbook',username:requestedBy});}catch(error){snapshotError=error.message;}
-  return prisma.runbookExecution.update({where:{id:execution.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?beforeBackup.sha256!==afterBackup.sha256:null,completedAt:new Date(),error:failed?'Uma ou mais etapas falharam':snapshotError?`Configuração aplicada, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
+  return prisma.runbookExecution.update({where:{id:execution.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?await snapshotsDiffer(beforeBackup.id,afterBackup.id):null,completedAt:new Date(),error:failed?'Uma ou mais etapas falharam':snapshotError?`Configuração aplicada, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
 }
 
 export async function rollbackRunbook({execution,device,requestedBy}){
@@ -117,5 +118,5 @@ export async function rollbackRunbook({execution,device,requestedBy}){
   }
   let afterBackup;let snapshotError=null;
   try{afterBackup=await runDeviceBackup(device.id,{type:'post_rollback',username:requestedBy});}catch(error){snapshotError=error.message;}
-  return prisma.runbookExecution.update({where:{id:rollback.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?beforeBackup.sha256!==afterBackup.sha256:null,completedAt:new Date(),error:failed?'Rollback falhou':snapshotError?`Rollback aplicado, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
+  return prisma.runbookExecution.update({where:{id:rollback.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?await snapshotsDiffer(beforeBackup.id,afterBackup.id):null,completedAt:new Date(),error:failed?'Rollback falhou':snapshotError?`Rollback aplicado, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
 }

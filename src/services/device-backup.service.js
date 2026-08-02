@@ -170,8 +170,9 @@ export function decryptSnapshot(snapshot) {
 }
 
 export function compareConfigurations(before, after) {
-  const a = String(before).split(/\r?\n/);
-  const b = String(after).split(/\r?\n/);
+  const stableLines=value=>String(value).split(/\r?\n/).filter(line=>!/^#\s+[a-z]{3}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}\s+by RouterOS\b/i.test(line.trim()));
+  const a = stableLines(before);
+  const b = stableLines(after);
   const aSet = new Set(a);
   const bSet = new Set(b);
   const removed = a.filter(line => line.trim() && !bSet.has(line));

@@ -20,3 +20,11 @@ test('compara versões sem revelar conteúdo fora das diferenças', () => {
   assert.deepEqual(diff.removed, ['/ip route add gateway=1.1.1.1']);
   assert.equal(diff.unchangedCount, 1);
 });
+
+test('ignora o cabeçalho dinâmico de data do export RouterOS',()=>{
+  const before='# aug/02/2026 13:57:44 by RouterOS 6.49.13\n/ip dns set servers=1.1.1.1';
+  const after='# aug/02/2026 13:57:57 by RouterOS 6.49.13\n/ip dns set servers=1.1.1.1';
+  const diff=compareConfigurations(before,after);
+  assert.equal(diff.addedCount,0);
+  assert.equal(diff.removedCount,0);
+});
