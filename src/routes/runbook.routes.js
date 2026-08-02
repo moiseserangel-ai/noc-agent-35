@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import prisma from '../database/client.js';
 import { logAudit, requestIdentity } from '../services/audit.service.js';
-import { assessRunbookRisk, createSimulation, executeRunbook, publicExecution, publicRunbook, renderRunbook, rollbackRunbook, runbookInputHash, validateRunbookDefinition } from '../services/runbook.service.js';
+import { assessRunbookRisk, createSimulation, executeRunbook, prepareRunbookRollback, publicExecution, publicRunbook, renderRunbook, rollbackRunbook, runbookInputHash, validateRunbookDefinition } from '../services/runbook.service.js';
 import { getRunbookTemplate, listRunbookTemplates } from '../services/runbook-template.service.js';
 import { nextScheduleRun, protectScheduleVariables, publicSchedule, validateTimezone } from '../services/runbook-schedule.service.js';
 import { createRunbookBatch, getRunbookBatch, listRunbookBatches, publicBatch, simulateRunbookBatch, startRunbookBatch } from '../services/runbook-batch.service.js';
@@ -253,12 +253,26 @@ router.post('/:id/execute',async(req,res,next)=>{try{
   res.json({success:true,data:publicExecution(row),message:row.status==='completed'?'Runbook concluído':'Runbook finalizado com falha'});
 }catch(error){next(error);}});
 
+router.post('/executions/:executionId/rollback/prepare',async(req,res,next)=>{try{
+  if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem preparar rollback'});
+  const execution=await prisma.runbookExecution.findUnique({where:{id:req.params.executionId},include:{device:true,beforeBackup:true,afterBackup:true}});
+  if(!execution||execution.mode!=='execution'||execution.status!=='completed')return res.status(404).json({success:false,error:'Execução concluída não encontrada'});
+  const row=await prepareRunbookRollback({execution,device:execution.device,requestedBy:actor(req)});
+  await logAudit({...requestIdentity(req),action:'prepare_rollback',resource:'runbook_execution',resourceId:row.id,details:{sourceExecutionId:execution.id,deviceId:execution.deviceId}});
+  const backup=row=>row?{id:row.id,sha256:row.sha256,size:row.size,createdAt:row.createdAt,type:row.type}:null;
+  res.json({success:true,data:{...publicExecution(row),sourceExecutionId:execution.id,currentBackup:backup(execution.afterBackup),previousBackup:backup(execution.beforeBackup)},message:'Rollback preparado; revise os comandos antes de confirmar'});
+}catch(error){next(error);}});
+
 router.post('/executions/:executionId/rollback',async(req,res,next)=>{try{
   if(req.user.role!=='admin'||req.body.confirmed!==true)return res.status(403).json({success:false,error:'Rollback exige administrador e confirmação explícita'});
   const execution=await prisma.runbookExecution.findUnique({where:{id:req.params.executionId},include:{device:true}});
   if(!execution||execution.mode!=='execution')return res.status(404).json({success:false,error:'Execução não encontrada'});
-  const row=await rollbackRunbook({execution,device:execution.device,requestedBy:actor(req)});
-  await logAudit({...requestIdentity(req),action:'rollback',resource:'runbook_execution',resourceId:row.id,status:row.status==='completed'?'success':'failure',details:{sourceExecutionId:execution.id}});
+  const preparation=await prisma.runbookExecution.findFirst({where:{id:String(req.body.preparationId||''),runbookId:execution.runbookId,deviceId:execution.deviceId,inputHash:execution.inputHash,mode:'rollback_simulation',status:'completed',createdAt:{gte:new Date(Date.now()-30*60_000)}}});
+  if(!preparation)return res.status(409).json({success:false,error:'Prepare e revise o rollback nos últimos 30 minutos antes da execução'});
+  const claimed=await prisma.runbookExecution.updateMany({where:{id:preparation.id,status:'completed'},data:{status:'consumed'}});
+  if(!claimed.count)return res.status(409).json({success:false,error:'Esta preparação de rollback já foi utilizada'});
+  const row=await rollbackRunbook({execution,preparation,device:execution.device,requestedBy:actor(req)});
+  await logAudit({...requestIdentity(req),action:'rollback',resource:'runbook_execution',resourceId:row.id,status:row.status==='completed'?'success':'failure',details:{sourceExecutionId:execution.id,preparationId:preparation.id}});
   res.json({success:true,data:publicExecution(row),message:row.status==='completed'?'Rollback concluído':'Rollback falhou'});
 }catch(error){next(error);}});
 

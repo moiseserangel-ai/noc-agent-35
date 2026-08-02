@@ -84,6 +84,17 @@ export function createSimulation({runbook,device,rendered,requestedBy,taskId=nul
   return prisma.runbookExecution.create({data:{runbookId:runbook.id,deviceId:device.id,taskId,scheduleId,batchId,mode:'simulation',status:'completed',inputHash,variables:encrypt(JSON.stringify(rendered.variables)),renderedSteps:encrypt(JSON.stringify(rendered.steps)),results:encrypt(JSON.stringify(rendered.steps.map(step=>({stepId:step.id,name:step.name,commandType:step.commandType,validationType:step.validationType,rollbackAvailable:Boolean(step.rollback),status:'simulated'})))),requestedBy,completedAt:new Date()}});
 }
 
+export async function prepareRunbookRollback({execution,device,requestedBy}){
+  const steps=protectedJson(execution.renderedSteps,[]).filter(step=>step.rollback).reverse().map(step=>{
+    const policy=classifyCliCommand(device.type,step.rollback);
+    if(!policy.valid)throw Object.assign(new Error(`${step.name}: rollback incompatível — ${policy.reason}`),{statusCode:400});
+    return{...step,command:step.rollback,commandType:policy.type,sourceStepId:step.id};
+  });
+  if(!steps.length)throw Object.assign(new Error('Esta execução não possui etapas de rollback'),{statusCode:400});
+  const preparation=await prisma.runbookExecution.create({data:{runbookId:execution.runbookId,deviceId:device.id,taskId:execution.taskId,mode:'rollback_simulation',status:'completed',inputHash:execution.inputHash,variables:execution.variables,renderedSteps:encrypt(JSON.stringify(steps)),results:encrypt(JSON.stringify(steps.map(step=>({stepId:step.id,name:step.name,commandType:step.commandType,status:'simulated'})))),requestedBy,completedAt:new Date()}});
+  return preparation;
+}
+
 export async function executeRunbook({runbook,device,rendered,requestedBy,approvedBy,taskId=null,scheduleId=null,batchId=null}){
   const hash=runbookInputHash(runbook.id,device.id,rendered.variables);
   const execution=await prisma.runbookExecution.create({data:{runbookId:runbook.id,deviceId:device.id,taskId,scheduleId,batchId,mode:'execution',status:'running',inputHash:hash,variables:encrypt(JSON.stringify(rendered.variables)),renderedSteps:encrypt(JSON.stringify(rendered.steps)),requestedBy,approvedBy,startedAt:new Date()}});
@@ -104,8 +115,8 @@ export async function executeRunbook({runbook,device,rendered,requestedBy,approv
   return prisma.runbookExecution.update({where:{id:execution.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?await snapshotsDiffer(beforeBackup.id,afterBackup.id):null,completedAt:new Date(),error:failed?'Uma ou mais etapas falharam':snapshotError?`Configuração aplicada, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
 }
 
-export async function rollbackRunbook({execution,device,requestedBy}){
-  const steps=protectedJson(execution.renderedSteps,[]).filter(step=>step.rollback).reverse();
+export async function rollbackRunbook({execution,preparation,device,requestedBy}){
+  const steps=preparation?protectedJson(preparation.renderedSteps,[]):protectedJson(execution.renderedSteps,[]).filter(step=>step.rollback).reverse();
   if(!steps.length)throw Object.assign(new Error('Esta execução não possui etapas de rollback'),{statusCode:400});
   const rollback=await prisma.runbookExecution.create({data:{runbookId:execution.runbookId,deviceId:device.id,mode:'rollback',status:'running',inputHash:execution.inputHash,variables:execution.variables,renderedSteps:encrypt(JSON.stringify(steps)),requestedBy,approvedBy:requestedBy,startedAt:new Date()}});
   let beforeBackup;
