@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
 
-export default function Modal({ isOpen, onClose, title, children, footer }) {
+export default function Modal({ isOpen, onClose, title, children, footer, className = '' }) {
   useEffect(() => {
     if (!isOpen) return;
     const close = event => { if (event.key === 'Escape') onClose(); };
@@ -12,7 +12,7 @@ export default function Modal({ isOpen, onClose, title, children, footer }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
+      <div className={`modal ${className}`.trim()} role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
           <button className="btn btn-ghost btn-sm" aria-label="Fechar" onClick={onClose}>
