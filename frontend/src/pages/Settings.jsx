@@ -96,6 +96,14 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Gestão de Vulnerabilidades', icon: Shield,
+    fields: [
+      { key:'vulnerability_scan_enabled',label:'Análise automática',type:'select',defaultValue:'false',options:[['true','Habilitada'],['false','Desabilitada']] },
+      { key:'vulnerability_scan_interval_hours',label:'Intervalo entre análises (horas)',type:'number',placeholder:'168',helperText:'168 horas corresponde a uma análise semanal.' },
+      { key:'nvd_api_key',label:'API Key do NVD (opcional)',type:'password',placeholder:'Chave do NVD',helperText:'Aumenta o limite oficial de consultas. Sem chave, o sistema processa um equipamento por vez.' },
+    ],
+  },
+  {
     title: 'Segurança',
     icon: Key,
     fields: [

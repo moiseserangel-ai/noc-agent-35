@@ -54,6 +54,7 @@ import { syncStatusServices } from './services/status-page.service.js';
 import { runMonthlyReportScheduler } from './services/monthly-report.service.js';
 import { runCmdbInventoryScheduler } from './services/cmdb-inventory.service.js';
 import { runCmdbLifecycleMonitor } from './services/cmdb-lifecycle.service.js';
+import { runVulnerabilityScheduler } from './services/vulnerability.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -471,6 +472,8 @@ runCapacityScheduler().catch(err => logger.error(`Initial capacity scheduler err
 const runbookScheduleMonitor = setInterval(runRunbookScheduleScheduler,60_000);
 runbookScheduleMonitor.unref();
 runRunbookScheduleScheduler();
+const vulnerabilityMonitor=setInterval(()=>runVulnerabilityScheduler().catch(err=>logger.error(`Vulnerability scheduler error: ${err.message}`)),60_000);
+vulnerabilityMonitor.unref();
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
@@ -484,6 +487,7 @@ process.on('SIGTERM', async () => {
   clearInterval(complianceEscalationMonitor);
   clearInterval(capacityMonitor);
   clearInterval(runbookScheduleMonitor);
+  clearInterval(vulnerabilityMonitor);
   logger.info('SIGTERM received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();
@@ -501,6 +505,7 @@ process.on('SIGINT', async () => {
   clearInterval(complianceEscalationMonitor);
   clearInterval(capacityMonitor);
   clearInterval(runbookScheduleMonitor);
+  clearInterval(vulnerabilityMonitor);
   logger.info('SIGINT received, shutting down...');
   await prisma.$disconnect();
   httpServer.close();

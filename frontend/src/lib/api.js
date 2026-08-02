@@ -115,6 +115,8 @@ export const api = {
   decideConfigurationDrift: (id,action,resolution='') => request(`/device-backups/drifts/${id}/decision`,{method:'POST',body:JSON.stringify({action,resolution})}),
   getVulnerabilities: () => request('/vulnerabilities'),
   scanDeviceVulnerabilities: id => request(`/vulnerabilities/scan/${id}`,{method:'POST'}),
+  scanAllVulnerabilities: () => request('/vulnerabilities/scan-all',{method:'POST'}),
+  getVulnerabilityScanAllStatus: () => request('/vulnerabilities/scan-all/status'),
   decideVulnerability: (id,action,resolution='') => request(`/vulnerabilities/${id}/decision`,{method:'POST',body:JSON.stringify({action,resolution})}),
   deleteDeviceBackup: id => request(`/device-backups/snapshots/${id}`, { method: 'DELETE' }),
   downloadDeviceBackup: async id => {
