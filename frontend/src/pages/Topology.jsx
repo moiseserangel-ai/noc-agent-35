@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Cable, Check, Clock, Cpu, ExternalLink, Filter, HardDrive, Link2, Maximize2, MemoryStick, Network, Plus, RefreshCw, Save, ScanSearch, Server, Wifi, WifiOff, XCircle, ZoomIn, ZoomOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const STATUS = {
   online: { label:'Online', icon:Wifi },

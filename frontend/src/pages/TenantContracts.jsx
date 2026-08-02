@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download, ExternalLink, FileClock, Play, Save, ShieldCheck } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const sla = [['slaCriticalAck','Crítica — reconhecer'],['slaCriticalResolve','Crítica — resolver'],['slaHighAck','Alta — reconhecer'],['slaHighResolve','Alta — resolver'],['slaMediumAck','Média — reconhecer'],['slaMediumResolve','Média — resolver'],['slaLowAck','Baixa — reconhecer'],['slaLowResolve','Baixa — resolver']];
 const channels = [['panel','Painel'],['telegram','Telegram'],['whatsapp','WhatsApp']];

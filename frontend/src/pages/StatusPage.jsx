@@ -1,6 +1,6 @@
 import{useEffect,useState}from'react';
 import{ExternalLink,Plus,RadioTower,RefreshCw,Save,Send,Trash2}from'lucide-react';
-import{api}from'../lib/api.js';import{useToast}from'../App.jsx';
+import{api}from'../lib/api.js';import{useToast}from'../contexts/ToastContext.jsx';
 const serviceEmpty={name:'',description:'',deviceId:'',automatic:true,manualStatus:'operational',sortOrder:100};
 const incidentEmpty={serviceId:'',taskId:'',title:'',message:'',severity:'degraded',status:'investigating',scheduledAt:'',scheduledEndAt:''};
 const labels={operational:'Operacional',degraded:'Degradado',partial_outage:'Indisponibilidade parcial',major_outage:'Indisponibilidade',maintenance:'Manutenção',investigating:'Investigando',identified:'Identificado',monitoring:'Monitorando',resolved:'Resolvido',scheduled:'Manutenção programada'};

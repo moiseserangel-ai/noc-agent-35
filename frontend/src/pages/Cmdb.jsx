@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, Bell, Boxes, Briefcase, CalendarClock, Check, ClipboardCheck, DatabaseZap, Download, Edit2, Eye, GitBranch, Link2, Network, Plus, RefreshCw, ScanSearch, Search, Server, ShieldAlert, Trash2, Wrench, XCircle } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import Modal from '../components/Modal.jsx';
 
 const EMPTY={name:'',assetTag:'',category:'network',status:'active',criticality:'medium',tenantId:'',siteId:'',deviceId:'',manufacturer:'',model:'',serialNumber:'',hostname:'',managementIp:'',location:'',rack:'',rackUnit:'',purchaseDate:'',warrantyUntil:'',supportUntil:'',licenseUntil:'',cost:'',currency:'BRL',owner:'',contact:'',tags:'',notes:''};

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { api } from './lib/api.js';
 import Layout from './components/Layout.jsx';
@@ -33,11 +33,9 @@ import TenantContracts from './pages/TenantContracts.jsx';
 import OnCallScopes from './pages/OnCallScopes.jsx';
 import Cmdb from './pages/Cmdb.jsx';
 import Vulnerabilities from './pages/Vulnerabilities.jsx';
+import { ToastContext } from './contexts/ToastContext.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
-
-const ToastContext = createContext();
-export const useToast = () => useContext(ToastContext);
 
 const themePrimary = (color, light) => {
   const match = String(color || '').match(/^#([0-9a-f]{6})$/i);

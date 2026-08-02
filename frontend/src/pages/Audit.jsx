@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RefreshCw, ScrollText } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const actionLabel = value => ({ login: 'Login', logout: 'Logout', change_password: 'Alteração de senha', create_or_execute: 'Criação/execução', update: 'Alteração', delete: 'Exclusão', approve: 'Aprovação', reject: 'Rejeição', agent_execute: 'Execução do agente' }[value] || value);
 

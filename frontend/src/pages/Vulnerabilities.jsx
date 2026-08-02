@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, ExternalLink, RefreshCw, Search, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const fmt=value=>value?new Date(value).toLocaleString('pt-BR'):'Nunca';
 

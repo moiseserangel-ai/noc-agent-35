@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, Cpu, Download, Gauge, HardDrive, MemoryStick, RefreshCw, Server, TrendingUp, Wifi, WifiOff } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const pct=value=>value===null||value===undefined?'—':`${Math.round(value*10)/10}%`;
 const bytes=value=>{

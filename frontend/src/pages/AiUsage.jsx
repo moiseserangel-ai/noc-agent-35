@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Bot, Coins, RefreshCw, RotateCcw, Zap } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const providerName = { claude: 'Claude', openai: 'OpenAI', gemini: 'Gemini' };
 const statusLabel = { available: 'Disponível', cooldown: 'Limite temporário', quota_exhausted: 'Cota esgotada', error: 'Erro' };

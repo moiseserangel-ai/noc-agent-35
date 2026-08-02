@@ -1,7 +1,7 @@
 import { useEffect,useState } from 'react';
 import { Bell,CheckCheck,Plus,RefreshCw,Save,Trash2,X } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const emptyRule=()=>({name:'',enabled:true,sortOrder:100,priorities:[],events:[],sources:[],deviceGroups:[],channels:['panel'],recipients:[],activeDays:[0,1,2,3,4,5,6],startTime:'00:00',endTime:'23:59',timezone:'America/Porto_Velho'});
 const fmt=value=>new Date(value).toLocaleString('pt-BR');

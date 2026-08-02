@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Ban, CheckCircle2, Eye, Network, Plus, Radar, RefreshCw, Server, Trash2, X } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const statusLabel={queued:'Na fila',running:'Descobrindo',completed:'Concluída',failed:'Falhou',cancelled:'Cancelada'};
 const stateLabel={new:'Novo',known:'Já cadastrado',imported:'Importado',ignored:'Ignorado'};

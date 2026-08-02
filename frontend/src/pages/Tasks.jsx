@@ -3,7 +3,7 @@ import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, Sh
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
 import AgentResponse from '../components/AgentResponse.jsx';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const formatDuration = seconds => {
   if (seconds === null || seconds === undefined) return '—';

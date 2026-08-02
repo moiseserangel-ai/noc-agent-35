@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, Eye, GitBranch, Play, Plus, RefreshCw, RotateCcw, Send, ShieldCheck, X, XCircle } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const statusLabel={draft:'Rascunho',awaiting_approval:'Aguardando aprovação',approved:'Aprovada',in_progress:'Em execução',validating:'Validando',completed:'Concluída',failed_validation:'Falha na validação',rollback_requested:'Rollback solicitado',rolled_back:'Rollback concluído',rejected:'Rejeitada',cancelled:'Cancelada'};
 const typeLabel={standard:'Padrão',normal:'Normal',emergency:'Emergencial'};

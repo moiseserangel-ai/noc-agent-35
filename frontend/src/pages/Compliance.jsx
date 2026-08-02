@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardCheck, Download, Eye, FileText, Play, Plus, RefreshCw, Save, Settings2, ShieldAlert, ShieldCheck, Trash2, Wrench, X, XCircle } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const week = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
 const date = value => value ? new Date(value).toLocaleString('pt-BR') : 'Nunca';

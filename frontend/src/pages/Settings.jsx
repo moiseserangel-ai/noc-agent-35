@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Key, MessageSquare, Activity, Save, CheckCircle, Palette, Image } from 'lucide-react';
+import { Key, MessageSquare, Activity, Save, CheckCircle, Palette, Image, Shield } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const SECTIONS = [
   {

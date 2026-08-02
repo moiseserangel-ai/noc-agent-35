@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Users as UsersIcon, Plus, Save, Trash2 } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const empty = { username: '', name: '', password: '', role: 'operator', mustChangePassword: true };
 const roleName = role => ({ admin: 'Administrador', operator: 'Operador NOC', viewer: 'Visualização' }[role] || role);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Copy, KeyRound, LogOut, ShieldCheck, Smartphone } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 export default function Security({ user, onUser, forcePasswordChange = false }) {
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });

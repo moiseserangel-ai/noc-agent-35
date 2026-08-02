@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { BookOpen, CheckSquare, ChevronDown, ChevronRight, FileText, Link2, Pencil, Power, RefreshCw, Search, Square, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const scopeLabel = {
   global: 'Todos os agentes',

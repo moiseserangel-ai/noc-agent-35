@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Archive, CalendarClock, CheckCircle2, Edit3, Eye, Layers3, Library, Pause, Play, Plus, RefreshCw, RotateCcw, Save, Trash2, Workflow, X } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const localId=()=>globalThis.crypto?.randomUUID?.()||`step-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const emptyStep=()=>({id:localId(),name:'',deviceType:'any',command:'',validation:'',rollback:'',continueOnError:false});

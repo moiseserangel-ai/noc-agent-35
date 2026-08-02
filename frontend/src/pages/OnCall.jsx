@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import {CalendarClock,Clock,Plus,RefreshCw,Save,Trash2,UserRoundCheck,Users} from 'lucide-react';
 import {api} from '../lib/api.js';
-import {useToast} from '../App.jsx';
+import {useToast} from '../contexts/ToastContext.jsx';
 
 const DAYS=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 const teamEmpty={name:'',description:'',timezone:'America/Porto_Velho',tenantId:''};

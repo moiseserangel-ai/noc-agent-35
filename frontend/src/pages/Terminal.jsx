@@ -5,7 +5,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { io } from 'socket.io-client';
 import '@xterm/xterm/css/xterm.css';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const typeLabel = value => ({ mikrotik: 'MikroTik RouterOS', huawei_vrp: 'Huawei VRP', cisco_ios:'Cisco IOS / IOS-XE', juniper_junos:'Juniper Junos', fortigate_fortios:'Fortinet FortiGate / FortiOS', ubiquiti_edgeos:'Ubiquiti EdgeOS', datacom_dmos:'Datacom DMOS', nokia_sros:'Nokia SR OS', linux: 'Linux' }[value] || value);
 const statusLabel = value => ({ active: 'Ativa', closed: 'Encerrada', expired: 'Expirada' }[value] || value);

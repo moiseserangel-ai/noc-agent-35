@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Wifi, Edit2, Server, History } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { TypeBadge } from '../components/StatusBadge.jsx';
 import Modal from '../components/Modal.jsx';
 

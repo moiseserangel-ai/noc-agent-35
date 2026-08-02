@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DatabaseBackup, Download, RefreshCw, RotateCcw, Save } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 
 const size = bytes => bytes < 1024*1024 ? `${(bytes/1024).toFixed(1)} KB` : `${(bytes/1024/1024).toFixed(2)} MB`;
 const typeName = value => ({manual:'Manual',automatic:'Automático','pre-restore':'Pré-restauração'}[value] || value);
