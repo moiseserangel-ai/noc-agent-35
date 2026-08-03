@@ -6,7 +6,7 @@ export default function Vpn() {
   const toast = useToast();
   const [form, setForm] = useState({ server: '', username: '', password: '', psk: '', status: '' });
   const load = () => api.getVpn().then(r => setForm(r.data)).catch(e => toast(e.message, 'error'));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   const save = async () => { try { await api.saveVpn(form); toast('Perfil L2TP/IPsec salvo', 'success'); load(); } catch (e) { toast(e.message, 'error'); } };
   const action = async type => { try { const r = type === 'connect' ? await api.connectVpn() : await api.disconnectVpn(); toast(r.message, 'success'); setTimeout(load, 2000); } catch (e) { toast(e.message, 'error'); } };
   return <div><div className="page-header"><div><h2>VPN L2TP/IPsec</h2><p>Cliente para acesso seguro a redes MikroTik. Apenas um perfil ativo por CT.</p></div></div>
