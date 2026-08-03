@@ -3,6 +3,13 @@ import prisma from '../database/client.js';
 export const LIFECYCLE_VENDORS=['MikroTik','Huawei','Cisco','Fortinet','Juniper'];
 export const LIFECYCLE_TYPES=['software','hardware','license'];
 export const LIFECYCLE_PRODUCT_STATUSES=['active','discontinued','unknown'];
+export const LIFECYCLE_VENDOR_SOURCES=[
+  {vendor:'MikroTik',title:'Catálogo oficial de produtos',url:'https://mikrotik.com/products',access:'public',guidance:'Localize o produto e confirme se a página exibe Discontinued.'},
+  {vendor:'Huawei',title:'Info-Finder — Lifecycle Query',url:'https://info.support.huawei.com/info-finder/search-center/en/enterprise/eox',access:'public',guidance:'Pesquise pelo modelo e pela versão; registre EOM, EOFS e EOS publicados.'},
+  {vendor:'Cisco',title:'End-of-Sale and End-of-Life Hub',url:'https://www.cisco.com/site/us/en/products/eol/index.html',access:'public',guidance:'Localize o PID exato e use as datas do boletim EOL correspondente.'},
+  {vendor:'Fortinet',title:'Product Life Cycle',url:'https://support.fortinet.com/Information/ProductLifeCycle.aspx',access:'login',guidance:'Acesse o portal de suporte e consulte Hardware, Software ou Services.'},
+  {vendor:'Juniper',title:'Product End of Life',url:'https://support.juniper.net/support/eol/',access:'public',guidance:'Escolha a família e confirme SKU, Last Order e End of Support.'}
+];
 const text=(value,max=255)=>String(value||'').trim().slice(0,max);
 const date=value=>{if(!value)return null;const parsed=value instanceof Date?value:new Date(`${value}T12:00:00Z`);if(Number.isNaN(parsed.getTime()))throw Object.assign(new Error('Data inválida no catálogo'),{statusCode:400});return parsed;};
 const pattern=value=>text(value,160)||'*';

@@ -137,10 +137,12 @@ export const api = {
   scanLifecycle: () => request('/lifecycle/scan',{method:'POST'}),
   createLifecycleTask: (assetId,reason='') => request(`/lifecycle/${assetId}/task`,{method:'POST',body:JSON.stringify({reason})}),
   getLifecycleCatalog: (params={}) => request(`/lifecycle/catalog?${new URLSearchParams(params)}`),
+  getLifecycleCatalogSources: () => request('/lifecycle/catalog-sources'),
   createLifecycleCatalog: data => request('/lifecycle/catalog',{method:'POST',body:JSON.stringify(data)}),
   updateLifecycleCatalog: (id,data) => request(`/lifecycle/catalog/${id}`,{method:'PUT',body:JSON.stringify(data)}),
   verifyLifecycleCatalog: id => request(`/lifecycle/catalog/${id}/verify`,{method:'POST'}),
   deleteLifecycleCatalog: id => request(`/lifecycle/catalog/${id}`,{method:'DELETE'}),
+  downloadLifecycleReport: async(format,params={})=>{const res=await fetch(`${BASE}/lifecycle/export.${format}?${new URLSearchParams(params)}`,{headers:{Authorization:`Bearer ${getToken()}`}});if(!res.ok){let data={};try{data=await res.json();}catch{}throw new Error(data.error||'Falha ao exportar ciclo de vida');}return{blob:await res.blob(),filename:res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||`ciclo-de-vida.${format}`};},
   deleteDeviceBackup: id => request(`/device-backups/snapshots/${id}`, { method: 'DELETE' }),
   downloadDeviceBackup: async id => {
     const res = await fetch(`${BASE}/device-backups/snapshots/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${getToken()}` } });

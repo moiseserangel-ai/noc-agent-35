@@ -1,4 +1,5 @@
 import prisma from '../database/client.js';
+import https from 'node:https';
 import logger from '../utils/logger.js';
 import { decrypt } from '../utils/crypto.js';
 import { sendToAdmin, sendWhatsAppMessage } from './evolution.service.js';
@@ -30,9 +31,9 @@ export async function sendTelegramMessage(chatId, text, tokenOverride) {
   const cfg = await getNotificationConfig();
   const token = tokenOverride || cfg.telegramToken;
   if (!token || !chatId) throw new Error('Token do Telegram ou Chat ID não configurado');
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }) });
-  const data = await response.json();
-  if (!response.ok || !data.ok) throw new Error(data.description || `Telegram HTTP ${response.status}`);
+  const body=JSON.stringify({chat_id:chatId,text,disable_web_page_preview:true});
+  const {status,data}=await new Promise((resolve,reject)=>{const request=https.request({hostname:'api.telegram.org',path:`/bot${token}/sendMessage`,method:'POST',family:4,timeout:15000,headers:{'content-type':'application/json','content-length':Buffer.byteLength(body)}},response=>{const chunks=[];response.on('data',chunk=>chunks.push(chunk));response.on('end',()=>{try{resolve({status:response.statusCode,data:JSON.parse(Buffer.concat(chunks).toString('utf8'))});}catch{reject(new Error(`Telegram retornou resposta inválida (HTTP ${response.statusCode})`));}});});request.on('timeout',()=>request.destroy(new Error('Tempo esgotado ao conectar com o Telegram')));request.on('error',reject);request.end(body);});
+  if (status < 200 || status >= 300 || !data.ok) throw new Error(data.description || `Telegram HTTP ${status}`);
   return data;
 }
 
