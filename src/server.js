@@ -39,6 +39,7 @@ import statusAdminRoutes,{publicStatusRouter} from './routes/status-page.routes.
 import tenantRoutes from './routes/tenant.routes.js';
 import cmdbRoutes from './routes/cmdb.routes.js';
 import vulnerabilityRoutes from './routes/vulnerability.routes.js';
+import lifecycleRoutes from './routes/lifecycle.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -114,6 +115,7 @@ app.use('/api/on-call', authMiddleware,globalOnly, requireRoles('admin'), auditM
 app.use('/api/status-page', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, statusAdminRoutes);
 app.use('/api/cmdb',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,cmdbRoutes);
 app.use('/api/vulnerabilities',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,vulnerabilityRoutes);
+app.use('/api/lifecycle',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,lifecycleRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

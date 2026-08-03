@@ -529,6 +529,32 @@ model CmdbLifecycleAlert {
   @@index([status, severity, updatedAt])
 }
 
+model LifecycleCatalogEntry {
+  id               String   @id @default(uuid())
+  vendor           String
+  product          String
+  lifecycleType    String   @default("software") // software|hardware|license
+  productStatus    String   @default("unknown") // active|discontinued|unknown
+  modelPattern     String   @default("*")
+  versionPattern   String   @default("*")
+  releaseDate      DateTime?
+  endOfSaleDate    DateTime?
+  endOfSupportDate DateTime?
+  sourceUrl        String
+  sourceTitle      String?
+  lastVerifiedAt   DateTime?
+  notes            String?
+  isActive         Boolean  @default(true)
+  createdBy        String
+  updatedBy        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([vendor, product, modelPattern, versionPattern])
+  @@index([vendor, isActive])
+  @@index([endOfSupportDate])
+}
+
 model CmdbInventoryPolicy {
   id        String    @id @default(uuid())
   assetId   String    @unique

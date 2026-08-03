@@ -33,6 +33,7 @@ import TenantContracts from './pages/TenantContracts.jsx';
 import OnCallScopes from './pages/OnCallScopes.jsx';
 import Cmdb from './pages/Cmdb.jsx';
 import Vulnerabilities from './pages/Vulnerabilities.jsx';
+import Lifecycle from './pages/Lifecycle.jsx';
 import { ToastContext } from './contexts/ToastContext.jsx';
 
 const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
@@ -187,6 +188,7 @@ export default function App() {
               <Route path="device-backups" element={user?.role === 'admin' ? <DeviceBackups /> : <Navigate to="/" replace />} />
               <Route path="compliance" element={user?.role === 'admin' ? <Compliance /> : <Navigate to="/" replace />} />
               <Route path="vulnerabilities" element={user?.role === 'admin' ? <Vulnerabilities /> : <Navigate to="/" replace />} />
+              <Route path="lifecycle" element={user?.role === 'admin' ? <Lifecycle /> : <Navigate to="/" replace />} />
               <Route path="changes" element={['admin','operator'].includes(user?.role) ? <Changes isAdmin={user?.role==='admin'} /> : <Navigate to="/" replace />} />
               <Route path="discovery" element={user?.role==='admin' ? <Discovery /> : <Navigate to="/" replace />} />
               <Route path="capacity" element={<Capacity isAdmin={user?.role==='admin'} />} />

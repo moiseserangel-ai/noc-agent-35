@@ -133,6 +133,14 @@ export const api = {
   scanAllVulnerabilities: () => request('/vulnerabilities/scan-all',{method:'POST'}),
   getVulnerabilityScanAllStatus: () => request('/vulnerabilities/scan-all/status'),
   decideVulnerability: (id,action,resolution='') => request(`/vulnerabilities/${id}/decision`,{method:'POST',body:JSON.stringify({action,resolution})}),
+  getLifecycle: (params={}) => request(`/lifecycle?${new URLSearchParams(params)}`),
+  scanLifecycle: () => request('/lifecycle/scan',{method:'POST'}),
+  createLifecycleTask: (assetId,reason='') => request(`/lifecycle/${assetId}/task`,{method:'POST',body:JSON.stringify({reason})}),
+  getLifecycleCatalog: (params={}) => request(`/lifecycle/catalog?${new URLSearchParams(params)}`),
+  createLifecycleCatalog: data => request('/lifecycle/catalog',{method:'POST',body:JSON.stringify(data)}),
+  updateLifecycleCatalog: (id,data) => request(`/lifecycle/catalog/${id}`,{method:'PUT',body:JSON.stringify(data)}),
+  verifyLifecycleCatalog: id => request(`/lifecycle/catalog/${id}/verify`,{method:'POST'}),
+  deleteLifecycleCatalog: id => request(`/lifecycle/catalog/${id}`,{method:'DELETE'}),
   deleteDeviceBackup: id => request(`/device-backups/snapshots/${id}`, { method: 'DELETE' }),
   downloadDeviceBackup: async id => {
     const res = await fetch(`${BASE}/device-backups/snapshots/${encodeURIComponent(id)}/download`, { headers: { Authorization: `Bearer ${getToken()}` } });

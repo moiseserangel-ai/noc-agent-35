@@ -34,6 +34,7 @@ const NAV_ITEMS = [
   { path: '/device-backups', label: 'Backup de equipamentos', icon: ArchiveRestore, roles: ['admin'] },
   { path: '/compliance', label: 'Compliance', icon: ClipboardCheck, roles: ['admin'] },
   { path: '/vulnerabilities', label: 'Vulnerabilidades', icon: Shield, roles: ['admin'] },
+  { path: '/lifecycle', label: 'Ciclo de vida', icon: CalendarClock, roles: ['admin'] },
   { path: '/changes', label: 'Mudanças', icon: ClipboardList, roles: ['admin','operator'] },
   { path: '/security', label: 'Minha segurança', icon: Shield },
 ];
