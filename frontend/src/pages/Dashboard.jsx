@@ -23,6 +23,7 @@ export default function Dashboard({ showBackup=false }) {
   const [tasks,setTasks]=useState([]);
   const [backupStatus,setBackupStatus]=useState(null);
   const [compliance,setCompliance]=useState(null);
+  const [lifecycle,setLifecycle]=useState(null);
   const [loading,setLoading]=useState(true);
   const [refreshing,setRefreshing]=useState(false);
   const [updatedAt,setUpdatedAt]=useState(null);
@@ -31,14 +32,16 @@ export default function Dashboard({ showBackup=false }) {
   const load=useCallback(async(initial=false)=>{
     if(initial)setLoading(true);else setRefreshing(true);
     try{
-      const [statsRes,tasksRes,backupRes,complianceRes]=await Promise.all([
+      const [statsRes,tasksRes,backupRes,complianceRes,lifecycleRes]=await Promise.all([
         api.getTaskStats(),api.getTasks({limit:10}),
         showBackup?api.getBackupStatus().catch(()=>null):Promise.resolve(null),
         showBackup?api.getComplianceDashboard().catch(()=>null):Promise.resolve(null),
+        showBackup?api.getLifecycle().catch(()=>null):Promise.resolve(null),
       ]);
       setStats(statsRes.data);setTasks(tasksRes.data);
       if(backupRes)setBackupStatus(backupRes.data);
       if(complianceRes)setCompliance(complianceRes.data);
+      if(lifecycleRes)setLifecycle(lifecycleRes.data);
       setUpdatedAt(new Date());
     }catch{}finally{setLoading(false);setRefreshing(false);}
   },[showBackup]);
@@ -59,8 +62,9 @@ export default function Dashboard({ showBackup=false }) {
   const openTasks=(stats?.pending||0)+(stats?.inProgress||0)+(stats?.diagnosing||0)+(stats?.awaiting||0);
   const slaBreached=stats?.slaBreached||0;
   const criticalFindings=compliance?.summary.criticalFindings||0;
-  const systemTone=slaBreached>0||criticalFindings>0?'danger':openTasks>0?'warning':'success';
-  const systemDetail=slaBreached>0?`${slaBreached} SLA(s) violado(s)`:criticalFindings>0?`${criticalFindings} desvio(s) crítico(s) de compliance`:openTasks>0?`${openTasks} Task(s) em aberto`:'Serviço do NOC online';
+  const lifecycleRisk=lifecycle?.summary.highRisk||0;
+  const systemTone=slaBreached>0||criticalFindings>0||lifecycleRisk>0?'danger':openTasks>0?'warning':'success';
+  const systemDetail=slaBreached>0?`${slaBreached} SLA(s) violado(s)`:criticalFindings>0?`${criticalFindings} desvio(s) crítico(s) de compliance`:lifecycleRisk>0?`${lifecycleRisk} ativo(s) com alto risco de ciclo de vida`:openTasks>0?`${openTasks} Task(s) em aberto`:'Serviço do NOC online';
   const quickLinks=useMemo(()=>[
     {to:'/tasks',label:'Tasks',icon:ListTodo,detail:'Gerenciar atividades'},
     {to:'/devices',label:'Equipamentos',icon:Server,detail:'Inventário e acesso'},
@@ -81,6 +85,7 @@ export default function Dashboard({ showBackup=false }) {
       <HealthCard icon={AlertTriangle} label="SLA violado" value={stats?.slaBreached||0} detail={`${stats?.completedToday||0} resolvidas hoje`} tone={stats?.slaBreached?'danger':'success'} to="/reports"/>
       {showBackup&&<HealthCard icon={ShieldCheck} label="Compliance" value={`${compliance?.summary.averageScore||0}%`} detail={`${compliance?.summary.belowTarget||0} abaixo da meta`} tone={(compliance?.summary.criticalFindings||0)?'danger':(compliance?.summary.belowTarget||0)?'warning':'success'} to="/compliance"/>}
       {showBackup&&<HealthCard icon={DatabaseBackup} label="Último backup" value={backupStatus?.lastBackup?new Date(backupStatus.lastBackup.createdAt).toLocaleDateString('pt-BR'):'Pendente'} detail={backupStatus?.lastBackup?'Backup do sistema disponível':'Execute o primeiro backup'} tone={backupStatus?.lastBackup?'success':'warning'} to="/backups"/>}
+      {showBackup&&<HealthCard icon={CalendarClock} label="Ciclo de vida" value={lifecycleRisk?`${lifecycleRisk} em risco`:'Controlado'} detail={`${lifecycle?.summary.expired||0} vencido(s) · ${lifecycle?.summary.unknown||0} incompleto(s)`} tone={lifecycleRisk?'danger':(lifecycle?.summary.unknown||0)?'warning':'success'} to="/lifecycle"/>}
     </div>
 
     <div className="dashboard-main-grid">

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageSquare, Activity, Cpu, Workflow } from 'lucide-react';
+import { MessageSquare, Activity, CalendarClock, Cpu, Workflow } from 'lucide-react';
 
 export default function Docs() {
   const [activeTab, setActiveTab] = useState('evolution');
@@ -37,6 +37,7 @@ export default function Docs() {
           <Workflow size={16} />
           Runbooks
         </button>
+        <button className={`tab-btn ${activeTab === 'lifecycle' ? 'active' : ''}`} onClick={() => setActiveTab('lifecycle')}><CalendarClock size={16}/>Ciclo de Vida</button>
       </div>
 
       <div className="card" style={{ marginTop: '20px', padding: '24px' }}>
@@ -192,6 +193,7 @@ export default function Docs() {
             <ul><li><strong>Comparação:</strong> versões salvas podem ser conferidas lado a lado antes da aprovação.</li><li><strong>Notificações:</strong> aprovações, falhas, lotes e agendamentos usam Telegram e WhatsApp configurados.</li><li><strong>Indicadores:</strong> taxa de sucesso, tempo médio, uso por Runbook e fabricante nos últimos 30 dias.</li><li><strong>Editor inteligente:</strong> sugestões de comandos por fabricante e inserção rápida de variáveis.</li></ul>
           </div>
         )}
+        {activeTab === 'lifecycle' && <div className="doc-content"><h3>📅 Ciclo de Vida e Fim de Suporte</h3><p>O módulo combina inventário do CMDB, garantia, contratos, licenças, versão instalada, vulnerabilidades e informações oficiais de EOL/EOS.</p><h4>Fluxo operacional</h4><ol><li>Vincule o equipamento a um ativo do CMDB e execute a coleta de inventário.</li><li>Abra <strong>Ciclo de Vida</strong> e identifique ativos sem correspondência no catálogo.</li><li>Use <strong>Preparar referência oficial</strong>, abra o portal do fabricante e confirme modelo, versão, estado e datas.</li><li>Informe somente datas publicadas; quando o fabricante apenas indicar <em>Discontinued</em>, registre o estado sem inventar uma data.</li><li>Use <strong>Verificar agora</strong> para recalcular alertas e risco.</li></ol><h4>Alertas e automação</h4><ul><li>Fim de suporte, garantia ou licença: avisos em 90, 30 e 7 dias e após o vencimento.</li><li>Produto descontinuado: alerta alto, elevado a crítico quando o ativo for crítico.</li><li>Fonte oficial sem revisão: aviso após 90 dias, configurável por <code>LIFECYCLE_CATALOG_REVIEW_DAYS</code>.</li><li>Condições críticas podem criar uma Task automaticamente; a chave do ativo impede duplicidade.</li><li>Nenhuma atualização ou substituição é executada automaticamente.</li></ul><h4>Relatórios e auditoria</h4><p>Os botões PDF e CSV respeitam os filtros da página e incluem riscos, fontes, alertas, Tasks e recomendações. Cadastro, revisão, exportação e mudanças ficam registrados na Auditoria.</p><h4>Checklist de encerramento</h4><ul className="docs-highlight-list"><li>Inventário recente e ativo vinculado ao CMDB.</li><li>Fabricante, modelo e versão identificados.</li><li>Fonte HTTPS oficial vinculada e revisada.</li><li>Estado e datas confirmados sem estimativas.</li><li>Telegram testado e deduplicação validada.</li><li>PDF e CSV exportados com sucesso.</li><li>Ativos de alto risco com Task ou RFC de tratamento.</li></ul><div className="docs-warning"><strong>Governança</strong><p>O catálogo é uma evidência operacional. Sempre preserve a URL oficial e revise a referência antes de atualizar o estado ou uma data.</p></div></div>}
       </div>
     </div>
   );
