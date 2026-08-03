@@ -14,7 +14,8 @@ test('knowledge documents and imports belong to an optional tenant', () => {
 });
 
 test('tenant search sees shared documents and its own documents only', () => {
-  assert.match(service, /tenantId \? \{ in: \[null, tenantId\] \} : null/);
+  assert.match(service, /OR: tenantId \? \[\{ tenantId: null \}, \{ tenantId \}\] : \[\{ tenantId: null \}\]/);
+  assert.doesNotMatch(service, /in: \[null, tenantId\]/);
   assert.match(service, /knowledgeContext\(query, agentName, tenantId = undefined\)/);
   assert.match(agent, /knowledgeContext\(userMessage, this\.name, tenantId\)/);
 });

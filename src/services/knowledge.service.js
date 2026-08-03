@@ -491,7 +491,7 @@ export async function searchKnowledge(query, agentName, limit = 5, log = true, t
     where: { document: {
       status: 'active',
       agentScope: { in: ['global', agentName] },
-      ...(tenantId !== undefined && { tenantId: tenantId ? { in: [null, tenantId] } : null }),
+      ...(tenantId !== undefined && { OR: tenantId ? [{ tenantId: null }, { tenantId }] : [{ tenantId: null }] }),
     } },
     include: { document: { select: { id: true, title: true, filename: true, agentScope: true, tenantId: true, updatedAt: true } } },
   });

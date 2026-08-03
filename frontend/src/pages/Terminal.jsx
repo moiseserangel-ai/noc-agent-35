@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Clock3, Copy, Eraser, History, Play, Plug, TerminalSquare, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Clock3, Copy, Eraser, History, Play, Plug, TerminalSquare, X } from 'lucide-react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { io } from 'socket.io-client';
@@ -213,6 +213,7 @@ export default function Terminal({ user }) {
   const [terminalMode, setTerminalMode] = useState('controlled');
   const [interactiveTabs, setInteractiveTabs] = useState([]);
   const [activeTabId, setActiveTabId] = useState(null);
+  const [historyCollapsed, setHistoryCollapsed] = useState(() => localStorage.getItem('noc_cli_history_collapsed') === 'true');
 
   const device = useMemo(() => devices.find(item => item.id === deviceId), [devices, deviceId]);
   const loadSessions = () => api.getCliSessions().then(result => setSessions(result.data)).catch(() => {});
@@ -337,15 +338,21 @@ export default function Terminal({ user }) {
     setCommand(next === -1 ? '' : history[next]);
   };
 
+  const toggleHistory = () => setHistoryCollapsed(value => {
+    const next = !value;
+    localStorage.setItem('noc_cli_history_collapsed', String(next));
+    return next;
+  });
+
   return (
-    <div>
+    <div className="cli-page">
       <div className="page-header">
         <h2>Terminal CLI</h2>
         <p>Console SSH controlada para consultas e alterações auditadas nos equipamentos.</p>
       </div>
 
       <div className="cli-layout">
-        <aside className="card cli-sidebar">
+        <aside className={`card cli-sidebar ${historyCollapsed ? 'history-collapsed' : ''}`}>
           <div>
             <label className="form-label">Equipamento</label>
             <select className="form-select" value={deviceId} disabled={(terminalMode === 'controlled' && active) || busy} onChange={event => setDeviceId(event.target.value)}>
@@ -376,16 +383,16 @@ export default function Terminal({ user }) {
             <span>{user?.role === 'admin' ? 'Consultas e alterações controladas' : 'Somente consultas'}</span>
           </div>
 
-          <div className="cli-history-title"><History size={15} /> Sessões recentes</div>
-          <div className="cli-session-history">
+          <button type="button" className="cli-history-title" onClick={toggleHistory} aria-expanded={!historyCollapsed} title={historyCollapsed?'Mostrar sessões recentes':'Recolher sessões recentes'}><span><History size={15} /> Sessões recentes</span>{historyCollapsed?<ChevronDown size={15}/>:<ChevronUp size={15}/>}</button>
+          {!historyCollapsed&&<div className="cli-session-history">
             {sessions.map(item => (
-              <button key={item.id} className={session?.id === item.id ? 'active' : ''} onClick={() => openHistory(item.id)}>
+              <button key={item.id} className={session?.id === item.id ? 'active' : ''} onClick={() => openHistory(item.id)} title={`${item.deviceName} · ${new Date(item.startedAt).toLocaleString('pt-BR')}`}>
                 <strong>{item.deviceName}</strong>
                 <span>{new Date(item.startedAt).toLocaleString('pt-BR')} · {item._count?.commands || 0} comandos</span>
                 <small>{statusLabel(item.status)}</small>
               </button>
             ))}
-          </div>
+          </div>}
         </aside>
 
         {terminalMode === 'interactive' ? <section className="cli-main cli-interactive-main">

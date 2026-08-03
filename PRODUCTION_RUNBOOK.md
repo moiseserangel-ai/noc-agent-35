@@ -68,3 +68,5 @@ Erros HTTP 429 de IA indicam quota do provedor, não falha do servidor. Configur
 ## Recuperação de emergência
 
 Se o painel não iniciar, preserve primeiro `prisma/data` e `backups`. Consulte o journal, valide `.env`, rode `npx prisma validate` e restaure somente um arquivo com integridade confirmada. Não apague o banco atual antes de criar uma cópia recuperável.
+
+As operações de diagnóstico por IA podem ultrapassar 60 segundos. O proxy de produção deve usar `proxy_read_timeout 300s` e `proxy_send_timeout 300s`, conforme `deploy/nginx-noc-agent.conf`, para não devolver `504` enquanto o agente ainda trabalha.

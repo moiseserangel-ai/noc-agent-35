@@ -10,7 +10,17 @@ async function request(path, options = {}) {
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
-  const data = await res.json();
+  const body = await res.text();
+  let data = {};
+  if (body) {
+    try { data = JSON.parse(body); }
+    catch {
+      const proxyError = [502, 503, 504].includes(res.status)
+        ? 'O servidor intermediário encerrou a espera, mas a operação pode continuar em segundo plano. Atualize a Task em alguns instantes.'
+        : `O servidor respondeu em formato inesperado (HTTP ${res.status}).`;
+      throw new Error(proxyError);
+    }
+  }
 
   if (res.status === 401 && token) {
     localStorage.removeItem('noc_token');
@@ -113,7 +123,12 @@ export const api = {
   compareDeviceBackups: (before, after) => request(`/device-backups/compare?before=${encodeURIComponent(before)}&after=${encodeURIComponent(after)}`),
   getConfigurationDrifts: (status='all') => request(`/device-backups/drifts?status=${encodeURIComponent(status)}`),
   decideConfigurationDrift: (id,action,resolution='') => request(`/device-backups/drifts/${id}/decision`,{method:'POST',body:JSON.stringify({action,resolution})}),
-  getVulnerabilities: () => request('/vulnerabilities'),
+  getVulnerabilities: (params={}) => request(`/vulnerabilities?${new URLSearchParams(params)}`),
+  downloadVulnerabilityReport: async(format,params={})=>{
+    const res=await fetch(`${BASE}/vulnerabilities/export.${format}?${new URLSearchParams(params)}`,{headers:{Authorization:`Bearer ${getToken()}`}});
+    if(!res.ok){let data={};try{data=await res.json();}catch{}throw new Error(data.error||'Falha ao exportar vulnerabilidades');}
+    return{blob:await res.blob(),filename:res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||`vulnerabilidades.${format}`};
+  },
   scanDeviceVulnerabilities: id => request(`/vulnerabilities/scan/${id}`,{method:'POST'}),
   scanAllVulnerabilities: () => request('/vulnerabilities/scan-all',{method:'POST'}),
   getVulnerabilityScanAllStatus: () => request('/vulnerabilities/scan-all/status'),
