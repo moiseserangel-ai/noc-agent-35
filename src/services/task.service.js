@@ -41,21 +41,21 @@ export async function updateTask(id, data) {
   return prisma.task.update({
     where: { id },
     data,
-    include: { device: true, messages: { orderBy: { createdAt: 'asc' } } },
+    include: { device: true, messages: { orderBy: { createdAt: 'asc' } },proposalRevisions:{orderBy:{version:'asc'}} },
   });
 }
 
 export async function getTaskById(id) {
   return prisma.task.findUnique({
     where: { id },
-    include: { device: true, messages: { orderBy: { createdAt: 'asc' } } },
+    include: { device: true, messages: { orderBy: { createdAt: 'asc' } },proposalRevisions:{orderBy:{version:'asc'}} },
   });
 }
 
 export async function getTaskByNumber(taskNumber) {
   return prisma.task.findUnique({
     where: { taskNumber },
-    include: { device: true, messages: { orderBy: { createdAt: 'asc' } } },
+    include: { device: true, messages: { orderBy: { createdAt: 'asc' } },proposalRevisions:{orderBy:{version:'asc'}} },
   });
 }
 

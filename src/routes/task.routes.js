@@ -115,6 +115,45 @@ router.get('/stats', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+async function saveProposalRevision(task,{type,content,feedback,actor,role}){
+  const latest=await prisma.taskProposalRevision.findFirst({where:{taskId:task.id},orderBy:{version:'desc'}});
+  let version=latest?.version||0;
+  if(!latest&&task.proposedSolution){version=1;await prisma.taskProposalRevision.create({data:{taskId:task.id,version,type:'agent_original',content:task.proposedSolution,createdBy:'Agente especialista',createdByRole:'agent'}});}
+  version+=1;
+  const revision=await prisma.taskProposalRevision.create({data:{taskId:task.id,version,type,content,feedback:feedback||null,createdBy:actor,createdByRole:role}});
+  await taskService.updateTask(task.id,{proposedSolution:content,adminResponse:null,status:'awaiting_approval'});
+  return revision;
+}
+
+router.post('/:id/proposal-revisions',async(req,res,next)=>{
+  try{
+    if(!['admin','operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Somente administradores e operadores podem revisar propostas'});
+    const task=await taskService.getTaskById(req.params.id);
+    if(!task)return res.status(404).json({success:false,error:'Task não encontrada'});
+    if(task.status!=='awaiting_approval'||!task.proposedSolution)return res.status(409).json({success:false,error:'A Task não possui uma proposta aguardando revisão'});
+    const mode=String(req.body.mode||''),feedback=String(req.body.feedback||'').trim().slice(0,4000),actor=String(req.user.name||req.user.username).trim().slice(0,100);
+    let content,type;
+    if(mode==='edit'){
+      content=String(req.body.content||'').trim().slice(0,30000);
+      if(!content)return res.status(400).json({success:false,error:'Informe a proposta revisada'});
+      if(content===task.proposedSolution)return res.status(400).json({success:false,error:'A proposta não foi alterada'});
+      type='manual_edit';
+    }else if(mode==='suggest'){
+      if(!feedback)return res.status(400).json({success:false,error:'Descreva a correção desejada'});
+      if(!task.deviceId||!task.agentUsed)return res.status(400).json({success:false,error:'A Task não possui equipamento e especialista definidos'});
+      const agent=specialistAgents[task.agentUsed];if(!agent)return res.status(400).json({success:false,error:'Especialista indisponível'});
+      const prompt=[task.originalMessage,'',`PROPOSTA ATUAL:\n${task.proposedSolution}`,'',`REVISÃO HUMANA (${req.user.role} ${actor}):\n${feedback}`,'','Gere uma nova versão completa da proposta incorporando a revisão humana. Não execute comandos. Mantenha comandos exatos, impacto, risco, validação e rollback. Não solicite aprovação por código ou número de Task; apenas devolva o plano revisado para nova aprovação humana.'].join('\n');
+      const result=await agent.diagnose(task.deviceId,task.device?.name||'Dispositivo',prompt,task.taskNumber);
+      content=String(result.text||'').trim().slice(0,30000);if(!content)throw new Error('O especialista não retornou uma proposta revisada');type='agent_revision';
+    }else return res.status(400).json({success:false,error:'Modo de revisão inválido'});
+    const revision=await saveProposalRevision(task,{type,content,feedback,actor,role:req.user.role});
+    const label=type==='manual_edit'?'editou diretamente a proposta':`solicitou revisão ao agente: ${feedback}`;
+    await taskService.addTaskMessage(task.id,'user',`${actor} ${label}. Nova proposta v${revision.version} aguardando aprovação.`);
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:type,resource:'task_proposal',resourceId:revision.id,status:'success',details:{taskId:task.id,taskNumber:task.taskNumber,version:revision.version,feedback:feedback||null}});
+    res.json({success:true,data:await taskService.getTaskById(task.id),message:`Proposta v${revision.version} salva para nova aprovação`});
+  }catch(error){next(error);}
+});
+
 router.post('/:id/approval', async(req,res,next)=>{
   let task;
   try{
@@ -135,7 +174,8 @@ router.post('/:id/approval', async(req,res,next)=>{
     if(!agent)return res.status(400).json({success:false,error:'Especialista indisponível para este equipamento'});
     await taskService.updateTask(task.id,{status:'executing',adminResponse:'yes'});
     await taskService.addTaskMessage(task.id,'user',`${actor} aprovou explicitamente a correção.`);
-    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'approve',resource:'task',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber,agent:task.agentUsed}});
+    const approvedRevision=task.proposalRevisions?.at(-1)||null;
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'approve',resource:'task',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber,agent:task.agentUsed,proposalVersion:approvedRevision?.version||null,proposalRevisionId:approvedRevision?.id||null}});
     const execution=await agent.executeSolution(task.deviceId,task.device?.name||'Dispositivo',task.proposedSolution,task.taskNumber);
     let updated=await taskService.updateTask(task.id,{status:'resolved',executionResult:execution.text,resolutionSummary:execution.text,resolutionType:'agent',resolvedAt:new Date()});
     await taskService.addTaskMessage(task.id,'agent',execution.text,task.agentUsed);

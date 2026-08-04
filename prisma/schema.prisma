@@ -75,8 +75,138 @@ model Tenant {
   cmdbAssets CmdbAsset[]
   ipamSubnets IpamSubnet[]
   businessServices BusinessService[]
+  suppliers Supplier[]
+  commercialContracts CommercialContract[]
+  softwareLicenses SoftwareLicense[]
 
   @@index([isActive, name])
+}
+
+model Supplier {
+  id              String   @id @default(uuid())
+  tenantId        String?
+  tenant          Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  name            String
+  legalName       String?
+  document        String?
+  status          String   @default("active")
+  manufacturers   String?
+  website         String?
+  supportHours    String?
+  technicalName   String?
+  technicalEmail  String?
+  technicalPhone  String?
+  commercialName  String?
+  commercialEmail String?
+  commercialPhone String?
+  escalationPhone String?
+  rating          Int?
+  notes           String?
+  createdBy       String
+  updatedBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  contracts       CommercialContract[]
+  licenses        SoftwareLicense[]
+
+  @@index([tenantId, status, name])
+  @@index([status, name])
+}
+
+model CommercialContract {
+  id                String   @id @default(uuid())
+  number            String   @unique
+  title             String
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  supplierId        String
+  supplier          Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  status            String   @default("draft")
+  startDate         DateTime
+  endDate           DateTime
+  amount            Float?
+  currency          String   @default("BRL")
+  billingCycle      String   @default("annual")
+  renewalType       String   @default("manual")
+  noticeDays        Int      @default(30)
+  serviceHours      String?
+  slaCriticalMinutes Int?
+  slaHighMinutes    Int?
+  owner             String?
+  ownerEmail        String?
+  documentUrl       String?
+  notes             String?
+  createdBy         String
+  updatedBy         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  assets            CommercialContractAsset[]
+  licenses          SoftwareLicense[]
+
+  @@index([tenantId, status, endDate])
+  @@index([supplierId, status])
+}
+
+model CommercialContractAsset {
+  contractId String
+  contract   CommercialContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  assetId    String
+  asset      CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([contractId, assetId])
+  @@index([assetId])
+}
+
+model SoftwareLicense {
+  id              String   @id @default(uuid())
+  name            String
+  product         String
+  vendor          String?
+  edition         String?
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  contractId      String?
+  contract        CommercialContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  licenseType     String   @default("subscription")
+  status          String   @default("active")
+  reference       String?
+  keyLast4        String?
+  seatsPurchased  Int      @default(1)
+  seatsUsed       Int      @default(0)
+  startDate       DateTime?
+  expiresAt       DateTime?
+  renewalType     String   @default("manual")
+  noticeDays      Int      @default(30)
+  amount          Float?
+  currency        String   @default("BRL")
+  billingCycle    String   @default("annual")
+  owner           String?
+  ownerEmail      String?
+  portalUrl       String?
+  notes           String?
+  createdBy       String
+  updatedBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  assets          SoftwareLicenseAsset[]
+
+  @@index([tenantId, status, expiresAt])
+  @@index([supplierId, status])
+  @@index([contractId])
+}
+
+model SoftwareLicenseAsset {
+  licenseId String
+  license   SoftwareLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  assetId   String
+  asset     CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([licenseId, assetId])
+  @@index([assetId])
 }
 
 model TenantSite {
@@ -347,6 +477,8 @@ model CmdbAsset {
   ipAssignments     IpamAddress[]
   businessServices  BusinessServiceAsset[]
   ipamSuggestions   IpamReconciliationSuggestion[]
+  commercialContracts CommercialContractAsset[]
+  softwareLicenses SoftwareLicenseAsset[]
 
   @@index([tenantId, status])
   @@index([siteId, category])
@@ -1103,8 +1235,25 @@ model Task {
   changeRequests       ChangeRequest[]
   runbookExecutions    RunbookExecution[]
   statusIncident       StatusIncident?
+  proposalRevisions    TaskProposalRevision[]
 
   @@index([incidentKey, status])
+}
+
+model TaskProposalRevision {
+  id              String   @id @default(uuid())
+  taskId          String
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  version         Int
+  type            String   // agent_original|agent_revision|manual_edit
+  content         String
+  feedback        String?
+  createdBy       String
+  createdByRole   String
+  createdAt       DateTime @default(now())
+
+  @@unique([taskId, version])
+  @@index([taskId, createdAt])
 }
 
 model StatusService {

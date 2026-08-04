@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow, Bell, CalendarClock, RadioTower, Building2, Boxes
+  LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow, Bell, CalendarClock, RadioTower, Building2, Boxes, KeyRound
 } from 'lucide-react';
 import ThemeSelector from './ThemeSelector.jsx';
 
@@ -18,6 +18,9 @@ const NAV_ITEMS = [
   { path: '/status-page', label: 'Status Page', icon: RadioTower, roles: ['admin'] },
   { path: '/clients', label: 'Clientes', icon: Building2, roles: ['admin'] },
   { path: '/tenant-contracts', label: 'Contratos e Portais', icon: ClipboardList, roles: ['admin'] },
+  { path: '/suppliers', label: 'Fornecedores', icon: Building2, roles: ['admin'] },
+  { path: '/commercial-contracts', label: 'Contratos comerciais', icon: ClipboardList, roles: ['admin'] },
+  { path: '/software-licenses', label: 'Licenças e assinaturas', icon: KeyRound, roles: ['admin'] },
   { path: '/on-call-scopes', label: 'Escopos de Plantão', icon: Shield, roles: ['admin'] },
   { path: '/runbooks', label: 'Runbooks', icon: Workflow, roles: ['admin', 'operator'] },
   { path: '/chat', label: 'Chat IA', icon: MessageSquare, roles: ['admin', 'operator'] },

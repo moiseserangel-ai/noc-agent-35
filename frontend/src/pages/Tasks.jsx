@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle, Workflow, Eye, GitBranch } from 'lucide-react';
+import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle, Workflow, Eye, GitBranch, Pencil, Sparkles } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -32,6 +32,7 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
   const [workflowForms, setWorkflowForms] = useState({});
   const [taskRunbooks,setTaskRunbooks]=useState({});
   const [cmdbContexts,setCmdbContexts]=useState({});
+  const [proposalForms,setProposalForms]=useState({});
   const toast = useToast();
 
   useEffect(() => { api.getDevices().then(r => setDevices(r.data)).catch(() => {}); }, []);
@@ -68,6 +69,7 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
       setTasks(items => items.map(item => item.id === id ? r.data : item));
       setCmdbContexts(items=>({...items,[id]:context.data}));
       setWorkflowForms(forms => ({ ...forms, [id]: { assignedTo: r.data.assignedTo || '', dueAt: r.data.dueAt ? new Date(r.data.dueAt).toISOString().slice(0, 16) : '', note: '' } }));
+      setProposalForms(forms=>({...forms,[id]:{feedback:forms[id]?.feedback||'',content:r.data.proposedSolution||''}}));
       if(r.data.deviceId&&r.data.workType==='incident')loadRunbooks(r.data);
     } catch (e) { toast(e.message, 'error'); }
   };
@@ -111,6 +113,8 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
     catch(error){toast(error.message,'error');}
     finally{setProcessing(null);}
   };
+
+  const reviseProposal=async(task,mode)=>{const form=proposalForms[task.id]||{};if(mode==='suggest'&&!form.feedback?.trim()){toast('Descreva a correção que o agente deve considerar','error');return}if(mode==='edit'&&!window.confirm('Salvar sua edição como uma nova versão da proposta? Ela ainda precisará de aprovação antes da execução.'))return;setProcessing(`proposal:${task.id}`);try{const result=await api.reviseTaskProposal(task.id,{mode,feedback:form.feedback||'',content:form.content||''});toast(result.message,'success');setTasks(items=>items.map(item=>item.id===task.id?result.data:item));setProposalForms(forms=>({...forms,[task.id]:{feedback:'',content:result.data.proposedSolution||''}}))}catch(error){toast(error.message,'error')}finally{setProcessing(null)}};
 
   useEffect(() => {
     let active = true;
@@ -205,6 +209,7 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
                 {t.proposedSolution && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--warning)', fontWeight: 600, marginBottom: 4 }}>PLANO PROPOSTO — REVISE ANTES DE APROVAR</div>
                   <div style={{ fontSize: '0.8rem', background: 'var(--warning-dim)', border:'1px solid color-mix(in srgb,var(--warning) 35%,transparent)', padding: 12, borderRadius: 8 }}><AgentResponse content={t.proposedSolution} /></div>
+                  {canOperate&&t.status==='awaiting_approval'&&<div className="task-proposal-review"><div><label className="form-label">Sugestão para o agente</label><textarea className="form-input" rows="3" placeholder="Ex.: preserve a rota padrão e use a VLAN 410..." value={proposalForms[t.id]?.feedback||''} onChange={e=>setProposalForms(f=>({...f,[t.id]:{...f[t.id],feedback:e.target.value}}))}/><button className="btn btn-secondary" disabled={processing===`proposal:${t.id}`} onClick={()=>reviseProposal(t,'suggest')}><Sparkles size={14}/> Solicitar nova proposta</button></div><details><summary><Pencil size={14}/> Editar comandos e texto diretamente</summary><textarea className="form-input task-proposal-editor" rows="12" value={proposalForms[t.id]?.content??t.proposedSolution} onChange={e=>setProposalForms(f=>({...f,[t.id]:{...f[t.id],content:e.target.value}}))}/><button className="btn btn-secondary" disabled={processing===`proposal:${t.id}`} onClick={()=>reviseProposal(t,'edit')}><Pencil size={14}/> Salvar como nova versão</button></details>{t.proposalRevisions?.length>0&&<details className="task-proposal-history"><summary>Histórico de versões ({t.proposalRevisions.length})</summary>{t.proposalRevisions.map(r=><article key={r.id}><strong>v{r.version} · {r.type==='manual_edit'?'Edição humana':r.type==='agent_revision'?'Revisão do agente':'Proposta original'}</strong><small>{r.createdBy} ({r.createdByRole}) · {new Date(r.createdAt).toLocaleString('pt-BR')}</small>{r.feedback&&<p>Orientação: {r.feedback}</p>}<pre>{r.content}</pre></article>)}</details>}</div>}
                 </div>}
                 {t.executionResult && <div style={{ marginTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 600, marginBottom: 4 }}>RESULTADO</div>

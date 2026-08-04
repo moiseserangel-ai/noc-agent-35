@@ -40,6 +40,9 @@ import tenantRoutes from './routes/tenant.routes.js';
 import cmdbRoutes from './routes/cmdb.routes.js';
 import vulnerabilityRoutes from './routes/vulnerability.routes.js';
 import lifecycleRoutes from './routes/lifecycle.routes.js';
+import supplierRoutes from './routes/supplier.routes.js';
+import commercialContractRoutes from './routes/commercial-contract.routes.js';
+import softwareLicenseRoutes from './routes/software-license.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -116,6 +119,9 @@ app.use('/api/status-page', authMiddleware,globalOnly, requireRoles('admin'), au
 app.use('/api/cmdb',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,cmdbRoutes);
 app.use('/api/vulnerabilities',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,vulnerabilityRoutes);
 app.use('/api/lifecycle',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,lifecycleRoutes);
+app.use('/api/suppliers',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,supplierRoutes);
+app.use('/api/commercial-contracts',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,commercialContractRoutes);
+app.use('/api/software-licenses',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,softwareLicenseRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

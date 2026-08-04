@@ -30,6 +30,9 @@ import StatusPage from './pages/StatusPage.jsx';
 import PublicStatus from './pages/PublicStatus.jsx';
 import Clients from './pages/Clients.jsx';
 import TenantContracts from './pages/TenantContracts.jsx';
+import Suppliers from './pages/Suppliers.jsx';
+import CommercialContracts from './pages/CommercialContracts.jsx';
+import SoftwareLicenses from './pages/SoftwareLicenses.jsx';
 import OnCallScopes from './pages/OnCallScopes.jsx';
 import Cmdb from './pages/Cmdb.jsx';
 import Vulnerabilities from './pages/Vulnerabilities.jsx';
@@ -198,6 +201,9 @@ export default function App() {
               <Route path="on-call" element={user?.role==='admin' ? <OnCall /> : <Navigate to="/" replace />} />
               <Route path="clients" element={user?.role==='admin'&&!user?.tenantId ? <Clients /> : <Navigate to="/" replace />} />
               <Route path="tenant-contracts" element={user?.role==='admin'&&!user?.tenantId ? <TenantContracts /> : <Navigate to="/" replace />} />
+              <Route path="suppliers" element={user?.role==='admin'&&!user?.tenantId ? <Suppliers /> : <Navigate to="/" replace />} />
+              <Route path="commercial-contracts" element={user?.role==='admin'&&!user?.tenantId ? <CommercialContracts /> : <Navigate to="/" replace />} />
+              <Route path="software-licenses" element={user?.role==='admin'&&!user?.tenantId ? <SoftwareLicenses /> : <Navigate to="/" replace />} />
               <Route path="cmdb" element={user?.role==='admin'&&!user?.tenantId ? <Cmdb /> : <Navigate to="/" replace />} />
               <Route path="on-call-scopes" element={user?.role==='admin'&&!user?.tenantId ? <OnCallScopes /> : <Navigate to="/" replace />} />
               <Route path="status-page" element={user?.role==='admin' ? <StatusPage /> : <Navigate to="/" replace />} />
