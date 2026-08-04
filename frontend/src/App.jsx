@@ -33,6 +33,10 @@ import TenantContracts from './pages/TenantContracts.jsx';
 import Suppliers from './pages/Suppliers.jsx';
 import CommercialContracts from './pages/CommercialContracts.jsx';
 import SoftwareLicenses from './pages/SoftwareLicenses.jsx';
+import CommercialExpiries from './pages/CommercialExpiries.jsx';
+import CommercialCosts from './pages/CommercialCosts.jsx';
+import CommercialDashboard from './pages/CommercialDashboard.jsx';
+import CommercialReports from './pages/CommercialReports.jsx';
 import OnCallScopes from './pages/OnCallScopes.jsx';
 import Cmdb from './pages/Cmdb.jsx';
 import Vulnerabilities from './pages/Vulnerabilities.jsx';
@@ -204,6 +208,10 @@ export default function App() {
               <Route path="suppliers" element={user?.role==='admin'&&!user?.tenantId ? <Suppliers /> : <Navigate to="/" replace />} />
               <Route path="commercial-contracts" element={user?.role==='admin'&&!user?.tenantId ? <CommercialContracts /> : <Navigate to="/" replace />} />
               <Route path="software-licenses" element={user?.role==='admin'&&!user?.tenantId ? <SoftwareLicenses /> : <Navigate to="/" replace />} />
+              <Route path="commercial-expiries" element={user?.role==='admin'&&!user?.tenantId ? <CommercialExpiries /> : <Navigate to="/" replace />} />
+              <Route path="commercial-costs" element={user?.role==='admin'&&!user?.tenantId ? <CommercialCosts /> : <Navigate to="/" replace />} />
+              <Route path="commercial-dashboard" element={user?.role==='admin'&&!user?.tenantId ? <CommercialDashboard /> : <Navigate to="/" replace />} />
+              <Route path="commercial-reports" element={user?.role==='admin'&&!user?.tenantId ? <CommercialReports /> : <Navigate to="/" replace />} />
               <Route path="cmdb" element={user?.role==='admin'&&!user?.tenantId ? <Cmdb /> : <Navigate to="/" replace />} />
               <Route path="on-call-scopes" element={user?.role==='admin'&&!user?.tenantId ? <OnCallScopes /> : <Navigate to="/" replace />} />
               <Route path="status-page" element={user?.role==='admin' ? <StatusPage /> : <Navigate to="/" replace />} />

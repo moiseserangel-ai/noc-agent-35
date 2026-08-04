@@ -6,7 +6,7 @@ import { businessServiceSlaMinutes, cmdbOperationalContext, elevatedPriority } f
 
 async function buildBusinessSlaFields(priority,openedAt,tenantId,services=[]){const sla=await buildSlaFields(priority,openedAt,tenantId),minutes=businessServiceSlaMinutes(services);if(minutes){const serviceDueAt=new Date(openedAt.getTime()+minutes*60_000);if(!sla.slaResolveDueAt||serviceDueAt<sla.slaResolveDueAt)sla.slaResolveDueAt=serviceDueAt;}return sla;}
 
-export async function createTask({ source, originalMessage, deviceId, priority, workType, incident = {} }) {
+export async function createTask({ source, originalMessage, deviceId, tenantId=null, priority, workType, incident = {} }) {
   const lastTask = await prisma.task.findFirst({ orderBy: { taskNumber: 'desc' } });
   const taskNumber = (lastTask?.taskNumber || 0) + 1;
 
@@ -22,7 +22,7 @@ export async function createTask({ source, originalMessage, deviceId, priority, 
       workType: inferWorkType(originalMessage, source, workType),
       originalMessage,
       deviceId: deviceId || null,
-      tenantId:scopedDevice?.tenantId||null,
+      tenantId:scopedDevice?.tenantId||tenantId||null,
       priority: effectivePriority,
       ...sla,
       ...incident,

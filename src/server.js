@@ -43,6 +43,8 @@ import lifecycleRoutes from './routes/lifecycle.routes.js';
 import supplierRoutes from './routes/supplier.routes.js';
 import commercialContractRoutes from './routes/commercial-contract.routes.js';
 import softwareLicenseRoutes from './routes/software-license.routes.js';
+import commercialCostRoutes from './routes/commercial-cost.routes.js';
+import commercialDashboardRoutes from './routes/commercial-dashboard.routes.js';
 import { auditMutation } from './middleware/audit.middleware.js';
 import { logAudit } from './services/audit.service.js';
 import { inferWorkType } from './services/work-type.service.js';
@@ -59,6 +61,7 @@ import { runMonthlyReportScheduler } from './services/monthly-report.service.js'
 import { runCmdbInventoryScheduler } from './services/cmdb-inventory.service.js';
 import { runCmdbLifecycleMonitor } from './services/cmdb-lifecycle.service.js';
 import { runVulnerabilityScheduler } from './services/vulnerability.service.js';
+import { runCommercialExpiryScheduler } from './services/commercial-expiry.service.js';
 
 import prisma from './database/client.js';
 import SupportAgent from './agents/support-agent.js';
@@ -122,6 +125,8 @@ app.use('/api/lifecycle',authMiddleware,globalOnly,requireRoles('admin'),auditMu
 app.use('/api/suppliers',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,supplierRoutes);
 app.use('/api/commercial-contracts',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,commercialContractRoutes);
 app.use('/api/software-licenses',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,softwareLicenseRoutes);
+app.use('/api/commercial-costs',authMiddleware,globalOnly,requireRoles('admin'),commercialCostRoutes);
+app.use('/api/commercial-dashboard',authMiddleware,globalOnly,requireRoles('admin'),commercialDashboardRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -437,6 +442,9 @@ runCmdbInventoryScheduler().catch(err=>logger.error(`Initial CMDB inventory sche
 const cmdbLifecycleMonitor=setInterval(()=>runCmdbLifecycleMonitor(io).catch(err=>logger.error(`CMDB lifecycle monitor error: ${err.message}`)),60*60_000);
 cmdbLifecycleMonitor.unref();
 runCmdbLifecycleMonitor(io).catch(err=>logger.error(`Initial CMDB lifecycle monitor error: ${err.message}`));
+const commercialExpiryMonitor=setInterval(()=>runCommercialExpiryScheduler(io).catch(err=>logger.error(`Commercial expiry monitor error: ${err.message}`)),60*60_000);
+commercialExpiryMonitor.unref();
+runCommercialExpiryScheduler(io).catch(err=>logger.error(`Initial commercial expiry monitor error: ${err.message}`));
 
 const statusPageMonitor=setInterval(()=>syncStatusServices().catch(err=>logger.error(`Status Page sync error: ${err.message}`)),60_000);
 statusPageMonitor.unref();
@@ -493,6 +501,7 @@ process.on('SIGTERM', async () => {
   clearInterval(complianceMonitor);
   clearInterval(complianceExceptionMonitor);
   clearInterval(complianceEscalationMonitor);
+  clearInterval(commercialExpiryMonitor);
   clearInterval(capacityMonitor);
   clearInterval(runbookScheduleMonitor);
   clearInterval(vulnerabilityMonitor);

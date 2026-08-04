@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageSquare, Activity, CalendarClock, Cpu, Workflow } from 'lucide-react';
+import { MessageSquare, Activity, CalendarClock, ClipboardList, Cpu, Workflow } from 'lucide-react';
 
 export default function Docs() {
   const [activeTab, setActiveTab] = useState('evolution');
@@ -38,9 +38,11 @@ export default function Docs() {
           Runbooks
         </button>
         <button className={`tab-btn ${activeTab === 'lifecycle' ? 'active' : ''}`} onClick={() => setActiveTab('lifecycle')}><CalendarClock size={16}/>Ciclo de Vida</button>
+        <button className={`tab-btn ${activeTab === 'commercial' ? 'active' : ''}`} onClick={() => setActiveTab('commercial')}><ClipboardList size={16}/>Governança Comercial</button>
       </div>
 
       <div className="card" style={{ marginTop: '20px', padding: '24px' }}>
+        {activeTab === 'commercial' && <div className="doc-content"><h3>📋 Governança de Fornecedores, Contratos e Licenças</h3><p>O módulo centraliza parceiros, cobertura contratual, assinaturas, custos e renovações por empresa.</p><h4>Ordem recomendada de cadastro</h4><ol><li>Cadastre o fornecedor como global ou vinculado a uma empresa.</li><li>Cadastre o contrato, vigência, SLA, custo, renovação e ativos cobertos.</li><li>Cadastre as licenças, quantidade contratada/em uso, vencimento e contrato relacionado.</li><li>Confira a <strong>Visão comercial</strong> e os <strong>Custos comerciais</strong>.</li><li>Use <strong>Vencimentos e renovações</strong> para verificar alertas e criar Tasks.</li></ol><h4>Alertas e Tasks</h4><ul><li>O monitor verifica contratos e licenças a cada hora.</li><li>Os estágios são 90, 60, 30, 15 e 7 dias, além de vencido, respeitando a janela configurada em cada item.</li><li>Notificações usam painel, Telegram e WhatsApp conforme as configurações gerais.</li><li>A data, o estágio e o item formam a chave de deduplicação.</li><li>Tasks automáticas são opcionais e limitadas a sete dias ou vencido.</li><li>Nenhuma Task de renovação executa configuração técnica.</li></ul><h4>Custos</h4><ul><li>Mensal, trimestral e anual são normalizados para equivalentes mensal e anual.</li><li>Custos pontuais ficam separados dos recorrentes.</li><li>BRL, USD e EUR nunca são somados sem uma política explícita de câmbio.</li><li>Somente itens ativos com valor entram nos indicadores financeiros.</li></ul><h4>Relatórios</h4><p>Em <strong>Relatórios comerciais</strong>, selecione uma empresa ou todas e exporte PDF ou CSV. O PDF é executivo; o CSV contém uma linha por contrato ou licença. As exportações ficam registradas na Auditoria.</p><div className="docs-warning"><strong>Segurança</strong><p>Não armazene chaves completas de licença. Use apenas a referência e os últimos quatro caracteres. Antes de enviar relatórios a clientes, aplique o filtro da empresa correspondente.</p></div></div>}
         {activeTab === 'evolution' && (
           <div className="doc-content">
             <h3>📱 Configurando a Evolution API</h3>
