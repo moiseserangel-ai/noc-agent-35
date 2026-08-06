@@ -347,10 +347,11 @@ const crawlUrl = (raw, base, policy) => {
   try {
     const url = new URL(raw, base);
     url.hash = '';
-    if (url.protocol !== 'https:' || url.hostname !== policy.hostname || !url.pathname.startsWith(policy.prefix)) return null;
+    const rootPath = policy.prefix.endsWith('/') ? policy.prefix.slice(0, -1) : policy.prefix;
+    const isRoot = url.pathname === rootPath;
+    if (url.protocol !== 'https:' || url.hostname !== policy.hostname || (!isRoot && !url.pathname.startsWith(policy.prefix))) return null;
     if (/\.(?:png|jpe?g|gif|svg|webp|ico|pdf|zip|gz|mp4|mp3|css|js)$/i.test(url.pathname)) return null;
     url.search = '';
-    if (!url.pathname.endsWith('/')) url.pathname += '/';
     return url.toString();
   } catch { return null; }
 };
