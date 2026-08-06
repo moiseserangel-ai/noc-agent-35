@@ -6,6 +6,13 @@ import { providerRunners } from '../ai/providers.js';
 import { providerAvailability, recordAiFailure, recordAiSkipped, recordAiSuccess } from '../services/ai-usage.service.js';
 import { knowledgeContext } from '../services/knowledge.service.js';
 
+const CONFIGURATION_REQUEST = /\b(configur|alter|cria|adicion|remov|exclu|desativ|ativ|bloque|liber|aplic|reinici|instal|atualiz|migr)\w*/i;
+
+function knowledgeInstruction(message) {
+  if (!CONFIGURATION_REQUEST.test(String(message))) return '';
+  return '\n\n[POLÍTICA DE CONFIGURAÇÃO]\nAntes de propor ou aplicar qualquer alteração, consulte a base de conhecimento do especialista para confirmar sintaxe, compatibilidade e procedimento. Use a documentação como referência técnica e cite a fonte quando ela influenciar a solução. Se não houver documentação relevante, informe isso claramente e não invente uma referência.';
+}
+
 export async function getAiConfiguration() {
   const keys = ['ai_provider', 'ai_fallback_order', 'claude_api_key', 'claude_model', 'openai_api_key', 'openai_model', 'gemini_api_key', 'gemini_model'];
   const rows = await prisma.settings.findMany({ where: { key: { in: keys } } });
@@ -35,7 +42,7 @@ export default class BaseAgent {
       const deviceId = String(userMessage).match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0];
       if (deviceId) tenantId = (await prisma.device.findUnique({ where: { id: deviceId }, select: { tenantId: true } }))?.tenantId ?? null;
     }
-    const contextualMessage = `${userMessage}${await knowledgeContext(userMessage, this.name, tenantId)}`;
+    const contextualMessage = `${userMessage}${knowledgeInstruction(userMessage)}${await knowledgeContext(userMessage, this.name, tenantId)}`;
     const cfg = await getAiConfiguration();
     const order = [...new Set([cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
     if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');
