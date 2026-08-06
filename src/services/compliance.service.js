@@ -17,7 +17,7 @@ const contains = (text, pattern) => pattern.test(text);
 function routerOsCanonical(config) {
   let section = '';
   return String(config).split(/\r?\n/).map(raw => raw.trim()).filter(Boolean).map(line => {
-    if (line.startsWith('/')) {
+    if (/^\/[A-Za-z]/.test(line)) {
       section = line;
       return line;
     }

@@ -40,6 +40,19 @@ test('detecta exposição de serviços no RouterOS', () => {
   assert.ok(complianceScore(findings) < 50);
 });
 
+test('mantém seção RouterOS após continuação CIDR iniciada por barra',()=>{
+  const findings=evaluateMikrotikCompliance(`/ip service
+set ssh address="172.30.255.0/24,192.168.250.0\\
+    /24,172.16.255.0/24"
+set telnet disabled=yes
+set ftp disabled=yes
+set api disabled=yes
+/ip ssh
+set strong-crypto=yes`);
+  assert.equal(findings.find(item=>item.ruleKey==='mt_api').status,'compliant');
+  assert.equal(findings.find(item=>item.ruleKey==='mt_telnet').status,'compliant');
+});
+
 test('avalia baseline Huawei sem considerar Telnet ausente como habilitado', () => {
   const findings = evaluateHuaweiCompliance(`
 sysname NE8000-NOC

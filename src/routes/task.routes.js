@@ -234,7 +234,7 @@ router.post('/:id/complete', async (req, res, next) => {
     let updated = await taskService.updateTask(task.id, { status: 'resolved', executionResult: note, resolutionSummary: note, resolutionType: 'manual', resolvedAt: new Date(), adminResponse: 'manual' });
     await taskService.addTaskMessage(task.id, 'user', note);
     await notifyTask(updated, 'resolved', { message: note, io: req.app.get('io') });
-    updated = await validateComplianceRemediation({...task,...updated},req.user?.username || 'admin',req.app.get('io')) || updated;
+    if(String(task.incidentKey||'').startsWith('compliance-remediation:'))await taskService.addTaskMessage(task.id,'system','Conclusão manual registrada. A validação automática não será executada neste fluxo; use a ação de compliance ou a execução aprovada pelo agente quando desejar validar tecnicamente.');
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 });
