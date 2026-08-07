@@ -53,6 +53,14 @@ export async function collectCmdbInventory(assetId,{username='system',type='manu
     asset=await prisma.cmdbAsset.findUnique({where:{id:assetId},include:{device:true,inventoryPolicy:true}});if(!asset)throw Object.assign(new Error('Ativo não encontrado'),{statusCode:404});if(!asset.device?.isActive)throw Object.assign(new Error('Vincule um equipamento monitorado e ativo antes da coleta'),{statusCode:400});if(!INVENTORY_TYPES.includes(asset.device.type))throw Object.assign(new Error('Tipo sem suporte à coleta automática'),{statusCode:400});
     const data=await executeInventory(asset.device),now=new Date();
     const snapshot=await prisma.cmdbInventorySnapshot.create({data:{assetId:asset.id,deviceId:asset.device.id,status:'success',manufacturer:data.manufacturer,model:data.model,serialNumber:data.serialNumber,hostname:data.hostname,osVersion:data.osVersion,uptime:data.uptime,inventoryData:JSON.stringify(data),collectedBy:username}});
+    // O inventário técnico é a fonte atual para os campos exibidos nas telas de
+    // equipamentos, topologia e vulnerabilidades. Sem esta sincronização o
+    // CMDB recebia o snapshot novo, mas o Device continuava com a versão antiga.
+    const deviceSync={};
+    for(const field of ['manufacturer','model','hostname','osVersion']){
+      if(data[field]) deviceSync[field]=data[field];
+    }
+    if(Object.keys(deviceSync).length) await prisma.device.update({where:{id:asset.device.id},data:deviceSync});
     let previousInventory={};try{previousInventory=asset.inventoryData?JSON.parse(asset.inventoryData):{};}catch{}
     const reconciled={manufacturer:data.manufacturer||asset.manufacturer,model:data.model||asset.model,serialNumber:data.serialNumber||asset.serialNumber,hostname:data.hostname||asset.hostname},changes=diffCmdbValues({...asset,osVersion:previousInventory.osVersion},{...reconciled,osVersion:data.osVersion},['manufacturer','model','serialNumber','hostname','osVersion']);
     await prisma.cmdbAsset.update({where:{id:asset.id},data:{...reconciled,lastInventoryAt:now,lastInventoryStatus:'success',lastInventoryError:null,inventoryData:JSON.stringify(data),updatedBy:username}});
