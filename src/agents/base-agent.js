@@ -7,10 +7,16 @@ import { providerAvailability, recordAiFailure, recordAiSkipped, recordAiSuccess
 import { knowledgeContext } from '../services/knowledge.service.js';
 
 const CONFIGURATION_REQUEST = /\b(configur|alter|cria|adicion|remov|exclu|desativ|ativ|bloque|liber|aplic|reinici|instal|atualiz|migr)\w*/i;
+const APPROVED_EXECUTION = /(?:solu[cç][aã]o|mudan[cç]a)\s+aprovad[ao]/i;
 
 function knowledgeInstruction(message) {
   if (!CONFIGURATION_REQUEST.test(String(message))) return '';
   return '\n\n[POLÍTICA DE CONFIGURAÇÃO]\nAntes de propor ou aplicar qualquer alteração, consulte a base de conhecimento do especialista para confirmar sintaxe, compatibilidade e procedimento. Use a documentação como referência técnica e cite a fonte quando ela influenciar a solução. Se não houver documentação relevante, informe isso claramente e não invente uma referência.';
+}
+
+function approvedExecutionInstruction(message) {
+  if (!APPROVED_EXECUTION.test(String(message))) return '';
+  return '\n\n[EXECUÇÃO APROVADA — PLANO IMUTÁVEL]\nA proposta delimitada como solução/mudança aprovada foi revisada e autorizada pelo administrador. Execute somente o que está explicitamente descrito nesse plano, sem adicionar, remover, substituir ou redesenhar etapas. Não transforme a execução em um novo diagnóstico nem escolha uma solução alternativa. Preserve os parâmetros, objetos, comentários e comandos aprovados. Se o plano estiver incompleto, incompatível com o estado atual ou não puder ser executado exatamente, pare antes de alterar o equipamento e informe a divergência para nova aprovação. Após cada comando, valide o resultado e reporte fielmente o que foi executado.';
 }
 
 export async function getAiConfiguration() {
@@ -42,7 +48,7 @@ export default class BaseAgent {
       const deviceId = String(userMessage).match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0];
       if (deviceId) tenantId = (await prisma.device.findUnique({ where: { id: deviceId }, select: { tenantId: true } }))?.tenantId ?? null;
     }
-    const contextualMessage = `${userMessage}${knowledgeInstruction(userMessage)}${await knowledgeContext(userMessage, this.name, tenantId)}`;
+    const contextualMessage = `${approvedExecutionInstruction(userMessage)}${userMessage}${knowledgeInstruction(userMessage)}${await knowledgeContext(userMessage, this.name, tenantId)}`;
     const cfg = await getAiConfiguration();
     const order = [...new Set([cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
     if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');
