@@ -128,8 +128,14 @@ router.post('/:id/validate',async(req,res,next)=>{
     if(!current||!['in_progress','failed_validation'].includes(current.status))return res.status(409).json({success:false,error:'A mudança não está pronta para validação'});
     await prisma.changeRequest.update({where:{id:current.id},data:{status:'validating'}});
     const result=await validateExecutedChange(current,actor(req));
-    await logAudit({...requestIdentity(req),action:'validate',resource:'change_request',resourceId:current.id,status:result.passed?'success':'failure',details:{number:current.number,results:result.results}});
-    res.json({success:true,data:await prisma.changeRequest.findUnique({where:{id:current.id},include:changeInclude}),message:result.passed?'Mudança validada e concluída':'Validação falhou; avalie o rollback'});
+    let rollbackTasks=[];
+    if(!result.passed&&!current.rollbackTaskId){
+      // A falha pós-mudança abre automaticamente o fluxo de rollback, mas as
+      // Tasks continuam aguardando aprovação explícita antes de executar.
+      rollbackTasks=await createRollbackTasks(current,actor(req));
+    }
+    await logAudit({...requestIdentity(req),action:'validate',resource:'change_request',resourceId:current.id,status:result.passed?'success':'failure',details:{number:current.number,results:result.results,rollbackTasks}});
+    res.json({success:true,data:await prisma.changeRequest.findUnique({where:{id:current.id},include:changeInclude}),message:result.passed?'Mudança validada e concluída':`Validação falhou; ${rollbackTasks.length} rollback(s) preparado(s) para aprovação`});
   }catch(error){await prisma.changeRequest.update({where:{id:req.params.id},data:{status:'failed_validation'}}).catch(()=>{});next(error);}
 });
 
