@@ -14,8 +14,8 @@ import { diffCmdbValues, recordCmdbHistory } from './cmdb-history.service.js';
 const running=new Set();
 export const INVENTORY_TYPES=['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux'];
 const commands={
-  mikrotik:'/system resource print without-paging\n/system routerboard print without-paging\n/system identity print without-paging',
-  huawei_vrp:'display version\ndisplay device',cisco_ios:'show version\nshow inventory',juniper_junos:'show version\nshow chassis hardware',
+  mikrotik:'/system resource print without-paging\n/system routerboard print without-paging\n/system identity print without-paging\n/interface print detail without-paging\n/interface vlan print detail without-paging',
+  huawei_vrp:'display version\ndisplay device\ndisplay ip interface brief\ndisplay vlan',cisco_ios:'show version\nshow inventory\nshow ip interface brief\nshow vlan brief',juniper_junos:'show version\nshow chassis hardware',
   fortigate_fortios:'get system status\ndiagnose hardware deviceinfo',ubiquiti_edgeos:'show version',datacom_dmos:'show version\nshow inventory',nokia_sros:'show version\nshow chassis',
   linux:'hostname\nuname -a\ncat /etc/os-release\ncat /sys/class/dmi/id/product_name\ncat /sys/class/dmi/id/product_serial',
 };
@@ -45,6 +45,27 @@ export function nextInventoryAt(policy,from=new Date()){
 
 export const isUsableMikrotikInventoryOutput=output=>/\bversion:\s*\S+/i.test(String(output||''))&&/\bname:\s*[^\r\n]+/i.test(String(output||''));
 
+export function parseInterfaceInventory(type,output){
+  const source=String(output||'').replace(/\r/g,''),interfaces=[],vlans=[];
+  if(type==='mikrotik'){
+    const interfaceStart=source.search(/\/interface\s+print\b/i),vlanStart=source.search(/\/interface\s+vlan\b/i),section=interfaceStart>=0?source.slice(interfaceStart):source,base=vlanStart>=0?source.slice(interfaceStart>=0?interfaceStart:0,vlanStart):section,vlanSource=vlanStart>=0?source.slice(vlanStart):'';
+    for(const line of base.split('\n')){const name=line.match(/\bname=([^\s]+)/i)?.[1]?.replaceAll('"','');if(!name||/^(?:Flags|version|model|board-name|serial-number|uptime|identity)$/i.test(name))continue;interfaces.push({name,operStatus:/\brunning=yes\b/i.test(line)?'up':'down',adminStatus:/\bdisabled=yes\b/i.test(line)?'down':'up',macAddress:line.match(/\bmac-address=([^\s]+)/i)?.[1]||null});}
+    for(const line of vlanSource.split('\n')){const name=line.match(/\bname=([^\s]+)/i)?.[1]?.replaceAll('"',''),id=Number(line.match(/\bvlan-id=(\d+)/i)?.[1]);if(name&&id>=1&&id<=4094)vlans.push({vlanId:id,name});}
+  } else if(type==='huawei_vrp'){
+    for(const line of source.split('\n')){const match=line.match(/^\s*((?:Vlanif|GigabitEthernet|XGigabitEthernet|Eth-Trunk|LoopBack)\S*)\s+(up|down)\s+(up|down)/i);if(match)interfaces.push({name:match[1],adminStatus:match[2].toLowerCase(),operStatus:match[3].toLowerCase()});const vlan=line.match(/^\s*(\d{1,4})\s+([\w.-]+)/);if(vlan&&Number(vlan[1])<=4094)vlans.push({vlanId:Number(vlan[1]),name:vlan[2]});}
+  } else if(type==='cisco_ios'){
+    for(const line of source.split('\n')){const match=line.match(/^\s*((?:Gi|GigabitEthernet|Te|TenGigabitEthernet|Fa|FastEthernet|Vl|Port-channel)\S*)\s+(\S+)\s+(up|down|administratively down)/i);if(match)interfaces.push({name:match[1],operStatus:/administratively/i.test(match[3])?'down':match[3].toLowerCase(),adminStatus:/administratively/i.test(match[3])?'down':'up'});const vlan=line.match(/^\s*(\d{1,4})\s+([^\s]+)\s+(active|act\/unsup|suspended)/i);if(vlan&&Number(vlan[1])<=4094)vlans.push({vlanId:Number(vlan[1]),name:vlan[2],status:vlan[3].toLowerCase()});}
+  }
+  return {interfaces:[...new Map(interfaces.map(item=>[item.name,item])).values()],vlans:[...new Map(vlans.map(item=>[item.vlanId,item])).values()]};
+}
+
+async function syncInterfaceInventory(assetId,deviceId,type,output){
+  const parsed=parseInterfaceInventory(type,output),now=new Date();
+  for(const item of parsed.interfaces)await prisma.cmdbInterface.upsert({where:{assetId_name:{assetId,name:item.name}},update:{...item,source:'inventory',lastSeenAt:now},create:{assetId,name:item.name,description:null,source:'inventory',lastSeenAt:now,...item}});
+  for(const item of parsed.vlans)await prisma.cmdbVlan.upsert({where:{assetId_vlanId:{assetId,vlanId:item.vlanId}},update:{...item,source:'inventory',lastSeenAt:now},create:{assetId,source:'inventory',lastSeenAt:now,...item}});
+  return {interfaces:parsed.interfaces.length,vlans:parsed.vlans.length};
+}
+
 async function executeInventory(device){const exec=executors[device.type];if(!exec)throw Object.assign(new Error('Fabricante ainda não possui coleta automática de inventário'),{statusCode:400});const result=await exec({deviceId:device.id,command:commands[device.type]});const partialChr=device.type==='mikrotik'&&isUsableMikrotikInventoryOutput(result.output);if(!result.success&&!partialChr)throw Object.assign(new Error(result.output||'Falha na consulta de inventário'),{statusCode:502});return parseInventoryOutput(device.type,result.output,device);}
 
 export async function collectCmdbInventory(assetId,{username='system',type='manual'}={}){
@@ -61,10 +82,11 @@ export async function collectCmdbInventory(assetId,{username='system',type='manu
       if(data[field]) deviceSync[field]=data[field];
     }
     if(Object.keys(deviceSync).length) await prisma.device.update({where:{id:asset.device.id},data:deviceSync});
+    const technical=await syncInterfaceInventory(asset.id,asset.device.id,asset.device.type,data.rawExcerpt);
     let previousInventory={};try{previousInventory=asset.inventoryData?JSON.parse(asset.inventoryData):{};}catch{}
     const reconciled={manufacturer:data.manufacturer||asset.manufacturer,model:data.model||asset.model,serialNumber:data.serialNumber||asset.serialNumber,hostname:data.hostname||asset.hostname},changes=diffCmdbValues({...asset,osVersion:previousInventory.osVersion},{...reconciled,osVersion:data.osVersion},['manufacturer','model','serialNumber','hostname','osVersion']);
     await prisma.cmdbAsset.update({where:{id:asset.id},data:{...reconciled,lastInventoryAt:now,lastInventoryStatus:'success',lastInventoryError:null,inventoryData:JSON.stringify(data),updatedBy:username}});
-    await recordCmdbHistory({assetId:asset.id,eventType:changes.length?'inventory_reconciled':'inventory_verified',source:type==='automatic'?'automatic_inventory':'manual_inventory',actor:username,summary:changes.length?`${changes.length} diferença(s) reconciliada(s) pela coleta técnica`:'Inventário verificado sem alterações técnicas',changes,metadata:{snapshotId:snapshot.id,deviceId:asset.device.id}});
+    await recordCmdbHistory({assetId:asset.id,eventType:changes.length?'inventory_reconciled':'inventory_verified',source:type==='automatic'?'automatic_inventory':'manual_inventory',actor:username,summary:changes.length?`${changes.length} diferença(s) reconciliada(s) pela coleta técnica`:'Inventário verificado sem alterações técnicas',changes,metadata:{snapshotId:snapshot.id,deviceId:asset.device.id,technical}});
     if(type==='automatic'&&asset.inventoryPolicy)await prisma.cmdbInventoryPolicy.update({where:{assetId:asset.id},data:{lastRunAt:now,lastStatus:'success',lastError:null,nextRunAt:nextInventoryAt(asset.inventoryPolicy,new Date(now.getTime()+60000))}});
     await logAudit({username,displayName:username==='system'?'Coletor CMDB':username,role:username==='system'?'system':'admin',action:'collect',resource:'cmdb_inventory',resourceId:snapshot.id,status:'success',details:{assetId:asset.id,deviceId:asset.device.id,type}});return snapshot;
   }catch(error){
