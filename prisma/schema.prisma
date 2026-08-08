@@ -479,12 +479,51 @@ model CmdbAsset {
   ipamSuggestions   IpamReconciliationSuggestion[]
   commercialContracts CommercialContractAsset[]
   softwareLicenses SoftwareLicenseAsset[]
+  interfaces     CmdbInterface[]
+  vlans          CmdbVlan[]
 
   @@index([tenantId, status])
   @@index([siteId, category])
   @@index([category, status])
   @@index([warrantyUntil])
   @@index([supportUntil])
+}
+
+model CmdbInterface {
+  id          String   @id @default(uuid())
+  assetId     String
+  asset       CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  macAddress  String?
+  adminStatus String?
+  operStatus  String?
+  speed       String?
+  vlanId      Int?
+  source      String   @default("manual")
+  lastSeenAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([assetId, name])
+  @@index([vlanId])
+  @@index([assetId, operStatus])
+}
+
+model CmdbVlan {
+  id          String   @id @default(uuid())
+  assetId     String
+  asset       CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  vlanId      Int
+  name        String?
+  status      String   @default("active")
+  source      String   @default("manual")
+  lastSeenAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([assetId, vlanId])
+  @@index([vlanId, status])
 }
 
 model IpamSubnet {
