@@ -2194,6 +2194,8 @@ a.executive-health-card:hover { transform:translateY(-2px); border-color:var(--b
 .topology-node.offline { border-left-color: var(--danger); opacity: .78; }
 .topology-node.selected { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-glow), var(--shadow-lg); }
 .topology-node-icon { display: grid; flex: 0 0 35px; height: 35px; place-items: center; border-radius: 50%; background: var(--bg-primary); color: var(--text-muted); }
+.topology-node-icon { position: relative; }
+.topology-node-icon b { position: absolute; right: -7px; bottom: -5px; min-width: 18px; padding: 1px 3px; border-radius: 5px; background: var(--bg-tertiary); color: var(--text-secondary); font-size: .5rem; line-height: 13px; text-align: center; }
 .topology-node.online .topology-node-icon { color: var(--success); }
 .topology-node.warning .topology-node-icon { color: var(--warning); }
 .topology-node.critical .topology-node-icon, .topology-node.offline .topology-node-icon { color: var(--danger); }

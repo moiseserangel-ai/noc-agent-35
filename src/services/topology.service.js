@@ -20,6 +20,7 @@ export async function topologyDashboard() {
     where: { isActive: true },
     include: {
       topologyNode: true,
+      site: { select: { id: true, name: true } },
       capacitySnapshots: { orderBy: { collectedAt: 'desc' }, take: 1 },
       tasks: {
         where: { status: { in: OPEN_TASK_STATUSES } },
@@ -42,6 +43,7 @@ export async function topologyDashboard() {
       model: device.model,
       osVersion: device.osVersion,
       group: device.group,
+      site: device.site ? { id: device.site.id, name: device.site.name } : null,
       status: topologyStatus(snapshot, device.tasks),
       position: { x: position.x, y: position.y, saved: Boolean(device.topologyNode) },
       metrics: snapshot ? {
@@ -62,6 +64,7 @@ export async function topologyDashboard() {
     filters: {
       groups: [...new Set(nodes.map(node => node.group).filter(Boolean))].sort(),
       manufacturers: [...new Set(nodes.map(node => node.manufacturer).filter(Boolean))].sort(),
+      sites: [...new Set(nodes.map(node => node.site?.name).filter(Boolean))].sort(),
     },
     updatedAt: new Date(),
   };

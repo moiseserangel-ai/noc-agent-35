@@ -13,11 +13,12 @@ const STATUS = {
 };
 const pct=value=>value===null||value===undefined?'—':`${Math.round(value*10)/10}%`;
 const date=value=>value?new Date(value).toLocaleString('pt-BR'):'Sem coleta';
+const vendorIcon = manufacturer => ({mikrotik:'MT', huawei:'HW', cisco:'CS', juniper:'JN', ubiquiti:'UB'}[(manufacturer||'').toLowerCase()] || 'NW');
 
 export default function Topology({isAdmin=false}){
   const [data,setData]=useState({nodes:[],links:[],summary:{},filters:{groups:[],manufacturers:[]}});
   const [positions,setPositions]=useState({});
-  const [filters,setFilters]=useState({group:'',manufacturer:'',status:''});
+  const [filters,setFilters]=useState({group:'',manufacturer:'',site:'',status:''});
   const [selected,setSelected]=useState(null);
   const [zoom,setZoom]=useState(1);
   const [loading,setLoading]=useState(true);
@@ -50,6 +51,7 @@ export default function Topology({isAdmin=false}){
   const visibleNodes=useMemo(()=>data.nodes.filter(node=>
     (!filters.group||node.group===filters.group)&&
     (!filters.manufacturer||node.manufacturer===filters.manufacturer)&&
+    (!filters.site||node.site?.name===filters.site)&&
     (!filters.status||node.status===filters.status)
   ),[data.nodes,filters]);
   const visibleIds=useMemo(()=>new Set(visibleNodes.map(node=>node.id)),[visibleNodes]);
@@ -59,6 +61,13 @@ export default function Topology({isAdmin=false}){
     return {width:Math.max(1300,...points.map(point=>point.x+240)),height:Math.max(720,...points.map(point=>point.y+180))};
   },[positions]);
   const selectedNode=data.nodes.find(node=>node.id===selected);
+
+  const exportMap = () => {
+    const payload = { exportedAt: new Date().toISOString(), filters, summary: data.summary, nodes: visibleNodes, links: visibleLinks };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'}));
+    const link = document.createElement('a'); link.href=url; link.download='topologia-noc-agent.json'; link.click(); URL.revokeObjectURL(url);
+    toast('Topologia exportada com sucesso.','success');
+  };
 
   const pointerDown=(event,node)=>{
     if(!isAdmin)return;
@@ -134,6 +143,7 @@ export default function Topology({isAdmin=false}){
       {isAdmin&&<button className="btn btn-secondary" onClick={()=>setShowLink(true)}><Plus size={15}/> Conexão</button>}
       {isAdmin&&<button className="btn btn-secondary" onClick={organize}><Network size={15}/> Organizar</button>}
       {isAdmin&&<button className="btn btn-primary" disabled={!dirty||busy} onClick={save}>{busy?<span className="spinner"/>:<Save size={15}/>} Salvar mapa</button>}
+      <button className="btn btn-secondary" onClick={exportMap}><Save size={15}/> Exportar</button>
       <button className="btn btn-secondary" onClick={()=>load()}><RefreshCw size={15}/> Atualizar</button>
     </div></div>
 
@@ -148,7 +158,8 @@ export default function Topology({isAdmin=false}){
     <div className="card topology-toolbar">
       <Filter size={16}/>
       <select className="form-select" value={filters.group} onChange={e=>setFilters({...filters,group:e.target.value})}><option value="">Todos os grupos</option>{data.filters.groups.map(value=><option key={value}>{value}</option>)}</select>
-      <select className="form-select" value={filters.manufacturer} onChange={e=>setFilters({...filters,manufacturer:e.target.value})}><option value="">Todos os fabricantes</option>{data.filters.manufacturers.map(value=><option key={value}>{value}</option>)}</select>
+     <select className="form-select" value={filters.manufacturer} onChange={e=>setFilters({...filters,manufacturer:e.target.value})}><option value="">Todos os fabricantes</option>{data.filters.manufacturers.map(value=><option key={value}>{value}</option>)}</select>
+      <select className="form-select" value={filters.site} onChange={e=>setFilters({...filters,site:e.target.value})}><option value="">Todos os sites</option>{(data.filters.sites||[]).map(value=><option key={value}>{value}</option>)}</select>
       <select className="form-select" value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="">Todos os estados</option>{Object.entries(STATUS).map(([key,value])=><option key={key} value={key}>{value.label}</option>)}</select>
       <span>{visibleNodes.length} visível(is)</span>
       <div className="topology-zoom"><button onClick={()=>setZoom(value=>Math.max(.5,value-.1))}><ZoomOut size={16}/></button><strong>{Math.round(zoom*100)}%</strong><button onClick={()=>setZoom(value=>Math.min(1.5,value+.1))}><ZoomIn size={16}/></button><button onClick={fit} title="Ajustar"><Maximize2 size={16}/></button></div>
@@ -167,8 +178,8 @@ export default function Topology({isAdmin=false}){
                 {link.label&&<text className="topology-link-label" x={(a.x+b.x)/2+82} y={(a.y+b.y)/2+27} textAnchor="middle">{link.label}</text>}
               </g>})}
             </svg>
-            {visibleNodes.map(node=>{const point=positions[node.id]||node.position;const StateIcon=STATUS[node.status]?.icon||Activity;return <button key={node.id} type="button" className={`topology-node ${node.status} ${selected===node.id?'selected':''}`} style={{left:point.x,top:point.y}} onPointerDown={event=>pointerDown(event,node)} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onClick={()=>setSelected(node.id)}>
-              <span className="topology-node-icon"><StateIcon size={20}/></span><span><strong>{node.name}</strong><small>{node.hostname}</small></span><i>{node.tasks.length||''}</i>
+           {visibleNodes.map(node=>{const point=positions[node.id]||node.position;const StateIcon=STATUS[node.status]?.icon||Activity;return <button key={node.id} type="button" className={`topology-node ${node.status} ${selected===node.id?'selected':''}`} style={{left:point.x,top:point.y}} onPointerDown={event=>pointerDown(event,node)} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onClick={()=>setSelected(node.id)}>
+              <span className="topology-node-icon"><StateIcon size={20}/><b title={node.manufacturer||'Fabricante não informado'}>{vendorIcon(node.manufacturer)}</b></span><span><strong>{node.name}</strong><small>{node.hostname}{node.site?.name?` · ${node.site.name}`:''}</small></span><i>{node.tasks.length||''}</i>
             </button>})}
           </div>
         </div>
