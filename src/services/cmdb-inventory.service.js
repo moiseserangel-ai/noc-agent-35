@@ -77,8 +77,11 @@ export async function collectCmdbInventory(assetId,{username='system',type='manu
     // O inventário técnico é a fonte atual para os campos exibidos nas telas de
     // equipamentos, topologia e vulnerabilidades. Sem esta sincronização o
     // CMDB recebia o snapshot novo, mas o Device continuava com a versão antiga.
+    // O endereço de gerenciamento/hostname do Device é operacional e deve ser
+    // mantido conforme o cadastro manual. A coleta registra o hostname descoberto
+    // no snapshot/CMDB, mas nunca altera o destino usado pelo SSH.
     const deviceSync={};
-    for(const field of ['manufacturer','model','hostname','osVersion']){
+    for(const field of ['manufacturer','model','osVersion']){
       if(data[field]) deviceSync[field]=data[field];
     }
     if(Object.keys(deviceSync).length) await prisma.device.update({where:{id:asset.device.id},data:deviceSync});
