@@ -5,6 +5,7 @@ import logger from '../utils/logger.js';
 import { withApprovedRemediation } from '../security/execution-context.js';
 import { configurationPlanningInstruction } from '../services/agent-approval-policy.service.js';
 import { inferWorkType } from '../services/work-type.service.js';
+import { getDeviceById } from '../services/device.service.js';
 
 const SYSTEM_PROMPT = `Você é um especialista em Linux/Servidores para um NOC (Network Operations Center).
 
@@ -39,6 +40,8 @@ const SYSTEM_PROMPT = `Você é um especialista em Linux/Servidores para um NOC 
 - Caso precise de confirmação para aplicar algo, termine a mensagem com "Responda com SIM para aplicar ou NÃO para cancelar." e mencione a ref: #TASK-{taskNumber} (se houver).
 ---`;
 
+const contextFor = async deviceId => { const device = await getDeviceById(deviceId); return device ? `Hostname/IP: ${device.hostname || 'não informado'} | Porta SSH: ${device.port || 22} | Plataforma: ${device.platform || 'Linux'} | Modelo: ${device.model || 'não informado'} | Versão: ${device.osVersion || 'não informada'}` : 'Contexto cadastrado indisponível'; };
+
 export default class LinuxAgent extends BaseAgent {
   constructor() {
     super('linux', SYSTEM_PROMPT);
@@ -49,11 +52,13 @@ export default class LinuxAgent extends BaseAgent {
   }
 
   async diagnose(deviceId, deviceName, request, taskNumber) {
+    const deviceContext = await contextFor(deviceId);
     const planningInstruction = configurationPlanningInstruction(inferWorkType(request), taskNumber);
     const prompt = `Você recebeu uma solicitação do NOC.
 
 **Servidor:** ${deviceName} (ID: ${deviceId})
 **Tipo:** Linux
+**Contexto cadastrado:** ${deviceContext}
 **Task:** #TASK-${taskNumber}
 **Solicitação:** ${request}
 Acesse o servidor, analise e atenda à solicitação da forma mais autônoma possível. Use o deviceId "${deviceId}" em todas as chamadas de tools.
