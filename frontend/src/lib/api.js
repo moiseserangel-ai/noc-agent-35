@@ -103,6 +103,7 @@ export const api = {
   getCmdbLifecycleAlerts: (status='active') => request(`/cmdb/lifecycle-alerts?status=${status}`),
   scanCmdbLifecycle: () => request('/cmdb/lifecycle-alerts/scan',{method:'POST'}),
   getIpam: () => request('/cmdb/ipam'),
+  getIpamConflicts: () => request('/cmdb/ipam/conflicts'),
   createIpamSubnet: data => request('/cmdb/ipam/subnets',{method:'POST',body:JSON.stringify(data)}),
   deleteIpamSubnet: id => request(`/cmdb/ipam/subnets/${id}`,{method:'DELETE'}),
   createIpamAddress: data => request('/cmdb/ipam/addresses',{method:'POST',body:JSON.stringify(data)}),
