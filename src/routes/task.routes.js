@@ -177,10 +177,13 @@ router.post('/:id/approval', async(req,res,next)=>{
     const approvedRevision=task.proposalRevisions?.at(-1)||null;
     await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'approve',resource:'task',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber,agent:task.agentUsed,proposalVersion:approvedRevision?.version||null,proposalRevisionId:approvedRevision?.id||null}});
     const execution=await agent.executeSolution(task.deviceId,task.device?.name||'Dispositivo',task.proposedSolution,task.taskNumber);
-    let updated=await taskService.updateTask(task.id,{status:'resolved',executionResult:execution.text,resolutionSummary:execution.text,resolutionType:'agent',resolvedAt:new Date()});
+    const executionText=String(execution?.text||'').trim();
+    const executionFailed=/^(❌|⛔)|\b(?:erro|falha|bloqueado|não foi possível)\b/i.test(executionText);
+    let updated=await taskService.updateTask(task.id,{status:executionFailed?'failed':'resolved',executionResult:executionText,resolutionSummary:executionText,resolutionType:executionFailed?null:'agent',resolvedAt:executionFailed?null:new Date()});
     await taskService.addTaskMessage(task.id,'agent',execution.text,task.agentUsed);
-    await notifyTask(updated,'resolved',{message:'Correção de compliance executada após aprovação administrativa.',io:req.app.get('io')});
-    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'agent_execute',resource:'task',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber,agent:task.agentUsed}});
+    await notifyTask(updated,executionFailed?'failed':'resolved',{message:executionFailed?'A execução falhou; revisão e rollback podem ser necessários.':'Correção executada após aprovação administrativa.',io:req.app.get('io')});
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'agent_execute',resource:'task',resourceId:task.id,status:executionFailed?'failure':'success',details:{taskNumber:task.taskNumber,agent:task.agentUsed,executionFailed}});
+    if (executionFailed) return res.json({success:false,data:updated,message:'A execução falhou; a Task foi mantida como falha para revisão.'});
     updated = await validateComplianceRemediation({...task,...updated},actor,req.app.get('io')) || updated;
     res.json({success:true,data:updated,message:updated.status==='validated'?'Correção executada e validada no equipamento':'Correção executada; validação requer nova análise'});
   }catch(error){
