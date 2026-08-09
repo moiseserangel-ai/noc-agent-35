@@ -74,12 +74,17 @@ export default class BaseAgent {
   async run(userMessage, _context = {}, onEvent) {
     let tenantId = _context.tenantId;
     const deviceId = _context.deviceId || String(userMessage).match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0];
-    if (tenantId === undefined) {
-      if (deviceId) tenantId = (await prisma.device.findUnique({ where: { id: deviceId }, select: { tenantId: true } }))?.tenantId ?? null;
-    }
+    const deviceContext = deviceId ? await prisma.device.findUnique({ where: { id: deviceId }, select: { tenantId: true, type: true, manufacturer: true, model: true, platform: true, osVersion: true, capabilities: true } }) : null;
+    if (tenantId === undefined) tenantId = deviceContext?.tenantId ?? null;
     const preflightEvidence = deviceId && !APPROVED_EXECUTION.test(String(userMessage)) ? await this.collectPreflight(deviceId) : '';
     const preflightInstruction = preflightEvidence ? `\n\n[EVIDÊNCIAS PRÉVIAS COLETADAS AUTOMATICAMENTE — somente leitura]\n${preflightEvidence}` : '';
-    const contextualMessage = `${approvedExecutionInstruction(userMessage)}${userMessage}${preflightInstruction}${precisionInstruction(userMessage)}${knowledgeInstruction(userMessage)}${await knowledgeContext(userMessage, this.name, tenantId)}`;
+    const mikrotikModel = String(deviceContext?.model || '');
+    const mikrotikRole = deviceContext?.type === 'mikrotik' ? (/\b(?:CRS|CSS)/i.test(mikrotikModel) ? 'switch' : 'router') : '';
+    const routerOsMajor = deviceContext?.type === 'mikrotik' ? (String(deviceContext.osVersion || '').match(/^([67])/)?.[1] || preflightEvidence.match(/\bversion:\s*([67])(?:\.|\b)/i)?.[1] || '') : '';
+    const knowledgeClassification = mikrotikRole ? `MikroTik ${mikrotikRole} ${routerOsMajor ? `RouterOS ${routerOsMajor}` : ''}` : '';
+    const knowledgeQuery = `${userMessage} ${knowledgeClassification}`.trim();
+    const classificationInstruction = knowledgeClassification ? `\n\n[CLASSIFICAÇÃO AUTOMÁTICA PARA DOCUMENTAÇÃO]\n${knowledgeClassification}` : '';
+    const contextualMessage = `${approvedExecutionInstruction(userMessage)}${userMessage}${classificationInstruction}${preflightInstruction}${precisionInstruction(userMessage)}${knowledgeInstruction(userMessage)}${await knowledgeContext(knowledgeQuery, this.name, tenantId)}`;
     const cfg = await getAiConfiguration();
     const risk = CRITICAL_REQUEST.test(String(userMessage)) ? 'critical' : CONFIGURATION_REQUEST.test(String(userMessage)) ? 'diagnostic' : 'simple';
     const selectedPrimary = cfg.routing[risk] || cfg.primary;
