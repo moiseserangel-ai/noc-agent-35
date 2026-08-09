@@ -4,7 +4,7 @@ import prisma from '../database/client.js';
 import { createSpecialistAgents } from '../vendors/registry.js';
 import { buildSlaFields } from '../services/sla.service.js';
 import { notifyTask } from '../services/notification.service.js';
-import { configurationPlanningInstruction, specialistResultNeedsApproval } from '../services/agent-approval-policy.service.js';
+import { configurationPlanningInstruction, proposalQualityWarnings, specialistResultNeedsApproval } from '../services/agent-approval-policy.service.js';
 import { logAudit } from '../services/audit.service.js';
 import { runComplianceScan } from '../services/compliance.service.js';
 import { recommendRunbooksForTask } from '../services/incident-runbook.service.js';
@@ -145,6 +145,8 @@ router.post('/:id/proposal-revisions',async(req,res,next)=>{
       const agent=specialistAgents[task.agentUsed];if(!agent)return res.status(400).json({success:false,error:'Especialista indisponível'});
       const prompt=[task.originalMessage,'',`PROPOSTA ATUAL:\n${task.proposedSolution}`,'',`REVISÃO HUMANA (${req.user.role} ${actor}):\n${feedback}`,'','Gere uma nova versão completa da proposta incorporando a revisão humana. Não execute comandos. Mantenha comandos exatos, impacto, risco, validação e rollback. Não solicite aprovação por código ou número de Task; apenas devolva o plano revisado para nova aprovação humana.'].join('\n');
       const result=await agent.diagnose(task.deviceId,task.device?.name||'Dispositivo',prompt,task.taskNumber);
+      const qualityWarnings=proposalQualityWarnings(task.workType,result.text);
+      if(qualityWarnings.length) await taskService.addTaskMessage(task.id,'system',`⚠️ Revisão de qualidade da proposta: ${qualityWarnings.join('; ')}. A aprovação continua disponível, mas recomenda-se revisar o plano.`);
       content=String(result.text||'').trim().slice(0,30000);if(!content)throw new Error('O especialista não retornou uma proposta revisada');type='agent_revision';
     }else return res.status(400).json({success:false,error:'Modo de revisão inválido'});
     const revision=await saveProposalRevision(task,{type,content,feedback,actor,role:req.user.role});
@@ -222,6 +224,8 @@ router.post('/:id/reprocess', async (req, res, next) => {
 
     const request = `${task.originalMessage}${configurationPlanningInstruction(task.workType, task.taskNumber)}`;
     const result = await agent.diagnose(device.id, device.name, request, task.taskNumber);
+    const qualityWarnings=proposalQualityWarnings(task.workType,result.text);
+    if(qualityWarnings.length) await taskService.addTaskMessage(task.id,'system',`⚠️ Revisão de qualidade da proposta: ${qualityWarnings.join('; ')}. A aprovação continua disponível, mas recomenda-se revisar o plano.`);
     const needsApproval = specialistResultNeedsApproval(task.workType, result.text);
     const updated = await taskService.updateTask(task.id, {
       status: needsApproval ? 'awaiting_approval' : 'resolved',

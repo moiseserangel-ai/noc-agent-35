@@ -4,6 +4,13 @@ export function specialistResultNeedsApproval(workType, text = '') {
   return workType === 'configuration' || APPROVAL_SIGNAL.test(String(text));
 }
 
+export function proposalQualityWarnings(workType, text = '') {
+  if (workType !== 'configuration') return [];
+  const value = String(text || '').toLowerCase();
+  const required = [['evidências', 'evidências coletadas'], ['diagnóstico', 'diagnostico'], ['plano', 'plano'], ['risco', 'impacto'], ['validação', 'validacao'], ['rollback', 'reversão']];
+  return required.filter(([, ...terms]) => !terms.some(term => value.includes(term))).map(([label]) => `Seção ausente: ${label}`);
+}
+
 export function configurationPlanningInstruction(workType, taskNumber) {
   if (workType !== 'configuration') return '';
   return `
