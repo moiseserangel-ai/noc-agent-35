@@ -286,6 +286,7 @@ export const api = {
   completeTask: (id, note) => request(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({ note }) }),
   updateTaskWorkflow: (id, data) => request(`/tasks/${id}/workflow`, { method: 'POST', body: JSON.stringify(data) }),
   approveTask: (id, approved) => request(`/tasks/${id}/approval`, { method:'POST', body:JSON.stringify({approved}) }),
+  rollbackAssist: (id) => request(`/tasks/${id}/rollback-assist`, { method:'POST' }),
   reviseTaskProposal: (id,data) => request(`/tasks/${id}/proposal-revisions`,{method:'POST',body:JSON.stringify(data)}),
   getTaskRunbooks: id => request(`/tasks/${id}/runbooks`),
   simulateTaskRunbook: (taskId,runbookId,variables) => request(`/tasks/${taskId}/runbooks/${runbookId}/simulate`,{method:'POST',body:JSON.stringify({variables})}),

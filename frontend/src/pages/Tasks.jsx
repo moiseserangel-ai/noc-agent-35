@@ -105,6 +105,8 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
     finally { setProcessing(null); }
   };
 
+  const rollbackAssist = async task => { setProcessing(task.id); try { const result=await api.rollbackAssist(task.id); toast(result.message,'success'); await load(); } catch(error){ toast(error.message,'error'); } finally { setProcessing(null); } };
+
   const approve = async (task, approved) => {
     const question=approved?'Aprovar e executar esta configuração no equipamento?':'Rejeitar esta configuração sem executar comandos?';
     if(!window.confirm(question))return;
@@ -243,7 +245,8 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
                     {['pending', 'failed'].includes(t.status) && <button className="btn btn-primary" disabled={processing === t.id} onClick={() => workflow(t, 'acknowledge')}><UserCheck size={15} /> Reconhecer e atender</button>}
                     {!['resolved', 'completed', 'validated', 'closed', 'cancelled'].includes(t.status) && <button className="btn btn-success" disabled={processing === t.id} onClick={() => workflow(t, 'resolve', { resolutionType: 'manual' })}><CheckCircle size={15} /> Resolver</button>}
                     {['resolved', 'completed'].includes(t.status) && <button className="btn btn-primary" disabled={processing === t.id} onClick={() => workflow(t, 'validate')}><ShieldCheck size={15} /> Validar</button>}
-                    {['resolved', 'completed', 'validated'].includes(t.status) && <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => workflow(t, 'close')}><Archive size={15} /> Encerrar</button>}
+                  {['resolved', 'completed', 'validated'].includes(t.status) && <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => workflow(t, 'close')}><Archive size={15} /> Encerrar</button>}
+                  {isAdmin&&['failed','resolved'].includes(t.status)&&<button className="btn btn-secondary" disabled={processing===t.id} onClick={()=>rollbackAssist(t)}><RotateCcw size={15}/> Rollback assistido</button>}
                     {['resolved', 'completed', 'validated', 'closed', 'cancelled', 'failed'].includes(t.status) && <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => workflow(t, 'reopen')}><RotateCcw size={15} /> Reabrir</button>}
                     {workflowForms[t.id]?.note && <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => workflow(t, 'comment')}><MessageSquare size={15} /> Comentar</button>}
                   </div>

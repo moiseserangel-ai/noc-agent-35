@@ -203,6 +203,20 @@ router.post('/:id/approval', async(req,res,next)=>{
   }
 });
 
+router.post('/:id/rollback-assist', async (req,res,next) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({success:false,error:'Somente administradores podem solicitar rollback'});
+    const task = await taskService.getTaskById(req.params.id);
+    if (!task || !task.deviceId) return res.status(404).json({success:false,error:'Task ou equipamento não encontrado'});
+    const backup = await prisma.deviceConfigBackup.findFirst({where:{deviceId:task.deviceId,status:'success',type:'pre_change'},orderBy:{createdAt:'desc'},select:{id:true,createdAt:true,sha256:true,deviceName:true}});
+    if (!backup) return res.status(404).json({success:false,error:'Nenhum backup pré-mudança disponível para este equipamento'});
+    const actor=req.user.name||req.user.username;
+    await taskService.addTaskMessage(task.id,'system',`↩️ Rollback assistido solicitado por ${actor}. Backup recomendado: ${backup.id} (${new Date(backup.createdAt).toLocaleString('pt-BR')}, SHA-256 ${backup.sha256}). A restauração deve ser revisada e executada em uma nova mudança aprovada.`);
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'rollback_assist',resource:'task',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber,backupId:backup.id}});
+    res.json({success:true,data:{taskId:task.id,backup},message:'Backup pré-mudança identificado. Revise antes de executar o rollback.'});
+  } catch(error){next(error);}
+});
+
 router.post('/:id/reprocess', async (req, res, next) => {
   try {
     const task = await taskService.getTaskById(req.params.id);
