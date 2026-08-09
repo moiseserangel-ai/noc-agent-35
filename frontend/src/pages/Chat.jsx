@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen } from 'lucide-react';
+import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { api } from '../lib/api.js';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -25,6 +25,7 @@ export default function Chat() {
   const [specialists, setSpecialists] = useState([]);
   const [devices,setDevices]=useState([]);
   const [selectedDeviceId,setSelectedDeviceId]=useState('');
+  const [sessionSearch,setSessionSearch]=useState('');
   const [streaming, setStreaming] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tools, setTools] = useState([]);
@@ -109,14 +110,17 @@ export default function Chat() {
     if (!s.connected) s.connect();
     s.emit('chat:message', { sessionId: activeSession, message: msg, agentType, deviceId:selectedDeviceId||null });
   };
+  const filteredSessions=sessions.filter(session=>!sessionSearch.trim()||String(session.title||'Nova conversa').toLowerCase().includes(sessionSearch.trim().toLowerCase()));
+  const quickAction=text=>{if(!selectedDeviceId)return;setInput(text);};
 
   return (
     <div className="chat-workspace">
       {/* Sidebar sessions */}
       <div className="chat-sessions">
         <button className="btn btn-primary" style={{ width: '100%' }} onClick={newSession}><Plus size={16} /> Nova Conversa</button>
+        <label className="chat-session-search"><Search size={14}/><input value={sessionSearch} onChange={e=>setSessionSearch(e.target.value)} placeholder="Pesquisar conversas"/></label>
         <div className="chat-session-list">
-          {sessions.map(s => (
+          {filteredSessions.map(s => (
             <div key={s.id}
               className={`sidebar-link ${activeSession === s.id ? 'active' : ''}`}
               style={{ justifyContent: 'space-between', fontSize: '0.8rem' }}
@@ -173,6 +177,7 @@ export default function Chat() {
           </div>
 
           <div className="chat-input-area">
+            <div className="chat-quick-actions"><button type="button" disabled={!selectedDeviceId||isLoading} onClick={()=>quickAction('Consulte o estado atual deste equipamento e apresente um resumo objetivo, sem realizar alterações.')}><Activity size={13}/> Consultar estado</button><button type="button" disabled={!selectedDeviceId||isLoading} onClick={()=>quickAction('Faça um diagnóstico somente leitura deste equipamento, apresente evidências e possíveis causas.')}><Stethoscope size={13}/> Diagnosticar</button><button type="button" disabled={!selectedDeviceId||isLoading} onClick={()=>quickAction('Prepare um plano de mudança para este equipamento com comandos, riscos, validação e rollback. Não execute alterações.')}><ClipboardList size={13}/> Preparar plano</button></div>
             <textarea className="chat-input" rows={1} value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
