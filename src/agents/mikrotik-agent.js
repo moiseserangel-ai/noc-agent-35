@@ -38,7 +38,6 @@ const SYSTEM_PROMPT = `Você é um especialista em MikroTik RouterOS para um NOC
 - Caso precise de confirmação para aplicar algo, termine a mensagem com "Responda com SIM para aplicar ou NÃO para cancelar." e mencione a ref: #TASK-{taskNumber} (se houver).
 ---`;
 const contextFor = async deviceId => { const device = await getDeviceById(deviceId); return device ? `Hostname/IP: ${device.hostname || 'não informado'} | Porta SSH: ${device.port || 22} | Fabricante: ${device.manufacturer || 'MikroTik'} | Plataforma: ${device.platform || 'RouterOS'} | Modelo: ${device.model || 'não informado'} | Versão: ${device.osVersion || 'não informada'} | Capacidades: ${device.capabilities || 'não informadas'}` : 'Contexto cadastrado indisponível'; };
-const preflight = async deviceId => { const commands = ['/system resource print without-paging', '/system routerboard print without-paging', '/interface print detail without-paging', '/ip route print detail without-paging']; const rows = []; for (const command of commands) { const result = await sshMikrotikExec({ deviceId, command }); rows.push(`$ ${command}\n${String(result.output || '').slice(0, 5000)}`); } return rows.join('\n\n'); };
 
 export default class MikrotikAgent extends BaseAgent {
   constructor() {
@@ -51,15 +50,12 @@ export default class MikrotikAgent extends BaseAgent {
 
   async diagnose(deviceId, deviceName, request, taskNumber) {
     const deviceContext = await contextFor(deviceId);
-    const collectedEvidence = await preflight(deviceId);
     const planningInstruction = configurationPlanningInstruction(inferWorkType(request), taskNumber);
     const prompt = `Você recebeu uma solicitação do NOC.
 
 **Dispositivo:** ${deviceName} (ID: ${deviceId})
 **Tipo:** MikroTik RouterOS
 **Contexto cadastrado:** ${deviceContext}
-**Evidências prévias coletadas automaticamente:**
-${collectedEvidence}
 **Task:** #TASK-${taskNumber}
 **Solicitação:** ${request}
 Acesse o equipamento, analise e atenda à solicitação da forma mais autônoma possível. Use o deviceId "${deviceId}" em todas as chamadas de tools.

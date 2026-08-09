@@ -8,6 +8,17 @@ import { knowledgeContext } from '../services/knowledge.service.js';
 
 const CONFIGURATION_REQUEST = /\b(configur|alter|cria|adicion|remov|exclu|desativ|ativ|bloque|liber|aplic|reinici|instal|atualiz|migr)\w*/i;
 const APPROVED_EXECUTION = /(?:solu[cç][aã]o|mudan[cç]a)\s+aprovad[ao]/i;
+const PREFLIGHT_COMMANDS = {
+  mikrotik: ['/system resource print without-paging', '/system routerboard print without-paging', '/interface print detail without-paging', '/ip route print detail without-paging'],
+  huawei_vrp: ['display version', 'display device', 'display interface brief', 'display ip routing-table'],
+  cisco_ios: ['show version', 'show inventory', 'show interfaces status', 'show ip route'],
+  fortigate_fortios: ['get system status', 'get system performance status', 'diagnose netlink interface list', 'get router info routing-table all'],
+  linux: ['uname -a', 'cat /etc/os-release', 'ip addr show', 'ip route show', 'df -h'],
+  juniper_junos: ['show version', 'show chassis hardware', 'show interfaces terse', 'show route summary'],
+  ubiquiti_edgeos: ['show version', 'show interfaces', 'show ip route'],
+  datacom_dmos: ['show version', 'show interfaces', 'show ip route'],
+  nokia_sros: ['show version', 'show chassis', 'show port', 'show router route-table'],
+};
 
 function knowledgeInstruction(message) {
   if (!CONFIGURATION_REQUEST.test(String(message))) return '';
@@ -42,6 +53,17 @@ export async function getAiConfiguration() {
 export default class BaseAgent {
   constructor(name, systemPrompt, tools = []) { this.name = name; this.systemPrompt = systemPrompt; this.tools = tools; this.toolHandlers = {}; }
   registerTool(definition, handler) { this.tools.push(definition); this.toolHandlers[definition.name] = handler; }
+  async collectPreflight(deviceId) {
+    const commands = PREFLIGHT_COMMANDS[this.name];
+    const ssh = Object.entries(this.toolHandlers).find(([name]) => /^ssh/i.test(name))?.[1];
+    if (!commands || !ssh) return '';
+    const rows = [];
+    for (const command of commands) {
+      try { const result = await ssh({ deviceId, command }); rows.push(`$ ${command}\n${String(result?.output || '').slice(0, 4000)}`); }
+      catch (error) { rows.push(`$ ${command}\nErro na coleta: ${error.message}`); }
+    }
+    return rows.join('\n\n');
+  }
   async executeToolCall(name, input) {
     const handler = this.toolHandlers[name];
     if (!handler) return JSON.stringify({ error: `Unknown tool: ${name}` });
@@ -49,11 +71,13 @@ export default class BaseAgent {
   }
   async run(userMessage, _context = {}, onEvent) {
     let tenantId = _context.tenantId;
+    const deviceId = _context.deviceId || String(userMessage).match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0];
     if (tenantId === undefined) {
-      const deviceId = String(userMessage).match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0];
       if (deviceId) tenantId = (await prisma.device.findUnique({ where: { id: deviceId }, select: { tenantId: true } }))?.tenantId ?? null;
     }
-   const contextualMessage = `${approvedExecutionInstruction(userMessage)}${userMessage}${precisionInstruction(userMessage)}${knowledgeInstruction(userMessage)}${await knowledgeContext(userMessage, this.name, tenantId)}`;
+    const preflightEvidence = deviceId && !APPROVED_EXECUTION.test(String(userMessage)) ? await this.collectPreflight(deviceId) : '';
+    const preflightInstruction = preflightEvidence ? `\n\n[EVIDÊNCIAS PRÉVIAS COLETADAS AUTOMATICAMENTE — somente leitura]\n${preflightEvidence}` : '';
+    const contextualMessage = `${approvedExecutionInstruction(userMessage)}${userMessage}${preflightInstruction}${precisionInstruction(userMessage)}${knowledgeInstruction(userMessage)}${await knowledgeContext(userMessage, this.name, tenantId)}`;
     const cfg = await getAiConfiguration();
     const order = [...new Set([cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
     if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');
