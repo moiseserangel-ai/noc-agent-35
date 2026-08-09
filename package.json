@@ -12,6 +12,7 @@
     "db:seed": "node prisma/seed.js",
     "test": "node --test test/*.test.js",
     "test:smoke": "node scripts/smoke-test.mjs",
+    "test:agents": "node scripts/agent-smoke-test.mjs",
     "check:production": "node scripts/production-check.mjs"
   },
   "dependencies": {
