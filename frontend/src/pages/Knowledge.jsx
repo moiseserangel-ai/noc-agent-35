@@ -36,6 +36,8 @@ export default function Knowledge() {
   const [importJob, setImportJob] = useState(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [expandedCollections, setExpandedCollections] = useState([]);
+  const [listFilters,setListFilters]=useState({scope:'',role:'',version:''});
+  const [bulk,setBulk]=useState({role:'',version:''});
   const fileRef = useRef();
   const toast = useToast();
 
@@ -163,7 +165,10 @@ export default function Knowledge() {
     } catch (error) { toast(error.message, 'error'); }
   };
 
-  const documentGroups = documents.reduce((groups, item) => {
+  const filteredDocuments=documents.filter(item=>(!listFilters.scope||item.agentScope===listFilters.scope)&&(!listFilters.role||item.mikrotikRole===listFilters.role)&&(!listFilters.version||item.routerOsMajor===listFilters.version));
+  const bulkCandidates=filteredDocuments.filter(item=>item.agentScope==='mikrotik');
+  const bulkClassify=async()=>{if(!bulkCandidates.length)return toast('Nenhum documento MikroTik nos filtros atuais.','info');if(!window.confirm(`Classificar ${bulkCandidates.length} documento(s) MikroTik filtrado(s)?`))return;try{const result=await api.bulkClassifyKnowledge({ids:bulkCandidates.map(item=>item.id),mikrotikRole:bulk.role,routerOsMajor:bulk.version});toast(result.message,'success');await load();}catch(error){toast(error.message,'error');}};
+  const documentGroups = filteredDocuments.reduce((groups, item) => {
     const key = item.collectionRootUrl ? `collection:${item.tenantId || 'global'}:${item.collectionRootUrl}` : `document:${item.id}`;
     if (!groups.has(key)) groups.set(key, { key, rootUrl: item.collectionRootUrl, documents: [] });
     groups.get(key).documents.push(item);
@@ -247,6 +252,8 @@ export default function Knowledge() {
 
     <div className="card" style={{marginTop:16}}>
       <div className="card-header"><div><h3>Documentos indexados</h3><p>Ative, edite ou remova o conhecimento disponível aos agentes</p></div></div>
+      <div className="knowledge-bulk-toolbar"><select className="form-select" value={listFilters.scope} onChange={e=>setListFilters({...listFilters,scope:e.target.value})}><option value="">Todos os especialistas</option>{Object.entries(scopeLabel).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><select className="form-select" value={listFilters.role} onChange={e=>setListFilters({...listFilters,role:e.target.value})}><option value="">Router e Switch</option><option value="router">Router</option><option value="switch">Switch</option></select><select className="form-select" value={listFilters.version} onChange={e=>setListFilters({...listFilters,version:e.target.value})}><option value="">RouterOS 6 e 7</option><option value="6">RouterOS 6</option><option value="7">RouterOS 7</option></select><span>{filteredDocuments.length} documento(s)</span></div>
+      <div className="knowledge-bulk-toolbar"><strong>Classificar MikroTik filtrados:</strong><select className="form-select" value={bulk.role} onChange={e=>setBulk({...bulk,role:e.target.value})}><option value="">Todos os tipos</option><option value="router">Router</option><option value="switch">Switch</option></select><select className="form-select" value={bulk.version} onChange={e=>setBulk({...bulk,version:e.target.value})}><option value="">Todas as versões</option><option value="6">RouterOS 6</option><option value="7">RouterOS 7</option></select><button className="btn btn-secondary" onClick={bulkClassify} disabled={!bulkCandidates.length}>Aplicar a {bulkCandidates.length}</button></div>
       {loading ? <div className="loading-screen" style={{minHeight:180}}><div className="spinner"/></div> :
       <div className="table-container"><table><thead><tr><th>Documento</th><th>Especialista</th><th>Indexação</th><th>Responsável</th><th>Status</th><th></th></tr></thead><tbody>
         {groupedDocuments.map(group => {
@@ -270,7 +277,7 @@ export default function Knowledge() {
             {expanded && group.documents.map(item=><tr key={item.id} className="knowledge-collection-child"><td><strong>{item.title}</strong><br/><span className="knowledge-muted">{item.tenant?.name || 'Global'} · {item.sourceUrl}</span></td><td>{scopeLabel[item.agentScope] || item.agentScope}</td><td>{item.chunkCount} trechos<br/><span className="knowledge-muted">{date(item.updatedAt)}</span></td><td>{item.uploadedBy}</td><td><span className={`status-badge ${item.status==='active'?'status-completed':'status-pending'}`}>{item.status==='active'?'Ativo':'Desabilitado'}</span></td><td><div className="table-actions"><button className="btn btn-ghost btn-sm" title="Editar" onClick={()=>edit(item.id)}><Pencil size={15}/></button><button className="btn btn-ghost btn-sm" title={item.status==='active'?'Desabilitar':'Habilitar'} onClick={()=>toggle(item)}><Power size={15}/></button><button className="btn btn-ghost btn-sm" title="Excluir" onClick={()=>remove(item)}><Trash2 size={15}/></button></div></td></tr>)}
           </Fragment>;
         })}
-        {!documents.length&&<tr><td colSpan="6"><div className="empty-state"><BookOpen size={30}/><p>Nenhum documento foi adicionado.</p></div></td></tr>}
+        {!filteredDocuments.length&&<tr><td colSpan="6"><div className="empty-state"><BookOpen size={30}/><p>Nenhum documento encontrado nos filtros.</p></div></td></tr>}
       </tbody></table></div>}
     </div>
   </div>;

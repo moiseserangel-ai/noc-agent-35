@@ -328,6 +328,7 @@ export const api = {
   discoverKnowledgePages: data => request('/knowledge/crawl/discover', { method: 'POST', body: JSON.stringify(data) }),
   importKnowledgePages: data => request('/knowledge/crawl/import', { method: 'POST', body: JSON.stringify(data) }),
   getKnowledgeImportJob: id => request(`/knowledge/crawl/jobs/${id}`),
+  bulkClassifyKnowledge: data => request('/knowledge/bulk/classify', { method:'POST', body:JSON.stringify(data) }),
 
   // Terminal CLI
   getCliDevices: () => request('/cli/devices'),

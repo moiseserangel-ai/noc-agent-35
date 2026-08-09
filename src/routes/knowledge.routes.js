@@ -105,4 +105,15 @@ router.post('/test/search', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.post('/bulk/classify', async (req,res,next) => {
+  try {
+    const ids=[...new Set((Array.isArray(req.body.ids)?req.body.ids:[]).map(String))].slice(0,1000);
+    if(!ids.length)return res.status(400).json({success:false,error:'Selecione ao menos um documento'});
+    const mikrotikRole=['router','switch'].includes(req.body.mikrotikRole)?req.body.mikrotikRole:null;
+    const routerOsMajor=['6','7'].includes(String(req.body.routerOsMajor||''))?String(req.body.routerOsMajor):null;
+    const result=await prisma.knowledgeDocument.updateMany({where:{id:{in:ids},agentScope:'mikrotik'},data:{mikrotikRole,routerOsMajor}});
+    res.json({success:true,data:{updated:result.count},message:`${result.count} documento(s) MikroTik classificado(s)`});
+  }catch(error){next(error);}
+});
+
 export default router;
