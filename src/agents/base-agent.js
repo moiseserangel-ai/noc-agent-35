@@ -8,6 +8,7 @@ import { knowledgeContext } from '../services/knowledge.service.js';
 
 const CONFIGURATION_REQUEST = /\b(configur|alter|cria|adicion|remov|exclu|desativ|ativ|bloque|liber|aplic|reinici|instal|atualiz|migr)\w*/i;
 const APPROVED_EXECUTION = /(?:solu[cç][aã]o|mudan[cç]a)\s+aprovad[ao]/i;
+const CRITICAL_REQUEST = /\b(?:cr[ií]tic|disaster|produ[cç][aã]o|indispon[ií]vel|queda|derrub|urgente|firewall|rota padr[aã]o|bgp|ospf|vpn)\w*/i;
 const PREFLIGHT_COMMANDS = {
   mikrotik: ['/system resource print without-paging', '/system routerboard print without-paging', '/interface print detail without-paging', '/ip route print detail without-paging'],
   huawei_vrp: ['display version', 'display device', 'display interface brief', 'display ip routing-table'],
@@ -36,11 +37,12 @@ function approvedExecutionInstruction(message) {
 }
 
 export async function getAiConfiguration() {
-  const keys = ['ai_provider', 'ai_fallback_order', 'claude_api_key', 'claude_model', 'openai_api_key', 'openai_model', 'gemini_api_key', 'gemini_model'];
+  const keys = ['ai_provider', 'ai_fallback_order', 'ai_simple_provider', 'ai_diagnostic_provider', 'ai_critical_provider', 'claude_api_key', 'claude_model', 'openai_api_key', 'openai_model', 'gemini_api_key', 'gemini_model'];
   const rows = await prisma.settings.findMany({ where: { key: { in: keys } } });
   const values = Object.fromEntries(rows.map(r => [r.key, r.encrypted ? decrypt(r.value) : r.value]));
   return {
     primary: values.ai_provider || 'claude',
+    routing: { simple: values.ai_simple_provider || values.ai_provider || 'openai', diagnostic: values.ai_diagnostic_provider || values.ai_provider || 'openai', critical: values.ai_critical_provider || 'claude' },
     fallback: (values.ai_fallback_order || '').split(',').map(v => v.trim()).filter(Boolean),
     providers: {
       claude: { apiKey: values.claude_api_key || config.claude.apiKey, model: values.claude_model || config.claude.model },
@@ -79,7 +81,9 @@ export default class BaseAgent {
     const preflightInstruction = preflightEvidence ? `\n\n[EVIDÊNCIAS PRÉVIAS COLETADAS AUTOMATICAMENTE — somente leitura]\n${preflightEvidence}` : '';
     const contextualMessage = `${approvedExecutionInstruction(userMessage)}${userMessage}${preflightInstruction}${precisionInstruction(userMessage)}${knowledgeInstruction(userMessage)}${await knowledgeContext(userMessage, this.name, tenantId)}`;
     const cfg = await getAiConfiguration();
-    const order = [...new Set([cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
+    const risk = CRITICAL_REQUEST.test(String(userMessage)) ? 'critical' : CONFIGURATION_REQUEST.test(String(userMessage)) ? 'diagnostic' : 'simple';
+    const selectedPrimary = cfg.routing[risk] || cfg.primary;
+    const order = [...new Set([selectedPrimary, cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
     if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');
     let lastError;
     for (const provider of order) {
