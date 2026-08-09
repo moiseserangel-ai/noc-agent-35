@@ -84,7 +84,9 @@ export default class BaseAgent {
     const knowledgeClassification = mikrotikRole ? `MikroTik ${mikrotikRole} ${routerOsMajor ? `RouterOS ${routerOsMajor}` : ''}` : '';
     const knowledgeQuery = `${userMessage} ${knowledgeClassification}`.trim();
     const classificationInstruction = knowledgeClassification ? `\n\n[CLASSIFICAÇÃO AUTOMÁTICA PARA DOCUMENTAÇÃO]\n${knowledgeClassification}` : '';
-    const contextualMessage = `${approvedExecutionInstruction(userMessage)}${userMessage}${classificationInstruction}${preflightInstruction}${precisionInstruction(userMessage)}${knowledgeInstruction(userMessage)}${await knowledgeContext(knowledgeQuery, this.name, tenantId)}`;
+    const knowledgeBlock=await knowledgeContext(knowledgeQuery, this.name, tenantId);
+    const knowledgeSources=[...knowledgeBlock.matchAll(/\[FONTE \d+: ([^>\]]+)/g)].map(match=>match[1].trim());
+    const contextualMessage = `${approvedExecutionInstruction(userMessage)}${userMessage}${classificationInstruction}${preflightInstruction}${precisionInstruction(userMessage)}${knowledgeInstruction(userMessage)}${knowledgeBlock}`;
     const cfg = await getAiConfiguration();
     const risk = CRITICAL_REQUEST.test(String(userMessage)) ? 'critical' : CONFIGURATION_REQUEST.test(String(userMessage)) ? 'diagnostic' : 'simple';
     const selectedPrimary = cfg.routing[risk] || cfg.primary;
@@ -104,7 +106,7 @@ export default class BaseAgent {
         logger.info(`[${this.name}] provider=${provider} model=${cfg.providers[provider].model}`);
         const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: contextualMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent });
         await recordAiSuccess({ provider, model: cfg.providers[provider].model, agentName: this.name, usage: result.usage, durationMs: Date.now() - startedAt });
-        return { ...result, provider };
+        return { ...result, provider, model: cfg.providers[provider].model, knowledgeSources };
       } catch (err) {
         lastError = err;
         const failure = await recordAiFailure({ provider, model: cfg.providers[provider].model, agentName: this.name, error: err, durationMs: Date.now() - startedAt });

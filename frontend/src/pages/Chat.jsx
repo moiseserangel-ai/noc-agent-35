@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Trash2, MessageSquare, Wrench, Bot } from 'lucide-react';
+import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { api } from '../lib/api.js';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -23,6 +23,8 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [agentType, setAgentType] = useState('support');
   const [specialists, setSpecialists] = useState([]);
+  const [devices,setDevices]=useState([]);
+  const [selectedDeviceId,setSelectedDeviceId]=useState('');
   const [streaming, setStreaming] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tools, setTools] = useState([]);
@@ -31,6 +33,7 @@ export default function Chat() {
   useEffect(() => {
     api.getChatSessions().then(r => setSessions(r.data)).catch(() => {});
     api.getDeviceTypes().then(r => setSpecialists(r.data)).catch(() => {});
+    api.getDevices().then(r=>setDevices(r.data.filter(item=>item.isActive))).catch(()=>{});
   }, []);
 
   useEffect(() => {
@@ -56,8 +59,8 @@ export default function Chat() {
     };
     s.on('chat:chunk', ({ text }) => setStreaming(prev => prev + text));
     s.on('chat:tool', (data) => setTools(prev => [...prev, data]));
-    s.on('chat:complete', ({ text, agentUsed, toolsUsed }) => {
-      setMessages(prev => [...prev, { role: 'assistant', content: text, agentUsed, id: Date.now() }]);
+    s.on('chat:complete', ({ text, agentUsed, toolsUsed, provider, model, knowledgeSources }) => {
+      setMessages(prev => [...prev, { role: 'assistant', content: text, agentUsed, provider, model, knowledgeSources, id: Date.now() }]);
       setStreaming('');
       setTools([]);
       setIsLoading(false);
@@ -104,7 +107,7 @@ export default function Chat() {
     setTools([]);
     const s = getSocket();
     if (!s.connected) s.connect();
-    s.emit('chat:message', { sessionId: activeSession, message: msg, agentType });
+    s.emit('chat:message', { sessionId: activeSession, message: msg, agentType, deviceId:selectedDeviceId||null });
   };
 
   return (
@@ -143,18 +146,19 @@ export default function Chat() {
               <Bot size={20} style={{ color: 'var(--primary)' }} />
               <span style={{ fontWeight: 600 }}>Chat com Agente</span>
             </div>
-            <select className="form-select" style={{ width: 160, padding: '6px 10px', fontSize: '0.8rem' }}
+            <div className="chat-context-controls"><label><Server size={15}/><select className="form-select" value={selectedDeviceId} onChange={e=>setSelectedDeviceId(e.target.value)}><option value="">Nenhum equipamento fixado</option>{devices.map(item=><option key={item.id} value={item.id}>{item.name} · {item.hostname}</option>)}</select></label><select className="form-select" style={{ width: 160, padding: '6px 10px', fontSize: '0.8rem' }}
               value={agentType} onChange={e => setAgentType(e.target.value)}>
               <option value="support">🧠 Suporte</option>
               {specialists.map(item=><option key={item.type} value={item.type}>🔧 {item.label}</option>)}
-            </select>
+            </select></div>
           </div>
 
           <div className="chat-messages">
             {messages.map((m, i) => (
               <div key={m.id || i} className={`chat-message ${m.role}`}>
-                {m.agentUsed && <div style={{ fontSize: '0.65rem', opacity: 0.7, marginBottom: 4 }}>Agent: {m.agentUsed}</div>}
+                {m.agentUsed && <div className="chat-message-meta"><Bot size={12}/> {m.agentUsed}{m.provider&&<> · {m.provider}</>}{m.model&&<> · {m.model}</>}</div>}
                 {m.role === 'assistant' ? <AgentResponse content={m.content} /> : <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>}
+                {m.role==='assistant'&&(()=>{let sources=m.knowledgeSources||[];if(typeof sources==='string')try{sources=JSON.parse(sources);}catch{sources=[];}return sources.length?<div className="chat-sources"><BookOpen size={13}/><span>Fontes: {[...new Set(sources)].join(' · ')}</span></div>:null;})()}
               </div>
             ))}
             {tools.length > 0 && tools.map((t, i) => (

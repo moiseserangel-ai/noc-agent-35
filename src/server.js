@@ -186,7 +186,7 @@ io.on('connection', (socket) => {
   logger.info(`Dashboard client connected: ${socket.id}`);
   registerInteractiveCli(socket);
 
-  socket.on('chat:message', async ({ sessionId, message, agentType = 'support' }) => {
+  socket.on('chat:message', async ({ sessionId, message, agentType = 'support', deviceId = null }) => {
     try {
       if (socket.user.tenantId) throw new Error('Chat com agentes é restrito à equipe global do NOC');
       if (!['admin', 'operator'].includes(socket.user.role)) throw new Error('Sem permissão para usar agentes');
@@ -198,6 +198,9 @@ io.on('connection', (socket) => {
         socket.emit('chat:error', { error: `Agent "${agentType}" not found` });
         return;
       }
+      const selectedDevice=deviceId?await prisma.device.findFirst({where:{id:String(deviceId),isActive:true},select:{id:true,type:true}}):null;
+      if(deviceId&&!selectedDevice)throw new Error('Equipamento fixado não encontrado ou inativo');
+      const agentMessage=selectedDevice?`[EQUIPAMENTO FIXADO PELO USUÁRIO]\nID interno: ${selectedDevice.id}\nTipo: ${selectedDevice.type}\nUse somente o ID interno nas ferramentas; não solicite nem exponha Host/IP ou credenciais.\n\nSolicitação: ${message}`:message;
 
       // Save user message
       const savedUserMessage = await prisma.chatMessage.create({
@@ -271,7 +274,7 @@ io.on('connection', (socket) => {
       // Run agent with streaming
       socket.emit('chat:typing', { agentType });
       
-      const result = await agent.runStreaming(message, (chunk) => {
+      const result = await agent.runStreaming(agentMessage, (chunk) => {
         // If it's SupportAgent, we hide the text stream to prevent raw JSON from showing up,
         // but we still emit tool events.
         if (agentType !== 'support' && chunk.type === 'text') {
@@ -335,6 +338,7 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
 
                 result.text += `\n\n🔄 **Encaminhando para especialista em ${deviceType}...**\n\n${specialistResult.text}`;
                 result.toolsUsed.push(...specialistResult.toolsUsed);
+                result.agentUsed=deviceType;result.provider=specialistResult.provider;result.model=specialistResult.model;result.knowledgeSources=specialistResult.knowledgeSources;
                 const needsApproval = specialistResultNeedsApproval(dashboardTask.workType, specialistResult.text);
                 await taskService.updateTask(dashboardTask.id, {
                   status: needsApproval ? 'awaiting_approval' : 'resolved',
@@ -371,14 +375,20 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
           sessionId,
           role: 'assistant',
           content: result.text,
-          agentUsed: agentType,
+          agentUsed: result.agentUsed||agentType,
+          provider: result.provider||null,
+          model: result.model||null,
+          knowledgeSources: result.knowledgeSources?.length?JSON.stringify(result.knowledgeSources):null,
           toolCalls: result.toolsUsed.length > 0 ? JSON.stringify(result.toolsUsed) : null,
         },
       });
 
       socket.emit('chat:complete', {
         text: result.text,
-        agentUsed: agentType,
+        agentUsed: result.agentUsed||agentType,
+        provider: result.provider||null,
+        model: result.model||null,
+        knowledgeSources: result.knowledgeSources||[],
         toolsUsed: result.toolsUsed,
       });
     } catch (err) {

@@ -1603,6 +1603,9 @@ model ChatMessage {
   role      String // "user" | "assistant"
   content   String
   agentUsed String?
+  provider  String?
+  model     String?
+  knowledgeSources String?
   toolCalls String? // JSON string with tools used
   createdAt DateTime    @default(now())
 }
