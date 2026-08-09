@@ -127,6 +127,7 @@ export default function Settings() {
   const [testingClaude, setTestingClaude] = useState(false);
   const [testingEvolution, setTestingEvolution] = useState(false);
   const [testingTelegram, setTestingTelegram] = useState(false);
+  const [testingNetbox, setTestingNetbox] = useState(false);
   const [testingAI, setTestingAI] = useState('');
   const [geminiModels, setGeminiModels] = useState([]);
   const [loadingGeminiModels, setLoadingGeminiModels] = useState(false);
@@ -199,6 +200,30 @@ export default function Settings() {
       toast('Configurações salvas com sucesso!', 'success');
     } catch (err) { toast(err.message, 'error'); }
     finally { setSaving(false); }
+  };
+
+  const handleTestNetbox = async () => {
+    setTestingNetbox(true);
+    try {
+      const result = await api.testNetboxIntegration();
+      toast(`✅ NetBox conectado${result?.data?.version ? ` (v${result.data.version})` : ''}.`, 'success');
+    } catch (err) {
+      toast(`❌ NetBox: ${err.message}`, 'error');
+    } finally { setTestingNetbox(false); }
+  };
+
+  const handleExportAnsible = async () => {
+    try {
+      const result = await api.getAnsibleInventory();
+      const blob = new Blob([JSON.stringify(result.data?.inventory || result.inventory, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'ansible-inventory.json';
+      link.click();
+      URL.revokeObjectURL(url);
+      toast(`✅ Inventário exportado (${result.data?.count ?? result.count ?? 0} equipamentos).`, 'success');
+    } catch (err) { toast(`❌ Inventário: ${err.message}`, 'error'); }
   };
 
   const handleTestClaude = async () => {
@@ -377,6 +402,10 @@ export default function Settings() {
               </button>
             )}
             {section.title === 'Notificações e Escalonamento' && <button className="btn btn-secondary" onClick={handleTestTelegram} disabled={testingTelegram}><MessageSquare size={16} /> {testingTelegram ? 'Testando...' : 'Testar Telegram'}</button>}
+            {section.title === 'NetBox e Ansible' && <>
+              <button className="btn btn-secondary" onClick={handleTestNetbox} disabled={testingNetbox}>{testingNetbox ? <><div className="spinner" /> Testando...</> : <><CheckCircle size={16} /> Testar NetBox</>}</button>
+              <button className="btn btn-secondary" onClick={handleExportAnsible}><Activity size={16} /> Exportar inventário Ansible</button>
+            </>}
           </div>
           {section.title === 'Zabbix' && (
             <div style={{ marginTop: '20px', padding: '15px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '8px' }}>
