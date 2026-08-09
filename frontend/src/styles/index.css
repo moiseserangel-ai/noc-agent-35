@@ -1057,6 +1057,13 @@ tr:last-child td { border-bottom: none; }
 .knowledge-suggestions header div,.knowledge-suggestions label div { display:grid; gap:.15rem; }
 .knowledge-suggestions header span,.knowledge-suggestions label span,.knowledge-suggestions label small { color:var(--text-muted); font-size:.7rem; }
 .knowledge-suggestions label { display:flex; align-items:flex-start; gap:.55rem; padding:.5rem; border-top:1px solid var(--border-primary); cursor:pointer; }
+.knowledge-classification-groups { display:grid; grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); gap:.55rem; padding:.75rem 1rem; border-top:1px solid var(--border-primary); }
+.knowledge-classification-groups button { display:flex; align-items:center; gap:.55rem; padding:.7rem; border:1px solid var(--border-primary); border-radius:10px; background:var(--bg-secondary); color:var(--text-primary); text-align:left; cursor:pointer; }
+.knowledge-classification-groups button:hover { border-color:var(--primary); transform:translateY(-1px); }
+.knowledge-classification-groups button span { display:grid; flex:1; gap:.1rem; font-size:.75rem; font-weight:700; }
+.knowledge-classification-groups button small { color:var(--text-muted); font-size:.62rem; font-weight:400; }
+.knowledge-classification-groups button strong { font-size:1.05rem; }
+.knowledge-classification-groups button.needs-review { border-color:var(--warning); }
 .knowledge-results article p { display: -webkit-box; margin-top: 7px; overflow: hidden; color: var(--text-secondary); font-size: .72rem; line-height: 1.55; white-space: pre-wrap; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
 .table-actions { display: flex; justify-content: flex-end; gap: 3px; }
 .knowledge-collection-row { cursor: pointer; background: rgba(0,212,255,.035); }

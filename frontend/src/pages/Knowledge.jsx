@@ -36,7 +36,7 @@ export default function Knowledge() {
   const [importJob, setImportJob] = useState(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [expandedCollections, setExpandedCollections] = useState([]);
-  const [listFilters,setListFilters]=useState({scope:'',role:'',version:''});
+  const [listFilters,setListFilters]=useState({scope:'',role:'',version:'',review:false});
   const [bulk,setBulk]=useState({role:'',version:''});
   const [suggestions,setSuggestions]=useState([]);
   const [suggesting,setSuggesting]=useState(false);
@@ -168,11 +168,21 @@ export default function Knowledge() {
   };
 
   const filteredDocuments=documents.filter(item=>(!listFilters.scope||item.agentScope===listFilters.scope)&&(!listFilters.role||item.mikrotikRole===listFilters.role)&&(!listFilters.version||item.routerOsMajor===listFilters.version));
-  const bulkCandidates=filteredDocuments.filter(item=>item.agentScope==='mikrotik');
+  const mikrotikDocuments=documents.filter(item=>item.agentScope==='mikrotik');
+  const classificationGroups=[
+    {key:'router6',label:'Router · RouterOS 6',count:mikrotikDocuments.filter(item=>item.mikrotikRole==='router'&&item.routerOsMajor==='6').length,filters:{scope:'mikrotik',role:'router',version:'6',review:false}},
+    {key:'router7',label:'Router · RouterOS 7',count:mikrotikDocuments.filter(item=>item.mikrotikRole==='router'&&item.routerOsMajor==='7').length,filters:{scope:'mikrotik',role:'router',version:'7',review:false}},
+    {key:'switch6',label:'Switch · RouterOS 6',count:mikrotikDocuments.filter(item=>item.mikrotikRole==='switch'&&item.routerOsMajor==='6').length,filters:{scope:'mikrotik',role:'switch',version:'6',review:false}},
+    {key:'switch7',label:'Switch · RouterOS 7',count:mikrotikDocuments.filter(item=>item.mikrotikRole==='switch'&&item.routerOsMajor==='7').length,filters:{scope:'mikrotik',role:'switch',version:'7',review:false}},
+    {key:'general',label:'Documentação geral',count:mikrotikDocuments.filter(item=>!item.mikrotikRole&&!item.routerOsMajor).length,filters:{scope:'mikrotik',role:'',version:'',review:false}},
+    {key:'review',label:'Revisão necessária',count:mikrotikDocuments.filter(item=>!item.mikrotikRole||!item.routerOsMajor).length,review:true},
+  ];
+  const reviewFilteredDocuments=listFilters.review?filteredDocuments.filter(item=>!item.mikrotikRole||!item.routerOsMajor):filteredDocuments;
+  const bulkCandidates=reviewFilteredDocuments.filter(item=>item.agentScope==='mikrotik');
   const bulkClassify=async()=>{if(!bulkCandidates.length)return toast('Nenhum documento MikroTik nos filtros atuais.','info');if(!window.confirm(`Classificar ${bulkCandidates.length} documento(s) MikroTik filtrado(s)?`))return;try{const result=await api.bulkClassifyKnowledge({ids:bulkCandidates.map(item=>item.id),mikrotikRole:bulk.role,routerOsMajor:bulk.version});toast(result.message,'success');await load();}catch(error){toast(error.message,'error');}};
   const analyzeSuggestions=async()=>{if(!bulkCandidates.length)return toast('Nenhum documento MikroTik nos filtros atuais.','info');setSuggesting(true);try{const rows=(await api.suggestKnowledgeClassification(bulkCandidates.map(item=>item.id))).data;setSuggestions(rows.map(item=>({...item,selected:true})));toast(`${rows.length} sugestão(ões) encontrada(s).`,'success');}catch(error){toast(error.message,'error');}finally{setSuggesting(false);}};
   const applySuggestions=async()=>{const rows=suggestions.filter(item=>item.selected);if(!rows.length)return;if(!window.confirm(`Aplicar ${rows.length} sugestão(ões) revisada(s)?`))return;try{const result=await api.applyKnowledgeSuggestions(rows);toast(result.message,'success');setSuggestions([]);await load();}catch(error){toast(error.message,'error');}};
-  const documentGroups = filteredDocuments.reduce((groups, item) => {
+  const documentGroups = reviewFilteredDocuments.reduce((groups, item) => {
     const key = item.collectionRootUrl ? `collection:${item.tenantId || 'global'}:${item.collectionRootUrl}` : `document:${item.id}`;
     if (!groups.has(key)) groups.set(key, { key, rootUrl: item.collectionRootUrl, documents: [] });
     groups.get(key).documents.push(item);
@@ -256,7 +266,8 @@ export default function Knowledge() {
 
     <div className="card" style={{marginTop:16}}>
       <div className="card-header"><div><h3>Documentos indexados</h3><p>Ative, edite ou remova o conhecimento disponível aos agentes</p></div></div>
-      <div className="knowledge-bulk-toolbar"><select className="form-select" value={listFilters.scope} onChange={e=>setListFilters({...listFilters,scope:e.target.value})}><option value="">Todos os especialistas</option>{Object.entries(scopeLabel).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><select className="form-select" value={listFilters.role} onChange={e=>setListFilters({...listFilters,role:e.target.value})}><option value="">Router e Switch</option><option value="router">Router</option><option value="switch">Switch</option></select><select className="form-select" value={listFilters.version} onChange={e=>setListFilters({...listFilters,version:e.target.value})}><option value="">RouterOS 6 e 7</option><option value="6">RouterOS 6</option><option value="7">RouterOS 7</option></select><span>{filteredDocuments.length} documento(s)</span></div>
+      <div className="knowledge-classification-groups">{classificationGroups.map(group=><button key={group.key} className={group.review&&group.count?'needs-review':''} onClick={()=>{setListFilters(group.review?{scope:'mikrotik',role:'',version:'',review:true}:group.filters);setSuggestions([]);}}><BookOpen size={17}/><span>{group.label}<small>{group.review?'Sem função ou versão':'Abrir grupo'}</small></span><strong>{group.count}</strong></button>)}</div>
+      <div className="knowledge-bulk-toolbar"><select className="form-select" value={listFilters.scope} onChange={e=>setListFilters({...listFilters,scope:e.target.value,review:false})}><option value="">Todos os especialistas</option>{Object.entries(scopeLabel).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><select className="form-select" value={listFilters.role} onChange={e=>setListFilters({...listFilters,role:e.target.value,review:false})}><option value="">Router e Switch</option><option value="router">Router</option><option value="switch">Switch</option></select><select className="form-select" value={listFilters.version} onChange={e=>setListFilters({...listFilters,version:e.target.value,review:false})}><option value="">RouterOS 6 e 7</option><option value="6">RouterOS 6</option><option value="7">RouterOS 7</option></select><span>{reviewFilteredDocuments.length} documento(s)</span></div>
       <div className="knowledge-bulk-toolbar"><strong>Classificar MikroTik filtrados:</strong><select className="form-select" value={bulk.role} onChange={e=>setBulk({...bulk,role:e.target.value})}><option value="">Todos os tipos</option><option value="router">Router</option><option value="switch">Switch</option></select><select className="form-select" value={bulk.version} onChange={e=>setBulk({...bulk,version:e.target.value})}><option value="">Todas as versões</option><option value="6">RouterOS 6</option><option value="7">RouterOS 7</option></select><button className="btn btn-secondary" onClick={bulkClassify} disabled={!bulkCandidates.length}>Aplicar a {bulkCandidates.length}</button><button className="btn btn-secondary" onClick={analyzeSuggestions} disabled={!bulkCandidates.length||suggesting}>{suggesting?'Analisando...':'Sugerir automaticamente'}</button></div>
       {suggestions.length>0&&<div className="knowledge-suggestions"><header><div><strong>Sugestões para revisão</strong><span>{suggestions.filter(item=>item.selected).length} de {suggestions.length} selecionadas</span></div><button className="btn btn-primary" onClick={applySuggestions}>Aplicar selecionadas</button></header>{suggestions.map(item=><label key={item.id}><input type="checkbox" checked={item.selected} onChange={e=>setSuggestions(rows=>rows.map(row=>row.id===item.id?{...row,selected:e.target.checked}:row))}/><div><strong>{item.title}</strong><span>{item.mikrotikRole==='switch'?'Switch':'Router'}{item.routerOsMajor?` · RouterOS ${item.routerOsMajor}`:''} · confiança {item.confidence}%</span><small>{item.evidence.join(' · ')}</small></div></label>)}</div>}
       {loading ? <div className="loading-screen" style={{minHeight:180}}><div className="spinner"/></div> :
@@ -282,7 +293,7 @@ export default function Knowledge() {
             {expanded && group.documents.map(item=><tr key={item.id} className="knowledge-collection-child"><td><strong>{item.title}</strong><br/><span className="knowledge-muted">{item.tenant?.name || 'Global'} · {item.sourceUrl}</span></td><td>{scopeLabel[item.agentScope] || item.agentScope}</td><td>{item.chunkCount} trechos<br/><span className="knowledge-muted">{date(item.updatedAt)}</span></td><td>{item.uploadedBy}</td><td><span className={`status-badge ${item.status==='active'?'status-completed':'status-pending'}`}>{item.status==='active'?'Ativo':'Desabilitado'}</span></td><td><div className="table-actions"><button className="btn btn-ghost btn-sm" title="Editar" onClick={()=>edit(item.id)}><Pencil size={15}/></button><button className="btn btn-ghost btn-sm" title={item.status==='active'?'Desabilitar':'Habilitar'} onClick={()=>toggle(item)}><Power size={15}/></button><button className="btn btn-ghost btn-sm" title="Excluir" onClick={()=>remove(item)}><Trash2 size={15}/></button></div></td></tr>)}
           </Fragment>;
         })}
-        {!filteredDocuments.length&&<tr><td colSpan="6"><div className="empty-state"><BookOpen size={30}/><p>Nenhum documento encontrado nos filtros.</p></div></td></tr>}
+        {!reviewFilteredDocuments.length&&<tr><td colSpan="6"><div className="empty-state"><BookOpen size={30}/><p>Nenhum documento encontrado nos filtros.</p></div></td></tr>}
       </tbody></table></div>}
     </div>
   </div>;
