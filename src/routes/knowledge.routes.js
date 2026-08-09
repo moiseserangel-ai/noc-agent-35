@@ -116,4 +116,32 @@ router.post('/bulk/classify', async (req,res,next) => {
   }catch(error){next(error);}
 });
 
+router.post('/bulk/suggest', async (req,res,next) => {
+  try {
+    const ids=[...new Set((Array.isArray(req.body.ids)?req.body.ids:[]).map(String))].slice(0,500);
+    const documents=await prisma.knowledgeDocument.findMany({where:{id:{in:ids},agentScope:'mikrotik'},select:{id:true,title:true,sourceUrl:true,tags:true,mikrotikRole:true,routerOsMajor:true,chunks:{take:2,orderBy:{position:'asc'},select:{content:true}}}});
+    const suggestions=documents.map(document=>{
+      const text=[document.title,document.sourceUrl,document.tags,...document.chunks.map(item=>item.content)].filter(Boolean).join(' ').toLowerCase();
+      const switchHits=(text.match(/\b(crs\d*|css\d*|switch(?:ing)?|switch chip|bridge vlan|hardware offload)\b/g)||[]).length;
+      const routerHits=(text.match(/\b(ccr\d*|router|routing|firewall|nat|bgp|ospf|pppoe|load balance|pcc)\b/g)||[]).length;
+      const v7Hits=(text.match(/\b(routeros\s*7|ros\s*7|v7(?:\.|\b)|wireguard|routing filter rule|routing table)\b/g)||[]).length;
+      const v6Hits=(text.match(/\b(routeros\s*6|ros\s*6|v6(?:\.|\b)|routing-mark|route rule)\b/g)||[]).length;
+      const mikrotikRole=switchHits>routerHits?'switch':routerHits>switchHits?'router':document.mikrotikRole;
+      const routerOsMajor=v7Hits>v6Hits?'7':v6Hits>v7Hits?'6':document.routerOsMajor;
+      const evidence=[];if(mikrotikRole)evidence.push(mikrotikRole==='switch'?`${switchHits} indício(s) de switch`:`${routerHits} indício(s) de router`);if(routerOsMajor)evidence.push(`RouterOS ${routerOsMajor}`);
+      const confidence=Math.min(95,40+Math.abs(switchHits-routerHits)*10+Math.abs(v7Hits-v6Hits)*10);
+      return {id:document.id,title:document.title,mikrotikRole:mikrotikRole||null,routerOsMajor:routerOsMajor||null,confidence,evidence};
+    }).filter(item=>item.mikrotikRole||item.routerOsMajor);
+    res.json({success:true,data:suggestions});
+  }catch(error){next(error);}
+});
+
+router.post('/bulk/apply-suggestions', async (req,res,next) => {
+  try {
+    const rows=(Array.isArray(req.body.rows)?req.body.rows:[]).slice(0,500);let updated=0;
+    await prisma.$transaction(async tx=>{for(const row of rows){const data={};if(['router','switch'].includes(row.mikrotikRole))data.mikrotikRole=row.mikrotikRole;if(['6','7'].includes(String(row.routerOsMajor||'')))data.routerOsMajor=String(row.routerOsMajor);if(Object.keys(data).length){const result=await tx.knowledgeDocument.updateMany({where:{id:String(row.id),agentScope:'mikrotik'},data});updated+=result.count;}}});
+    res.json({success:true,data:{updated},message:`${updated} sugestão(ões) aplicada(s)`});
+  }catch(error){next(error);}
+});
+
 export default router;
