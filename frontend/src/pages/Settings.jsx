@@ -96,6 +96,14 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'NetBox e Ansible',
+    icon: Activity,
+    fields: [
+      { key: 'netbox_url', label: 'URL do NetBox', type: 'text', placeholder: 'https://netbox.exemplo.com', helperText: 'A API do NetBox deve estar disponível por HTTPS.' },
+      { key: 'netbox_api_token', label: 'Token da API do NetBox', type: 'password', placeholder: 'Token do NetBox', helperText: 'Armazenado criptografado. A integração começa em modo somente leitura/teste.' },
+    ],
+  },
+  {
     title: 'Gestão de Vulnerabilidades', icon: Shield,
     fields: [
       { key:'vulnerability_scan_enabled',label:'Análise automática',type:'select',defaultValue:'false',options:[['true','Habilitada'],['false','Desabilitada']] },

@@ -14,6 +14,7 @@ import { authMiddleware, verifyToken, globalOnly, requireRoles, readOnlyForViewe
 import authRoutes from './routes/auth.routes.js';
 import deviceRoutes from './routes/device.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
+import integrationRoutes from './routes/integration.routes.js';
 import taskRoutes from './routes/task.routes.js';
 import chatRoutes from './routes/chat.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
@@ -98,6 +99,7 @@ app.use('/api/public/status', publicStatusRouter);
 // Protected routes
 app.use('/api/devices', authMiddleware, auditMutation, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);
 app.use('/api/settings', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, settingsRoutes);
+app.use('/api/integrations', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, integrationRoutes);
 app.use('/api/tasks', authMiddleware, readOnlyForViewer, auditMutation, taskRoutes);
 app.use('/api/chat', authMiddleware,globalOnly, requireRoles('admin', 'operator'), auditMutation, chatRoutes);
 app.use('/api/vpn', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, vpnRoutes);
