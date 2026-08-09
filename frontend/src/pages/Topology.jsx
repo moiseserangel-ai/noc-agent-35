@@ -25,7 +25,8 @@ export default function Topology({isAdmin=false}){
   const [busy,setBusy]=useState(false);
   const [dirty,setDirty]=useState(false);
   const [showLink,setShowLink]=useState(false);
-  const [showDiscovery,setShowDiscovery]=useState(false);
+ const [showDiscovery,setShowDiscovery]=useState(false);
+  const [fullscreen,setFullscreen]=useState(false);
   const [discovery,setDiscovery]=useState({runs:[],suggestions:[]});
   const [linkForm,setLinkForm]=useState({sourceDeviceId:'',targetDeviceId:'',linkType:'ethernet',label:''});
   const drag=useRef(null);
@@ -142,8 +143,9 @@ export default function Topology({isAdmin=false}){
       {isAdmin&&<button className="btn btn-secondary" onClick={()=>{setShowDiscovery(true);loadDiscovery();}}><ScanSearch size={15}/> LLDP/MNDP</button>}
       {isAdmin&&<button className="btn btn-secondary" onClick={()=>setShowLink(true)}><Plus size={15}/> Conexão</button>}
       {isAdmin&&<button className="btn btn-secondary" onClick={organize}><Network size={15}/> Organizar</button>}
-      {isAdmin&&<button className="btn btn-primary" disabled={!dirty||busy} onClick={save}>{busy?<span className="spinner"/>:<Save size={15}/>} Salvar mapa</button>}
-      <button className="btn btn-secondary" onClick={exportMap}><Save size={15}/> Exportar</button>
+     {isAdmin&&<button className="btn btn-primary" disabled={!dirty||busy} onClick={save}>{busy?<span className="spinner"/>:<Save size={15}/>} Salvar mapa</button>}
+      <button className="btn btn-secondary" onClick={()=>setFullscreen(value=>!value)}><Maximize2 size={15}/> {fullscreen?'Sair da tela cheia':'Tela cheia'}</button>
+     <button className="btn btn-secondary" onClick={exportMap}><Save size={15}/> Exportar</button>
       <button className="btn btn-secondary" onClick={()=>load()}><RefreshCw size={15}/> Atualizar</button>
     </div></div>
 
@@ -162,11 +164,12 @@ export default function Topology({isAdmin=false}){
       <select className="form-select" value={filters.site} onChange={e=>setFilters({...filters,site:e.target.value})}><option value="">Todos os sites</option>{(data.filters.sites||[]).map(value=><option key={value}>{value}</option>)}</select>
       <select className="form-select" value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="">Todos os estados</option>{Object.entries(STATUS).map(([key,value])=><option key={key} value={key}>{value.label}</option>)}</select>
       <span>{visibleNodes.length} visível(is)</span>
-      <div className="topology-zoom"><button onClick={()=>setZoom(value=>Math.max(.5,value-.1))}><ZoomOut size={16}/></button><strong>{Math.round(zoom*100)}%</strong><button onClick={()=>setZoom(value=>Math.min(1.5,value+.1))}><ZoomIn size={16}/></button><button onClick={fit} title="Ajustar"><Maximize2 size={16}/></button></div>
-    </div>
+     <div className="topology-zoom"><button onClick={()=>setZoom(value=>Math.max(.5,value-.1))}><ZoomOut size={16}/></button><strong>{Math.round(zoom*100)}%</strong><button onClick={()=>setZoom(value=>Math.min(1.5,value+.1))}><ZoomIn size={16}/></button><button onClick={fit} title="Ajustar"><Maximize2 size={16}/></button></div>
+   </div>
+    <div className="topology-legend"><span><i className="legend-dot online"/> Online</span><span><i className="legend-dot warning"/> Alerta</span><span><i className="legend-dot critical"/> Crítico</span><span><i className="legend-dot offline"/> Indisponível</span><span><i className="legend-line fiber"/> Fibra</span><span><i className="legend-line vpn"/> VPN</span></div>
 
     {loading?<div className="loading-screen" style={{minHeight:420}}><div className="spinner"/></div>:!data.nodes.length?<div className="card empty-state"><Network/><p>Cadastre equipamentos para montar o mapa de rede.</p></div>:
-    <div className="topology-workspace">
+    <div className={'topology-workspace '+(fullscreen?'topology-workspace-fullscreen':'')}>
       <div className="topology-viewport" ref={viewport}>
         <div className="topology-scale" style={{width:canvas.width*zoom,height:canvas.height*zoom}}>
           <div className="topology-canvas" style={{width:canvas.width,height:canvas.height,transform:`scale(${zoom})`}}>
