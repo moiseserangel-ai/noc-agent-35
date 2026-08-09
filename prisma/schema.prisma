@@ -1649,6 +1649,8 @@ model KnowledgeDocument {
   collectionRootUrl String?
   content           String
   agentScope        String           @default("global") // global|support|mikrotik|linux|huawei_vrp
+  mikrotikRole      String?          // router|switch
+  routerOsMajor     String?          // 6|7
   tags              String?
   status            String           @default("active") // active|disabled
   chunkCount        Int              @default(0)
@@ -1658,6 +1660,7 @@ model KnowledgeDocument {
   chunks            KnowledgeChunk[]
 
   @@index([agentScope, status])
+  @@index([mikrotikRole, routerOsMajor, status])
   @@index([tenantId, status])
   @@index([collectionRootUrl])
   @@index([updatedAt])
@@ -1699,6 +1702,8 @@ model KnowledgeImportJob {
   startUrl    String
   urls        String
   agentScope  String
+  mikrotikRole String?
+  routerOsMajor String?
   tags        String?
   status      String    @default("queued") // queued|running|completed|completed_with_errors|failed
   totalPages  Int

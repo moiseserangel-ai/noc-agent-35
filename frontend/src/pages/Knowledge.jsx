@@ -18,7 +18,7 @@ const scopeLabel = {
   nokia_sros: 'Nokia SR OS',
 };
 const sourceLabel = { markdown: 'Markdown', text: 'Texto', pdf: 'PDF', url: 'Link HTTPS' };
-const emptyForm = { id: null, tenantId: '', title: '', filename: '', content: '', fileData: '', sourceType: 'markdown', sourceUrl: '', refreshUrl: false, crawlMode: false, agentScope: 'global', tags: '' };
+const emptyForm = { id: null, tenantId: '', title: '', filename: '', content: '', fileData: '', sourceType: 'markdown', sourceUrl: '', refreshUrl: false, crawlMode: false, agentScope: 'global', mikrotikRole: '', routerOsMajor: '', tags: '' };
 const date = value => new Date(value).toLocaleString('pt-BR');
 
 export default function Knowledge() {
@@ -107,7 +107,7 @@ export default function Knowledge() {
   const edit = async id => {
     try {
       const item = (await api.getKnowledgeDocument(id)).data;
-      setForm({ id: item.id, tenantId: item.tenantId || '', title: item.title, filename: item.filename, content: item.content, fileData: '', sourceType: item.sourceType || 'markdown', sourceUrl: item.sourceUrl || '', refreshUrl: false, crawlMode: false, agentScope: item.agentScope, tags: item.tags || '' });
+      setForm({ id: item.id, tenantId: item.tenantId || '', title: item.title, filename: item.filename, content: item.content, fileData: '', sourceType: item.sourceType || 'markdown', sourceUrl: item.sourceUrl || '', refreshUrl: false, crawlMode: false, agentScope: item.agentScope, mikrotikRole: item.mikrotikRole || '', routerOsMajor: item.routerOsMajor || '', tags: item.tags || '' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) { toast(error.message, 'error'); }
   };
@@ -157,7 +157,7 @@ export default function Knowledge() {
   const startImport = async () => {
     if (!selectedPages.length) return toast('Selecione ao menos uma página.', 'error');
     try {
-      const job = (await api.importKnowledgePages({ startUrl: discovery.startUrl, urls: selectedPages, agentScope: form.agentScope, tags: form.tags, tenantId: form.tenantId || null })).data;
+      const job = (await api.importKnowledgePages({ startUrl: discovery.startUrl, urls: selectedPages, agentScope: form.agentScope, mikrotikRole: form.mikrotikRole, routerOsMajor: form.routerOsMajor, tags: form.tags, tenantId: form.tenantId || null })).data;
       setImportJob(job);
       toast('Importação iniciada em segundo plano.', 'success');
     } catch (error) { toast(error.message, 'error'); }
@@ -204,6 +204,7 @@ export default function Knowledge() {
         {!form.crawlMode && <div className="form-group"><label className="form-label">Título {form.sourceType==='url'&&'(opcional)'}</label><input className="form-input" required={form.sourceType!=='url'} maxLength="180" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></div>}
         <div className="form-group"><label className="form-label">Disponibilidade</label><select className="form-select" value={form.tenantId} onChange={e=>setForm({...form,tenantId:e.target.value})}><option value="">Global — compartilhado com todos os clientes</option>{tenants.map(item=><option key={item.id} value={item.id}>Somente {item.name}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Especialista</label><select className="form-select" value={form.agentScope} onChange={e=>setForm({...form,agentScope:e.target.value})}>{Object.entries(scopeLabel).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
+        {form.agentScope==='mikrotik'&&<div className="form-row"><div className="form-group"><label className="form-label">Função do equipamento</label><select className="form-select" value={form.mikrotikRole} onChange={e=>setForm({...form,mikrotikRole:e.target.value})}><option value="">Todos</option><option value="router">Router</option><option value="switch">Switch</option></select></div><div className="form-group"><label className="form-label">Versão principal</label><select className="form-select" value={form.routerOsMajor} onChange={e=>setForm({...form,routerOsMajor:e.target.value})}><option value="">RouterOS 6 e 7</option><option value="6">RouterOS 6</option><option value="7">RouterOS 7</option></select></div></div>}
         <div className="form-group"><label className="form-label">Tags</label><input className="form-input" placeholder="Ex.: bgp, firewall, ne8000, routeros-v7" maxLength="500" value={form.tags} onChange={e=>setForm({...form,tags:e.target.value})}/></div>
         {(form.content || form.fileData || form.sourceUrl) && <div className="knowledge-file-preview"><FileText size={15}/><span>{form.sourceType==='url' ? 'A página será baixada com proteção de rede' : form.sourceType==='pdf' ? 'PDF pronto para extração de texto' : `${form.content.length.toLocaleString('pt-BR')} caracteres carregados`}</span></div>}
         {form.crawlMode
@@ -251,7 +252,7 @@ export default function Knowledge() {
         {groupedDocuments.map(group => {
           if (!group.rootUrl) {
             const item = group.documents[0];
-            return <tr key={item.id}><td><strong>{item.title}</strong><br/><span className="knowledge-muted">{item.tenant?.name || 'Global'} · {sourceLabel[item.sourceType] || 'Markdown'} · {item.sourceUrl || item.filename}{item.tags ? ` · ${item.tags}` : ''}</span></td><td>{scopeLabel[item.agentScope] || item.agentScope}</td><td>{item.chunkCount} trechos<br/><span className="knowledge-muted">{date(item.updatedAt)}</span></td><td>{item.uploadedBy}</td><td><span className={`status-badge ${item.status==='active'?'status-completed':'status-pending'}`}>{item.status==='active'?'Ativo':'Desabilitado'}</span></td><td><div className="table-actions"><button className="btn btn-ghost btn-sm" title="Editar" onClick={()=>edit(item.id)}><Pencil size={15}/></button><button className="btn btn-ghost btn-sm" title={item.status==='active'?'Desabilitar':'Habilitar'} onClick={()=>toggle(item)}><Power size={15}/></button><button className="btn btn-ghost btn-sm" title="Excluir" onClick={()=>remove(item)}><Trash2 size={15}/></button></div></td></tr>;
+            return <tr key={item.id}><td><strong>{item.title}</strong><br/><span className="knowledge-muted">{item.tenant?.name || 'Global'} · {sourceLabel[item.sourceType] || 'Markdown'} · {item.sourceUrl || item.filename}{item.mikrotikRole?` · ${item.mikrotikRole==='router'?'Router':'Switch'}`:''}{item.routerOsMajor?` · RouterOS ${item.routerOsMajor}`:''}{item.tags ? ` · ${item.tags}` : ''}</span></td><td>{scopeLabel[item.agentScope] || item.agentScope}</td><td>{item.chunkCount} trechos<br/><span className="knowledge-muted">{date(item.updatedAt)}</span></td><td>{item.uploadedBy}</td><td><span className={`status-badge ${item.status==='active'?'status-completed':'status-pending'}`}>{item.status==='active'?'Ativo':'Desabilitado'}</span></td><td><div className="table-actions"><button className="btn btn-ghost btn-sm" title="Editar" onClick={()=>edit(item.id)}><Pencil size={15}/></button><button className="btn btn-ghost btn-sm" title={item.status==='active'?'Desabilitar':'Habilitar'} onClick={()=>toggle(item)}><Power size={15}/></button><button className="btn btn-ghost btn-sm" title="Excluir" onClick={()=>remove(item)}><Trash2 size={15}/></button></div></td></tr>;
           }
           const expanded = expandedCollections.includes(group.key);
           const root = group.documents.find(item => item.sourceUrl === group.rootUrl) || group.documents[0];

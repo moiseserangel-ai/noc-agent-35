@@ -280,7 +280,9 @@ export function validateDocumentInput(input) {
   if (Buffer.byteLength(content, 'utf8') > contentLimit) throw new Error('O texto extraído excede o limite permitido');
   if (content.includes('\0')) throw new Error('O arquivo contém dados inválidos');
   if (!KNOWLEDGE_SCOPES.includes(agentScope)) throw new Error('Especialista inválido');
-  return { filename: filename.slice(0, 220), sourceType, sourceUrl: input.sourceUrl || null, collectionRootUrl: input.collectionRootUrl || null, title, content, agentScope, tags: String(input.tags || '').trim().slice(0, 500) || null };
+  const mikrotikRole = agentScope === 'mikrotik' && ['router','switch'].includes(input.mikrotikRole) ? input.mikrotikRole : null;
+  const routerOsMajor = agentScope === 'mikrotik' && ['6','7'].includes(String(input.routerOsMajor || '')) ? String(input.routerOsMajor) : null;
+  return { filename: filename.slice(0, 220), sourceType, sourceUrl: input.sourceUrl || null, collectionRootUrl: input.collectionRootUrl || null, title, content, agentScope, mikrotikRole, routerOsMajor, tags: String(input.tags || '').trim().slice(0, 500) || null };
 }
 
 export async function createKnowledgeDocument(input, username, tenantId = null) {
@@ -297,7 +299,7 @@ export async function createKnowledgeDocument(input, username, tenantId = null) 
           position,
           heading: chunk.heading,
           content: chunk.content,
-          searchText: normalize(`${data.title} ${data.tags || ''} ${chunk.heading} ${chunk.content}`),
+          searchText: normalize(`${data.title} ${data.tags || ''} ${data.mikrotikRole || ''} routeros ${data.routerOsMajor || ''} ${chunk.heading} ${chunk.content}`),
         })),
       },
     },
@@ -327,7 +329,7 @@ export async function updateKnowledgeDocument(id, input, tenantId = undefined) {
             position,
             heading: chunk.heading,
             content: chunk.content,
-            searchText: normalize(`${merged.title} ${merged.tags || ''} ${chunk.heading} ${chunk.content}`),
+            searchText: normalize(`${merged.title} ${merged.tags || ''} ${merged.mikrotikRole || ''} routeros ${merged.routerOsMajor || ''} ${chunk.heading} ${chunk.content}`),
           })),
         },
       },
@@ -422,6 +424,8 @@ export async function createKnowledgeImportJob(input, username, tenantId = null)
       startUrl: start.toString(),
       urls: JSON.stringify(urls),
       agentScope: input.agentScope,
+      mikrotikRole: input.agentScope === 'mikrotik' && ['router','switch'].includes(input.mikrotikRole) ? input.mikrotikRole : null,
+      routerOsMajor: input.agentScope === 'mikrotik' && ['6','7'].includes(String(input.routerOsMajor || '')) ? String(input.routerOsMajor) : null,
       tags: String(input.tags || '').trim().slice(0, 500) || null,
       tenantId,
       totalPages: urls.length,
@@ -446,9 +450,9 @@ export async function processKnowledgeImportJob(jobId) {
     try {
       const current = await prisma.knowledgeDocument.findFirst({ where: { sourceType: 'url', sourceUrl: url, tenantId: job.tenantId } });
       if (current) {
-        await updateKnowledgeDocument(current.id, { ...current, sourceType: 'url', sourceUrl: url, collectionRootUrl: job.startUrl, agentScope: job.agentScope, tags: job.tags, refreshUrl: true }, job.tenantId);
+        await updateKnowledgeDocument(current.id, { ...current, sourceType: 'url', sourceUrl: url, collectionRootUrl: job.startUrl, agentScope: job.agentScope, mikrotikRole: job.mikrotikRole, routerOsMajor: job.routerOsMajor, tags: job.tags, refreshUrl: true }, job.tenantId);
       } else {
-        await createKnowledgeDocument({ sourceType: 'url', sourceUrl: url, collectionRootUrl: job.startUrl, agentScope: job.agentScope, tags: job.tags }, job.createdBy, job.tenantId);
+        await createKnowledgeDocument({ sourceType: 'url', sourceUrl: url, collectionRootUrl: job.startUrl, agentScope: job.agentScope, mikrotikRole: job.mikrotikRole, routerOsMajor: job.routerOsMajor, tags: job.tags }, job.createdBy, job.tenantId);
       }
       imported += 1;
     } catch (error) {
@@ -494,7 +498,7 @@ export async function searchKnowledge(query, agentName, limit = 5, log = true, t
       agentScope: { in: ['global', agentName] },
       ...(tenantId !== undefined && { OR: tenantId ? [{ tenantId: null }, { tenantId }] : [{ tenantId: null }] }),
     } },
-    include: { document: { select: { id: true, title: true, filename: true, agentScope: true, tenantId: true, updatedAt: true } } },
+    include: { document: { select: { id: true, title: true, filename: true, agentScope: true, mikrotikRole: true, routerOsMajor: true, tenantId: true, updatedAt: true } } },
   });
   const phrase = normalize(query);
   const ranked = chunks.map(chunk => {
@@ -507,6 +511,8 @@ export async function searchKnowledge(query, agentName, limit = 5, log = true, t
     }
     if (phrase.length > 8 && chunk.searchText.includes(phrase)) score += 12;
     if (chunk.document.agentScope === agentName) score += 1;
+    if (chunk.document.mikrotikRole && queryTerms.includes(chunk.document.mikrotikRole)) score += 8;
+    if (chunk.document.routerOsMajor && (phrase.includes(`routeros ${chunk.document.routerOsMajor}`) || phrase.includes(`versao ${chunk.document.routerOsMajor}`))) score += 10;
     return { ...chunk, score };
   }).filter(item => item.score > 0).sort((a, b) => b.score - a.score).slice(0, Math.max(1, Math.min(Number(limit) || 5, 10)));
 

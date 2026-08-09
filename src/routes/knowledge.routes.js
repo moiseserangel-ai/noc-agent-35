@@ -44,7 +44,7 @@ router.get('/', async (req, res, next) => {
   try {
     const documents = await prisma.knowledgeDocument.findMany({
       orderBy: { updatedAt: 'desc' },
-      select: { id: true, tenantId: true, tenant: { select: { id: true, name: true } }, title: true, filename: true, sourceType: true, sourceUrl: true, collectionRootUrl: true, agentScope: true, tags: true, status: true, chunkCount: true, uploadedBy: true, createdAt: true, updatedAt: true },
+      select: { id: true, tenantId: true, tenant: { select: { id: true, name: true } }, title: true, filename: true, sourceType: true, sourceUrl: true, collectionRootUrl: true, agentScope: true, mikrotikRole: true, routerOsMajor: true, tags: true, status: true, chunkCount: true, uploadedBy: true, createdAt: true, updatedAt: true },
     });
     res.json({ success: true, data: documents, scopes: KNOWLEDGE_SCOPES });
   } catch (error) { next(error); }
