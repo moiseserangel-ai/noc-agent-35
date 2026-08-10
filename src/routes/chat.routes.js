@@ -24,6 +24,17 @@ router.post('/sessions', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.patch('/sessions/:id',async(req,res,next)=>{try{
+  const session=await prisma.chatSession.findUnique({where:{id:req.params.id},select:{id:true}});
+  if(!session)return res.status(404).json({success:false,error:'Conversa não encontrada'});
+  const data={};
+  if(Object.hasOwn(req.body,'title')){const title=String(req.body.title||'').trim().replace(/\s+/g,' ').slice(0,100);if(!title)return res.status(400).json({success:false,error:'Informe um nome para a conversa'});data.title=title;}
+  if(Object.hasOwn(req.body,'archived'))data.archivedAt=req.body.archived===true?new Date():null;
+  if(!Object.keys(data).length)return res.status(400).json({success:false,error:'Nenhuma alteração informada'});
+  const updated=await prisma.chatSession.update({where:{id:session.id},data,include:{messages:{take:1,orderBy:{createdAt:'desc'}}}});
+  res.json({success:true,data:updated,message:data.archivedAt?'Conversa arquivada':data.archivedAt===null&&Object.hasOwn(req.body,'archived')?'Conversa restaurada':'Conversa renomeada'});
+}catch(error){next(error);}});
+
 router.get('/sessions/:id/messages', async (req, res, next) => {
   try {
     const messages = await prisma.chatMessage.findMany({
@@ -37,7 +48,7 @@ router.get('/sessions/:id/messages', async (req, res, next) => {
 router.delete('/sessions/:id', async (req, res, next) => {
   try {
     await prisma.chatSession.delete({ where: { id: req.params.id } });
-    res.json({ success: true, message: 'Session deleted' });
+    res.json({ success: true, message: 'Conversa excluída permanentemente' });
   } catch (err) { next(err); }
 });
 

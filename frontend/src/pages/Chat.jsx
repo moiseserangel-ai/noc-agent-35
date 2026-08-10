@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope, StopCircle, ThumbsUp, ThumbsDown, Terminal, ExternalLink } from 'lucide-react';
+import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope, StopCircle, ThumbsUp, ThumbsDown, Terminal, ExternalLink, Pencil, Archive, RotateCcw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../lib/api.js';
@@ -28,6 +28,7 @@ export default function Chat() {
   const [devices,setDevices]=useState([]);
   const [selectedDeviceId,setSelectedDeviceId]=useState('');
   const [sessionSearch,setSessionSearch]=useState('');
+  const [sessionView,setSessionView]=useState('active');
   const [streaming, setStreaming] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tools, setTools] = useState([]);
@@ -100,13 +101,16 @@ export default function Chat() {
   };
 
   const deleteSession = async (id) => {
+    if(!window.confirm('Excluir permanentemente esta conversa e todo o histórico? Esta ação não pode ser desfeita.'))return;
     await api.deleteChatSession(id);
     setSessions(prev => prev.filter(s => s.id !== id));
     if (activeSession === id) { setActiveSession(null); setMessages([]); }
   };
+  const renameSession=async session=>{const title=window.prompt('Novo nome da conversa:',session.title||'Nova conversa');if(title===null||!title.trim())return;const result=await api.updateChatSession(session.id,{title});setSessions(rows=>rows.map(row=>row.id===session.id?{...row,...result.data}:row));};
+  const archiveSession=async(session,archived)=>{const result=await api.updateChatSession(session.id,{archived});setSessions(rows=>rows.map(row=>row.id===session.id?{...row,...result.data}:row));if(archived&&activeSession===session.id){setActiveSession(null);setMessages([]);}};
 
   const sendMessage = () => {
-    if (!input.trim() || !activeSession || isLoading) return;
+    if (!input.trim() || !activeSession || isLoading || currentSession?.archivedAt) return;
     const msg = input.trim();
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: msg, id: Date.now() }]);
@@ -116,7 +120,8 @@ export default function Chat() {
     if (!s.connected) s.connect();
     s.emit('chat:message', { sessionId: activeSession, message: msg, agentType, deviceId:selectedDeviceId||null });
   };
-  const filteredSessions=sessions.filter(session=>!sessionSearch.trim()||String(session.title||'Nova conversa').toLowerCase().includes(sessionSearch.trim().toLowerCase()));
+  const filteredSessions=sessions.filter(session=>(sessionView==='archived'?Boolean(session.archivedAt):!session.archivedAt)&&(!sessionSearch.trim()||String(session.title||'Nova conversa').toLowerCase().includes(sessionSearch.trim().toLowerCase())));
+  const currentSession=sessions.find(session=>session.id===activeSession);
   const quickAction=text=>{if(!selectedDeviceId)return;setInput(text);};
   const cancelResponse=()=>{getSocket().emit('chat:cancel',{sessionId:activeSession});setStreaming('');setTools([]);setIsLoading(false);};
   const rateMessage=async(message,feedback)=>{if(!message.id)return;const value=message.feedback===feedback?null:feedback;try{await api.rateChatMessage(message.id,value);setMessages(rows=>rows.map(row=>row.id===message.id?{...row,feedback:value}:row));}catch{}};
@@ -128,6 +133,7 @@ export default function Chat() {
       {/* Sidebar sessions */}
       <div className="chat-sessions">
         <button className="btn btn-primary" style={{ width: '100%' }} onClick={newSession}><Plus size={16} /> Nova Conversa</button>
+        <div className="chat-session-tabs"><button className={sessionView==='active'?'active':''} onClick={()=>setSessionView('active')}>Ativas <span>{sessions.filter(item=>!item.archivedAt).length}</span></button><button className={sessionView==='archived'?'active':''} onClick={()=>setSessionView('archived')}>Arquivadas <span>{sessions.filter(item=>item.archivedAt).length}</span></button></div>
         <label className="chat-session-search"><Search size={14}/><input value={sessionSearch} onChange={e=>setSessionSearch(e.target.value)} placeholder="Pesquisar conversas"/></label>
         <div className="chat-session-list">
           {filteredSessions.map(s => (
@@ -138,8 +144,7 @@ export default function Chat() {
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                 {s.title || 'Nova conversa'}
               </span>
-              <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); deleteSession(s.id); }}
-                style={{ padding: 2, color: 'var(--text-muted)' }}><Trash2 size={12} /></button>
+              <span className="chat-session-actions"><button onClick={e=>{e.stopPropagation();renameSession(s)}} title="Renomear"><Pencil size={12}/></button><button onClick={e=>{e.stopPropagation();archiveSession(s,!s.archivedAt)}} title={s.archivedAt?'Restaurar':'Arquivar'}>{s.archivedAt?<RotateCcw size={12}/>:<Archive size={12}/>}</button><button onClick={e => { e.stopPropagation(); deleteSession(s.id); }} title="Excluir permanentemente"><Trash2 size={12}/></button></span>
             </div>
           ))}
         </div>
@@ -158,7 +163,7 @@ export default function Chat() {
           <div className="chat-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Bot size={20} style={{ color: 'var(--primary)' }} />
-              <span style={{ fontWeight: 600 }}>Chat com Agente</span>{contextStats?.summaryActive&&<span className="chat-context-badge" title={`${contextStats.summarizedMessageCount} mensagens antigas compactadas; as recentes permanecem integrais.`}>Memória otimizada · {contextStats.summarizedMessageCount}</span>}
+              <span style={{ fontWeight: 600 }}>Chat com Agente</span>{currentSession?.archivedAt&&<span className="chat-archived-badge">Arquivada · somente leitura</span>}{contextStats?.summaryActive&&<span className="chat-context-badge" title={`${contextStats.summarizedMessageCount} mensagens antigas compactadas; as recentes permanecem integrais.`}>Memória otimizada · {contextStats.summarizedMessageCount}</span>}
             </div>
             <div className="chat-context-controls"><label><Server size={15}/><select className="form-select" value={selectedDeviceId} onChange={e=>setSelectedDeviceId(e.target.value)}><option value="">Nenhum equipamento fixado</option>{devices.map(item=><option key={item.id} value={item.id}>{item.name} · {item.hostname}</option>)}</select></label><select className="form-select" style={{ width: 160, padding: '6px 10px', fontSize: '0.8rem' }}
               value={agentType} onChange={e => setAgentType(e.target.value)}>
@@ -189,12 +194,12 @@ export default function Chat() {
           </div>
 
           <div className="chat-input-area">
-            <div className="chat-quick-actions"><button type="button" disabled={!selectedDeviceId||isLoading} onClick={()=>quickAction('Consulte o estado atual deste equipamento e apresente um resumo objetivo, sem realizar alterações.')}><Activity size={13}/> Consultar estado</button><button type="button" disabled={!selectedDeviceId||isLoading} onClick={()=>quickAction('Faça um diagnóstico somente leitura deste equipamento, apresente evidências e possíveis causas.')}><Stethoscope size={13}/> Diagnosticar</button><button type="button" disabled={!selectedDeviceId||isLoading} onClick={()=>quickAction('Prepare um plano de mudança para este equipamento com comandos, riscos, validação e rollback. Não execute alterações.')}><ClipboardList size={13}/> Preparar plano</button></div>
+            <div className="chat-quick-actions"><button type="button" disabled={!selectedDeviceId||isLoading||Boolean(currentSession?.archivedAt)} onClick={()=>quickAction('Consulte o estado atual deste equipamento e apresente um resumo objetivo, sem realizar alterações.')}><Activity size={13}/> Consultar estado</button><button type="button" disabled={!selectedDeviceId||isLoading||Boolean(currentSession?.archivedAt)} onClick={()=>quickAction('Faça um diagnóstico somente leitura deste equipamento, apresente evidências e possíveis causas.')}><Stethoscope size={13}/> Diagnosticar</button><button type="button" disabled={!selectedDeviceId||isLoading||Boolean(currentSession?.archivedAt)} onClick={()=>quickAction('Prepare um plano de mudança para este equipamento com comandos, riscos, validação e rollback. Não execute alterações.')}><ClipboardList size={13}/> Preparar plano</button></div>
             <textarea className="chat-input" rows={1} value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder="Digite uma mensagem..." disabled={isLoading} />
-            {isLoading?<button className="btn btn-secondary" onClick={cancelResponse}><StopCircle size={18}/> Cancelar</button>:<button className="btn btn-primary" onClick={sendMessage} disabled={!input.trim()}><Send size={18}/></button>}
+              placeholder={currentSession?.archivedAt?'Restaure a conversa para continuar':'Digite uma mensagem...'} disabled={isLoading||Boolean(currentSession?.archivedAt)} />
+            {isLoading?<button className="btn btn-secondary" onClick={cancelResponse}><StopCircle size={18}/> Cancelar</button>:<button className="btn btn-primary" onClick={sendMessage} disabled={!input.trim()||Boolean(currentSession?.archivedAt)}><Send size={18}/></button>}
           </div>
         </div>
       )}

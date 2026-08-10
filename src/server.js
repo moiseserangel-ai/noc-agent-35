@@ -210,6 +210,7 @@ io.on('connection', (socket) => {
       if (typeof sessionId !== 'string' || typeof message !== 'string' || message.length > 4000) throw new Error('Mensagem inválida');
       const ownedSession = await prisma.chatSession.findUnique({ where: { id: sessionId } });
       if (!ownedSession) throw new Error('Sessão inválida');
+      if(ownedSession.archivedAt)throw new Error('Esta conversa está arquivada. Restaure-a antes de enviar novas mensagens.');
       const agent = agents[agentType];
       if (!agent) {
         socket.emit('chat:error', { error: `Agent "${agentType}" not found` });
