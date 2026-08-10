@@ -76,9 +76,10 @@ const periodStart = query => {
 
 export async function buildAiUsageReport(query = {}) {
   const from = periodStart(query);
-  const [logs, states] = await Promise.all([
+  const [logs, states,feedbackMessages] = await Promise.all([
     prisma.aiUsageLog.findMany({ where: { createdAt: { gte: from } }, orderBy: { createdAt: 'desc' }, take: 10000 }),
     prisma.aiProviderState.findMany({ orderBy: { provider: 'asc' } }),
+    prisma.chatMessage.findMany({where:{role:'assistant',createdAt:{gte:from}},select:{id:true,agentUsed:true,provider:true,model:true,feedback:true,createdAt:true,session:{select:{id:true,title:true}}},orderBy:{createdAt:'desc'},take:10000}),
   ]);
   const providers = ['claude', 'openai', 'gemini'].map(provider => {
     const rows = logs.filter(log => log.provider === provider);
@@ -102,6 +103,12 @@ export async function buildAiUsageReport(query = {}) {
       lastErrorAt: state?.lastErrorAt || null,
     };
   });
+  const qualityGroup=(keyOf)=>{
+    const keys=new Set([...feedbackMessages.map(keyOf),...logs.map(keyOf)].filter(Boolean));
+    return [...keys].map(key=>{const messages=feedbackMessages.filter(row=>keyOf(row)===key),calls=logs.filter(row=>keyOf(row)===key),rated=messages.filter(row=>row.feedback),positive=messages.filter(row=>row.feedback==='positive').length,successes=calls.filter(row=>row.status==='success'),errors=calls.filter(row=>row.status==='error');return{key,responses:messages.length,rated:rated.length,positive,negative:messages.filter(row=>row.feedback==='negative').length,satisfaction:rated.length?Math.round(positive/rated.length*100):null,calls:successes.length,errors:errors.length,successRate:successes.length+errors.length?Math.round(successes.length/(successes.length+errors.length)*100):null,averageDurationMs:successes.length?Math.round(successes.reduce((sum,row)=>sum+(row.durationMs||0),0)/successes.length):null,totalTokens:successes.reduce((sum,row)=>sum+row.totalTokens,0)};}).sort((a,b)=>(b.responses+b.calls)-(a.responses+a.calls)||a.key.localeCompare(b.key));
+  };
+  const rated=feedbackMessages.filter(row=>row.feedback),positive=rated.filter(row=>row.feedback==='positive').length,totalFinished=logs.filter(row=>['success','error'].includes(row.status));
+  const quality={summary:{responses:feedbackMessages.length,rated:rated.length,unrated:feedbackMessages.length-rated.length,positive,negative:rated.length-positive,satisfaction:rated.length?Math.round(positive/rated.length*100):null,feedbackCoverage:feedbackMessages.length?Math.round(rated.length/feedbackMessages.length*100):0,apiSuccessRate:totalFinished.length?Math.round(totalFinished.filter(row=>row.status==='success').length/totalFinished.length*100):null},byAgent:qualityGroup(row=>row.agentUsed||row.agentName||'não identificado'),byModel:qualityGroup(row=>row.provider&&row.model?`${row.provider} · ${row.model}`:null),recentNegative:feedbackMessages.filter(row=>row.feedback==='negative').slice(0,20)};
   return {
     from,
     summary: {
@@ -112,6 +119,7 @@ export async function buildAiUsageReport(query = {}) {
     },
     providers,
     recent: logs.slice(0, 100),
+    quality,
     pricingNote: 'Custos são estimativas de referência e podem diferir da cobrança real do modelo/contrato.',
   };
 }
