@@ -1591,6 +1591,10 @@ model Settings {
 model ChatSession {
   id        String        @id @default(uuid())
   title     String?
+  summary   String?
+  summarizedThroughAt DateTime?
+  summarizedMessageCount Int @default(0)
+  summaryUpdatedAt DateTime?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   messages  ChatMessage[]

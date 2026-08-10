@@ -31,6 +31,7 @@ export default function Chat() {
   const [streaming, setStreaming] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [tools, setTools] = useState([]);
+  const [contextStats,setContextStats]=useState(null);
   const messagesEnd = useRef(null);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function Chat() {
   useEffect(() => {
     if (!activeSession) return;
     api.getChatMessages(activeSession).then(r => setMessages(r.data)).catch(() => {});
+    const current=sessions.find(item=>item.id===activeSession);setContextStats(current?.summarizedMessageCount?{summaryActive:true,summarizedMessageCount:current.summarizedMessageCount}:null);
   }, [activeSession]);
 
   useEffect(() => {
@@ -76,12 +78,13 @@ export default function Chat() {
     });
     s.on('chat:typing', () => setIsLoading(true));
     s.on('chat:cancelled',()=>{setStreaming('');setTools([]);setIsLoading(false);});
+    s.on('chat:context',setContextStats);
     s.on('connect_error', onConnectError);
     document.addEventListener('visibilitychange', reconnect);
     window.addEventListener('focus', reconnect);
     window.addEventListener('noc:token-refreshed', reconnect);
     return () => {
-      s.off('chat:chunk'); s.off('chat:tool'); s.off('chat:complete'); s.off('chat:error'); s.off('chat:typing');s.off('chat:cancelled');
+      s.off('chat:chunk'); s.off('chat:tool'); s.off('chat:complete'); s.off('chat:error'); s.off('chat:typing');s.off('chat:cancelled');s.off('chat:context');
       s.off('connect_error', onConnectError);
       document.removeEventListener('visibilitychange', reconnect);
       window.removeEventListener('focus', reconnect);
@@ -155,7 +158,7 @@ export default function Chat() {
           <div className="chat-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Bot size={20} style={{ color: 'var(--primary)' }} />
-              <span style={{ fontWeight: 600 }}>Chat com Agente</span>
+              <span style={{ fontWeight: 600 }}>Chat com Agente</span>{contextStats?.summaryActive&&<span className="chat-context-badge" title={`${contextStats.summarizedMessageCount} mensagens antigas compactadas; as recentes permanecem integrais.`}>Memória otimizada · {contextStats.summarizedMessageCount}</span>}
             </div>
             <div className="chat-context-controls"><label><Server size={15}/><select className="form-select" value={selectedDeviceId} onChange={e=>setSelectedDeviceId(e.target.value)}><option value="">Nenhum equipamento fixado</option>{devices.map(item=><option key={item.id} value={item.id}>{item.name} · {item.hostname}</option>)}</select></label><select className="form-select" style={{ width: 160, padding: '6px 10px', fontSize: '0.8rem' }}
               value={agentType} onChange={e => setAgentType(e.target.value)}>

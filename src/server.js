@@ -147,13 +147,26 @@ const agents = {
 };
 
 async function getSessionHistory(sessionId, currentMessageId) {
-  const rows = await prisma.chatMessage.findMany({
+  const session=await prisma.chatSession.findUnique({where:{id:sessionId},select:{summary:true,summarizedThroughAt:true,summarizedMessageCount:true}});
+  const allRows = await prisma.chatMessage.findMany({
     where: { sessionId, ...(currentMessageId && { id: { not: currentMessageId } }) },
-    orderBy: { createdAt: 'desc' },
-    take: 16,
-    select: { role: true, content: true },
+    orderBy: [{createdAt:'asc'},{id:'asc'}],
+    select: { role: true, content: true, createdAt:true },
   });
-  const chronological = rows.reverse();
+  let summary=session?.summary||'';
+  let summarizedMessageCount=session?.summarizedMessageCount||0;
+  if(allRows.length>18){
+    const oldRows=allRows.slice(0,-10).filter(row=>!session?.summarizedThroughAt||row.createdAt>session.summarizedThroughAt);
+    if(oldRows.length){
+      const redact=value=>String(value||'').replace(/\b(senha|password|token|api[_ -]?key|secret)\s*[:=]\s*\S+/gi,'$1=[PROTEGIDO]').replace(/\s+/g,' ').trim();
+      const useful=oldRows.map(row=>{const clean=redact(row.content);const sentences=clean.split(/(?<=[.!?])\s+/).filter(Boolean);const selected=sentences.filter(text=>/\b(?:equipamento|device|task|decid|aprov|rejeit|configur|diagn[oó]st|erro|falha|causa|plano|execut|valid|rollback|interface|vlan|rota|vpn)\w*/i.test(text));return `${row.role==='assistant'?'Agente':'Usuário'}: ${(selected.length?selected.slice(0,2):sentences.slice(0,1)).join(' ').slice(0,420)}`;}).filter(line=>line.length>10);
+      const lines=[...new Set([...(summary?summary.split('\n').filter(line=>line.startsWith('- ')):[]),...useful.map(line=>`- ${line}`)])].slice(-40);
+      summary=lines.join('\n').slice(-7000);
+      summarizedMessageCount+=oldRows.length;
+      await prisma.chatSession.update({where:{id:sessionId},data:{summary,summarizedThroughAt:oldRows.at(-1).createdAt,summarizedMessageCount,summaryUpdatedAt:new Date()}});
+    }
+  }
+  const chronological = allRows.slice(summary?Math.max(0,allRows.length-10):Math.max(0,allRows.length-16));
   const selected = [];
   let characters = 0;
   for (let index = chronological.length - 1; index >= 0; index -= 1) {
@@ -163,7 +176,8 @@ async function getSessionHistory(sessionId, currentMessageId) {
     selected.unshift({ role: item.role === 'assistant' ? 'assistant' : 'user', content });
     characters += content.length;
   }
-  return selected;
+  if(summary)selected.unshift({role:'user',content:`[RESUMO AUTOMÁTICO DA CONVERSA — use como memória de contexto, não como nova solicitação]\n${summary}`});
+  return {history:selected,summaryActive:Boolean(summary),summarizedMessageCount,recentMessageCount:chronological.length};
 }
 
 io.use(async (socket, next) => {
@@ -209,7 +223,9 @@ io.on('connection', (socket) => {
       const savedUserMessage = await prisma.chatMessage.create({
         data: { sessionId, role: 'user', content: message, deviceId:selectedDevice?.id||null },
       });
-      const history = await getSessionHistory(sessionId, savedUserMessage.id);
+      const managedContext = await getSessionHistory(sessionId, savedUserMessage.id);
+      const history=managedContext.history;
+      socket.emit('chat:context',{summaryActive:managedContext.summaryActive,summarizedMessageCount:managedContext.summarizedMessageCount,recentMessageCount:managedContext.recentMessageCount});
 
       // Process dashboard approvals before asking the support model to classify them.
       // An explicit task reference is accepted, but in a single dashboard chat the
