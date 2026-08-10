@@ -234,6 +234,7 @@ export const api = {
   setTopologyBaseline: id => request(`/topology/history/${id}/baseline`,{method:'POST'}),
   compareTopologyHistory: (from,to) => request(`/topology/history/compare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   createTopologyChangeTask: (from,to) => request('/topology/history/change-task',{method:'POST',body:JSON.stringify({from,to})}),
+  exportTopologyPdf: async data=>{const res=await fetch(`${BASE}/topology/export.pdf`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${getToken()}`},body:JSON.stringify(data)});if(!res.ok){let body={};try{body=await res.json()}catch{}throw new Error(body.error||'Falha ao exportar PDF do mapa')}return{blob:await res.blob(),filename:res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||'mapa-rede.pdf'}},
   saveTopologyPositions: positions => request('/topology/positions',{method:'PUT',body:JSON.stringify({positions})}),
   createTopologyLink: data => request('/topology/links',{method:'POST',body:JSON.stringify(data)}),
   deleteTopologyLink: id => request(`/topology/links/${id}`,{method:'DELETE'}),

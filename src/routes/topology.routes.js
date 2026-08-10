@@ -5,6 +5,7 @@ import { approveTopologyNeighbor, ignoreTopologyNeighbor, startTopologyDiscovery
 import { logAudit, requestIdentity } from '../services/audit.service.js';
 import { cmdbOperationalContext } from '../services/cmdb-operational-context.service.js';
 import { captureTopologySnapshot, compareTopologySnapshots, createTopologyChangeTask, listTopologySnapshots, setTopologyBaseline } from '../services/topology-history.service.js';
+import { topologyPdf } from '../services/topology-export.service.js';
 
 const router = Router();
 const admin = (req, res, next) => req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem editar o mapa' });
@@ -19,6 +20,7 @@ router.post('/history',admin,async(req,res,next)=>{try{const row=await captureTo
 router.post('/history/:id/baseline',admin,async(req,res,next)=>{try{const row=await setTopologyBaseline(req.params.id);await logAudit({...requestIdentity(req),action:'set_baseline',resource:'topology',resourceId:row.id,status:'success'});res.json({success:true,data:row,message:'Baseline da topologia atualizado'});}catch(error){next(error);}});
 router.get('/history/compare',async(req,res,next)=>{try{res.json({success:true,data:await compareTopologySnapshots(String(req.query.from||''),String(req.query.to||''))});}catch(error){next(error);}});
 router.post('/history/change-task',admin,async(req,res,next)=>{try{const result=await createTopologyChangeTask(String(req.body.from||''),String(req.body.to||''),req.user.username);res.status(result.existing?200:201).json({success:true,data:{id:result.task.id,taskNumber:result.task.taskNumber},message:result.existing?`Task #TASK-${result.task.taskNumber} já acompanha esta mudança`:`Task #TASK-${result.task.taskNumber} criada`});}catch(error){next(error);}});
+router.post('/export.pdf',async(req,res,next)=>{try{const pdf=await topologyPdf(req.body);await logAudit({...requestIdentity(req),action:'export_pdf',resource:'topology',status:'success',details:{scope:req.body.scope||'network',devices:Array.isArray(req.body.deviceIds)?req.body.deviceIds.length:null}});res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`attachment; filename="mapa-rede-${new Date().toISOString().slice(0,10)}.pdf"`);res.send(pdf);}catch(error){next(error);}});
 
 router.get('/discovery', admin, async (req,res,next)=>{
   try{res.json({success:true,data:await topologyDiscoveryDashboard()});}catch(error){next(error);}
