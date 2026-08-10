@@ -10,7 +10,8 @@ import { runComplianceScan } from '../services/compliance.service.js';
 import { recommendRunbooksForTask } from '../services/incident-runbook.service.js';
 import { createSimulation, executeRunbook, publicExecution, renderRunbook, runbookInputHash } from '../services/runbook.service.js';
 import { cmdbOperationalContext } from '../services/cmdb-operational-context.service.js';
-import { runDeviceBackup } from '../services/device-backup.service.js';
+import { decryptSnapshot, runDeviceBackup } from '../services/device-backup.service.js';
+import { compareProposalWithConfiguration } from '../services/proposal-comparison.service.js';
 
 const router = Router();
 const specialistAgents = createSpecialistAgents();
@@ -154,6 +155,20 @@ router.post('/:id/proposal-revisions',async(req,res,next)=>{
     await taskService.addTaskMessage(task.id,'user',`${actor} ${label}. Nova proposta v${revision.version} aguardando aprovação.`);
     await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:type,resource:'task_proposal',resourceId:revision.id,status:'success',details:{taskId:task.id,taskNumber:task.taskNumber,version:revision.version,feedback:feedback||null}});
     res.json({success:true,data:await taskService.getTaskById(task.id),message:`Proposta v${revision.version} salva para nova aprovação`});
+  }catch(error){next(error);}
+});
+
+router.post('/:id/proposal-comparison',async(req,res,next)=>{
+  try{
+    if(!['admin','operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Sem permissão para comparar propostas'});
+    const task=await taskService.getTaskById(req.params.id);
+    if(!task?.deviceId||!task.proposedSolution)return res.status(400).json({success:false,error:'A Task precisa ter equipamento e proposta definidos'});
+    const actor=String(req.user.name||req.user.username||'Operador').slice(0,100);
+    const collected=await runDeviceBackup(task.deviceId,{type:'proposal_compare',username:actor});
+    const snapshot=await prisma.deviceConfigBackup.findUnique({where:{id:collected.id}});
+    const comparison=compareProposalWithConfiguration(decryptSnapshot(snapshot),task.proposedSolution);
+    await logAudit({userId:req.user.id||req.user.sub,username:req.user.username,displayName:req.user.name,role:req.user.role,action:'compare',resource:'task_proposal',resourceId:task.id,status:'success',details:{taskNumber:task.taskNumber,backupId:snapshot.id,...comparison.summary}});
+    res.json({success:true,data:{...comparison,baseline:{id:snapshot.id,createdAt:snapshot.createdAt,sha256:snapshot.sha256,deviceName:snapshot.deviceName,deviceType:snapshot.deviceType,osVersion:snapshot.osVersion}},message:'Estado atual coletado e comparado; nenhum comando foi executado'});
   }catch(error){next(error);}
 });
 

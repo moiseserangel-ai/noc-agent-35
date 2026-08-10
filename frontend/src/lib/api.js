@@ -288,6 +288,7 @@ export const api = {
   approveTask: (id, approved) => request(`/tasks/${id}/approval`, { method:'POST', body:JSON.stringify({approved}) }),
   rollbackAssist: (id) => request(`/tasks/${id}/rollback-assist`, { method:'POST' }),
   reviseTaskProposal: (id,data) => request(`/tasks/${id}/proposal-revisions`,{method:'POST',body:JSON.stringify(data)}),
+  compareTaskProposal: id => request(`/tasks/${id}/proposal-comparison`,{method:'POST'}),
   getTaskRunbooks: id => request(`/tasks/${id}/runbooks`),
   simulateTaskRunbook: (taskId,runbookId,variables) => request(`/tasks/${taskId}/runbooks/${runbookId}/simulate`,{method:'POST',body:JSON.stringify({variables})}),
   executeTaskRunbook: (taskId,runbookId,variables) => request(`/tasks/${taskId}/runbooks/${runbookId}/execute`,{method:'POST',body:JSON.stringify({variables,confirmed:true})}),
