@@ -18,14 +18,14 @@ const normalizeHistory = history => (Array.isArray(history) ? history : [])
     return messages;
   }, []);
 
-export async function runAnthropic({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent }) {
+export async function runAnthropic({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent, signal }) {
   const client = new Anthropic({ apiKey });
   const messages = [...normalizeHistory(history), { role: 'user', content: message }];
   const used = [];
   let response;
   const usage = { input_tokens: 0, output_tokens: 0 };
   do {
-    response = await client.messages.create({ model, max_tokens: 4096, system: systemPrompt, tools: tools.length ? tools : undefined, messages });
+    response = await client.messages.create({ model, max_tokens: 4096, system: systemPrompt, tools: tools.length ? tools : undefined, messages }, { signal });
     usage.input_tokens += Number(response.usage?.input_tokens || 0);
     usage.output_tokens += Number(response.usage?.output_tokens || 0);
     const calls = response.content.filter(item => item.type === 'tool_use');
@@ -43,7 +43,7 @@ export async function runAnthropic({ apiKey, model, systemPrompt, tools, message
   return { text: response.content.filter(i => i.type === 'text').map(i => i.text).join('\n'), toolsUsed: used, usage };
 }
 
-export async function runOpenAI({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent }) {
+export async function runOpenAI({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent, signal }) {
   const apiTools = tools.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.input_schema }));
   const used = [];
   let input = [...normalizeHistory(history), { role: 'user', content: message }];
@@ -54,6 +54,7 @@ export async function runOpenAI({ apiKey, model, systemPrompt, tools, message, h
     response = await ensureOk(await fetch('https://api.openai.com/v1/responses', {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ model, instructions: systemPrompt, input, tools: apiTools.length ? apiTools : undefined, previous_response_id: previousResponseId, store: true }),
+      signal,
     }));
     usage.input_tokens += Number(response.usage?.input_tokens || 0);
     usage.output_tokens += Number(response.usage?.output_tokens || 0);
@@ -75,7 +76,7 @@ export async function runOpenAI({ apiKey, model, systemPrompt, tools, message, h
   return { text, toolsUsed: used, usage };
 }
 
-export async function runGemini({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent }) {
+export async function runGemini({ apiKey, model, systemPrompt, tools, message, history, executeTool, onEvent, signal }) {
   const contents = [...normalizeHistory(history).map(item => ({ role: item.role === 'assistant' ? 'model' : 'user', parts: [{ text: item.content }] })), { role: 'user', parts: [{ text: message }] }];
   const apiTools = tools.length ? [{ functionDeclarations: tools.map(t => ({ name: t.name, description: t.description, parameters: t.input_schema })) }] : undefined;
   const used = [];
@@ -85,6 +86,7 @@ export async function runGemini({ apiKey, model, systemPrompt, tools, message, h
     data = await ensureOk(await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({ systemInstruction: { parts: [{ text: systemPrompt }] }, contents, tools: apiTools }),
+      signal,
     }));
     usage.promptTokenCount += Number(data.usageMetadata?.promptTokenCount || 0);
     usage.candidatesTokenCount += Number(data.usageMetadata?.candidatesTokenCount || 0);

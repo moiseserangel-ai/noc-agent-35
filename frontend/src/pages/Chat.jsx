@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope } from 'lucide-react';
+import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope, StopCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { api } from '../lib/api.js';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -60,8 +60,8 @@ export default function Chat() {
     };
     s.on('chat:chunk', ({ text }) => setStreaming(prev => prev + text));
     s.on('chat:tool', (data) => setTools(prev => [...prev, data]));
-    s.on('chat:complete', ({ text, agentUsed, toolsUsed, provider, model, knowledgeSources }) => {
-      setMessages(prev => [...prev, { role: 'assistant', content: text, agentUsed, provider, model, knowledgeSources, id: Date.now() }]);
+    s.on('chat:complete', ({ text, agentUsed, toolsUsed, provider, model, knowledgeSources, messageId }) => {
+      setMessages(prev => [...prev, { role: 'assistant', content: text, agentUsed, provider, model, knowledgeSources, id:messageId||Date.now() }]);
       setStreaming('');
       setTools([]);
       setIsLoading(false);
@@ -73,12 +73,13 @@ export default function Chat() {
       setIsLoading(false);
     });
     s.on('chat:typing', () => setIsLoading(true));
+    s.on('chat:cancelled',()=>{setStreaming('');setTools([]);setIsLoading(false);});
     s.on('connect_error', onConnectError);
     document.addEventListener('visibilitychange', reconnect);
     window.addEventListener('focus', reconnect);
     window.addEventListener('noc:token-refreshed', reconnect);
     return () => {
-      s.off('chat:chunk'); s.off('chat:tool'); s.off('chat:complete'); s.off('chat:error'); s.off('chat:typing');
+      s.off('chat:chunk'); s.off('chat:tool'); s.off('chat:complete'); s.off('chat:error'); s.off('chat:typing');s.off('chat:cancelled');
       s.off('connect_error', onConnectError);
       document.removeEventListener('visibilitychange', reconnect);
       window.removeEventListener('focus', reconnect);
@@ -112,6 +113,8 @@ export default function Chat() {
   };
   const filteredSessions=sessions.filter(session=>!sessionSearch.trim()||String(session.title||'Nova conversa').toLowerCase().includes(sessionSearch.trim().toLowerCase()));
   const quickAction=text=>{if(!selectedDeviceId)return;setInput(text);};
+  const cancelResponse=()=>{getSocket().emit('chat:cancel',{sessionId:activeSession});setStreaming('');setTools([]);setIsLoading(false);};
+  const rateMessage=async(message,feedback)=>{if(!message.id)return;const value=message.feedback===feedback?null:feedback;try{await api.rateChatMessage(message.id,value);setMessages(rows=>rows.map(row=>row.id===message.id?{...row,feedback:value}:row));}catch{}};
 
   return (
     <div className="chat-workspace">
@@ -163,6 +166,7 @@ export default function Chat() {
                 {m.agentUsed && <div className="chat-message-meta"><Bot size={12}/> {m.agentUsed}{m.provider&&<> · {m.provider}</>}{m.model&&<> · {m.model}</>}</div>}
                 {m.role === 'assistant' ? <AgentResponse content={m.content} /> : <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>}
                 {m.role==='assistant'&&(()=>{let sources=m.knowledgeSources||[];if(typeof sources==='string')try{sources=JSON.parse(sources);}catch{sources=[];}return sources.length?<div className="chat-sources"><BookOpen size={13}/><span>Fontes: {[...new Set(sources)].join(' · ')}</span></div>:null;})()}
+                {m.role==='assistant'&&m.id&&<div className="chat-feedback"><button className={m.feedback==='positive'?'active':''} onClick={()=>rateMessage(m,'positive')} title="Resposta útil"><ThumbsUp size={13}/></button><button className={m.feedback==='negative'?'active negative':''} onClick={()=>rateMessage(m,'negative')} title="Resposta precisa melhorar"><ThumbsDown size={13}/></button></div>}
               </div>
             ))}
             {tools.length > 0 && tools.map((t, i) => (
@@ -182,9 +186,7 @@ export default function Chat() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
               placeholder="Digite uma mensagem..." disabled={isLoading} />
-            <button className="btn btn-primary" onClick={sendMessage} disabled={isLoading || !input.trim()}>
-              <Send size={18} />
-            </button>
+            {isLoading?<button className="btn btn-secondary" onClick={cancelResponse}><StopCircle size={18}/> Cancelar</button>:<button className="btn btn-primary" onClick={sendMessage} disabled={!input.trim()}><Send size={18}/></button>}
           </div>
         </div>
       )}

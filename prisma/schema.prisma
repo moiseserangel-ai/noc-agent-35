@@ -1606,6 +1606,7 @@ model ChatMessage {
   provider  String?
   model     String?
   knowledgeSources String?
+  feedback  String? // positive|negative
   toolCalls String? // JSON string with tools used
   createdAt DateTime    @default(now())
 }

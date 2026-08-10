@@ -40,4 +40,6 @@ router.delete('/sessions/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.patch('/messages/:id/feedback',async(req,res,next)=>{try{const feedback=['positive','negative'].includes(req.body.feedback)?req.body.feedback:null;const message=await prisma.chatMessage.findFirst({where:{id:req.params.id,role:'assistant'},select:{id:true}});if(!message)return res.status(404).json({success:false,error:'Resposta não encontrada'});const updated=await prisma.chatMessage.update({where:{id:message.id},data:{feedback}});res.json({success:true,data:updated,message:feedback?'Avaliação registrada':'Avaliação removida'});}catch(error){next(error);}});
+
 export default router;

@@ -185,8 +185,11 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   logger.info(`Dashboard client connected: ${socket.id}`);
   registerInteractiveCli(socket);
+  const chatControllers=new Map();
+  socket.on('chat:cancel',({sessionId})=>{const controller=chatControllers.get(sessionId);if(controller){controller.abort();chatControllers.delete(sessionId);socket.emit('chat:cancelled',{sessionId});}});
 
   socket.on('chat:message', async ({ sessionId, message, agentType = 'support', deviceId = null }) => {
+    let responseController=null;
     try {
       if (socket.user.tenantId) throw new Error('Chat com agentes é restrito à equipe global do NOC');
       if (!['admin', 'operator'].includes(socket.user.role)) throw new Error('Sem permissão para usar agentes');
@@ -272,6 +275,8 @@ io.on('connection', (socket) => {
       }
 
       // Run agent with streaming
+      chatControllers.get(sessionId)?.abort();
+      responseController=new AbortController();chatControllers.set(sessionId,responseController);
       socket.emit('chat:typing', { agentType });
       
       const result = await agent.runStreaming(agentMessage, (chunk) => {
@@ -284,7 +289,7 @@ io.on('connection', (socket) => {
         } else if (chunk.type === 'tool_result') {
           socket.emit('chat:tool', { status: 'result', tool: chunk.tool, output: chunk.output });
         }
-      }, { history, tenantId: socket.user.tenantId || undefined });
+      }, { history, tenantId: socket.user.tenantId || undefined, signal:responseController.signal });
 
       // Handle automatic routing if Support Agent was used
       if (agentType === 'support') {
@@ -334,7 +339,7 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
                   } else if (chunk.type === 'tool_result') {
                     socket.emit('chat:tool', { status: 'result', tool: chunk.tool, output: chunk.output });
                   }
-                }, { history, tenantId: dashboardTask.tenantId || socket.user.tenantId || undefined });
+                }, { history, tenantId: dashboardTask.tenantId || socket.user.tenantId || undefined, signal:responseController.signal });
 
                 result.text += `\n\n🔄 **Encaminhando para especialista em ${deviceType}...**\n\n${specialistResult.text}`;
                 result.toolsUsed.push(...specialistResult.toolsUsed);
@@ -370,7 +375,7 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
       }
 
       // Save assistant message
-      await prisma.chatMessage.create({
+      const savedAssistantMessage=await prisma.chatMessage.create({
         data: {
           sessionId,
           role: 'assistant',
@@ -389,11 +394,14 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
         provider: result.provider||null,
         model: result.model||null,
         knowledgeSources: result.knowledgeSources||[],
+        messageId:savedAssistantMessage.id,
         toolsUsed: result.toolsUsed,
       });
     } catch (err) {
       logger.error(`Chat error: ${err.message}`);
-      socket.emit('chat:error', { error: err.message });
+      if(err.name==='AbortError')socket.emit('chat:cancelled',{sessionId});else socket.emit('chat:error', { error: err.message });
+    } finally {
+      if(responseController&&chatControllers.get(sessionId)===responseController)chatControllers.delete(sessionId);
     }
   });
 

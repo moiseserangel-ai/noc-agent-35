@@ -316,6 +316,7 @@ export const api = {
   createChatSession: (title) => request('/chat/sessions', { method: 'POST', body: JSON.stringify({ title }) }),
   getChatMessages: (sessionId) => request(`/chat/sessions/${sessionId}/messages`),
   deleteChatSession: (id) => request(`/chat/sessions/${id}`, { method: 'DELETE' }),
+  rateChatMessage: (id, feedback) => request(`/chat/messages/${id}/feedback`, { method:'PATCH', body:JSON.stringify({feedback}) }),
 
   // Base de conhecimento
   getKnowledgeDocuments: () => request('/knowledge'),

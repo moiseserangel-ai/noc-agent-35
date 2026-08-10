@@ -104,10 +104,12 @@ export default class BaseAgent {
       const startedAt = Date.now();
       try {
         logger.info(`[${this.name}] provider=${provider} model=${cfg.providers[provider].model}`);
-        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: contextualMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent });
+        if(_context.signal?.aborted)throw Object.assign(new Error('Resposta cancelada pelo usuário'),{name:'AbortError'});
+        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: contextualMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent, signal:_context.signal });
         await recordAiSuccess({ provider, model: cfg.providers[provider].model, agentName: this.name, usage: result.usage, durationMs: Date.now() - startedAt });
         return { ...result, provider, model: cfg.providers[provider].model, knowledgeSources };
       } catch (err) {
+        if(err.name==='AbortError'||_context.signal?.aborted)throw Object.assign(new Error('Resposta cancelada pelo usuário'),{name:'AbortError'});
         lastError = err;
         const failure = await recordAiFailure({ provider, model: cfg.providers[provider].model, agentName: this.name, error: err, durationMs: Date.now() - startedAt });
         logger.error(`[${this.name}] ${provider} falhou (${failure.kind}): ${err.message}`);
