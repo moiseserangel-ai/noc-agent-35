@@ -7,6 +7,7 @@ import { sshJuniperJunosExec } from '../tools/ssh-juniper-junos.tool.js';
 import { sshFortiGateExec } from '../tools/ssh-fortigate-fortios.tool.js';
 import { sshEdgeOsExec } from '../tools/ssh-ubiquiti-edgeos.tool.js';
 import { sshDatacomDmosExec, sshNokiaSrosExec } from '../tools/ssh-profiled-network.tool.js';
+import { captureAndDetectTopologyDrift } from './topology-history.service.js';
 
 let running = false;
 const clean = value => String(value || '').trim().replace(/^"|"$/g, '');
@@ -247,6 +248,7 @@ async function worker(runId) {
       await prisma.topologyNeighbor.update({where:{id:item.id},data:{status:conflict?'conflict':reverse?'confirmed':'suggested'}});
     }
     await prisma.topologyDiscoveryRun.update({where:{id:runId},data:{status:errors.length?'completed_with_errors':'completed',errors:errors.length?JSON.stringify(errors):null,completedAt:new Date()}});
+    await captureAndDetectTopologyDrift('Descoberta LLDP/CDP').catch(error=>logger.error(`Topology drift ${runId}: ${error.message}`));
   } catch (error) {
     await prisma.topologyDiscoveryRun.update({where:{id:runId},data:{status:'failed',errors:JSON.stringify([error.message]),completedAt:new Date()}}).catch(()=>{});
     logger.error(`Topology discovery ${runId}: ${error.message}`);

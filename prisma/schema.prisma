@@ -1526,6 +1526,21 @@ model TopologyLink {
   @@index([source, updatedAt])
 }
 
+model TopologySnapshot {
+  id          String   @id @default(uuid())
+  source      String   @default("manual") // manual|discovery|link_change|baseline
+  content     String
+  sha256      String
+  nodeCount   Int
+  linkCount   Int
+  isBaseline  Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([isBaseline, createdAt])
+}
+
 model TopologyDiscoveryRun {
   id          String             @id @default(uuid())
   status      String             @default("queued") // queued|running|completed|completed_with_errors|failed
