@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Building2, Cable, Check, ChevronDown, ChevronUp, Clock, Cpu, ExternalLink, Filter, HardDrive, Link2, Maximize2, MemoryStick, Network, Plus, RefreshCw, Save, ScanSearch, Server, Wifi, WifiOff, XCircle, ZoomIn, ZoomOut } from 'lucide-react';
+import { Activity, AlertTriangle, Building2, Cable, Check, ChevronDown, ChevronUp, Clock, Cpu, Crosshair, ExternalLink, Filter, HardDrive, Link2, Maximize2, MemoryStick, Network, Plus, RefreshCw, Save, ScanSearch, Search, Server, Wifi, WifiOff, XCircle, ZoomIn, ZoomOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useToast } from '../contexts/ToastContext.jsx';
@@ -20,6 +20,9 @@ export default function Topology({isAdmin=false}){
   const [positions,setPositions]=useState({});
   const [filters,setFilters]=useState({group:'',manufacturer:'',tenant:'',site:'',status:''});
   const [collapsedGroups,setCollapsedGroups]=useState(new Set());
+  const [mapSearch,setMapSearch]=useState('');
+  const [mapSearchIndex,setMapSearchIndex]=useState(0);
+  const [viewRect,setViewRect]=useState({x:0,y:0,width:0,height:0});
   const [selected,setSelected]=useState(null);
   const [selectedLink,setSelectedLink]=useState(null);
   const [impact,setImpact]=useState(null);
@@ -33,6 +36,7 @@ export default function Topology({isAdmin=false}){
   const [discovery,setDiscovery]=useState({runs:[],suggestions:[]});
   const [linkForm,setLinkForm]=useState({sourceDeviceId:'',targetDeviceId:'',linkType:'ethernet',label:'',sourceInterface:'',targetInterface:'',bandwidthMbps:''});
   const drag=useRef(null);
+  const pan=useRef(null);
   const viewport=useRef(null);
   const toast=useToast();
 
@@ -71,6 +75,7 @@ export default function Topology({isAdmin=false}){
   const selectedNode=data.nodes.find(node=>node.id===selected);
   const selectedLinkData=data.links.find(link=>link.id===selectedLink);
   const impactedIds=useMemo(()=>new Set([...(impact?.roots||[]).map(row=>row.deviceId),...(impact?.impacted||[]).map(row=>row.asset?.deviceId)].filter(Boolean)),[impact]);
+  const mapSearchResults=useMemo(()=>{const term=mapSearch.trim().toLocaleLowerCase('pt-BR');return term?data.nodes.filter(node=>[node.name,node.hostname,node.model,node.manufacturer,node.tenant?.name,node.site?.name,node.group].some(value=>String(value||'').toLocaleLowerCase('pt-BR').includes(term))):[]},[data.nodes,mapSearch]);
 
   const exportMap = () => {
     const payload = { exportedAt: new Date().toISOString(), filters, summary: data.summary, nodes: visibleNodes, links: visibleLinks };
@@ -124,6 +129,13 @@ export default function Topology({isAdmin=false}){
     try{const result=await api.deleteTopologyLink(id);toast(result.message,'success');await load();}catch(error){toast(error.message,'error');}
   };
   const fit=()=>{const points=visibleNodes.map(node=>positions[node.id]||node.position);if(!points.length)return;const minX=Math.min(...points.map(p=>p.x)),maxX=Math.max(...points.map(p=>p.x+185)),minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y+104)),view=viewport.current,next=Math.min(1.5,Math.max(.5,Math.min((view?.clientWidth||900)/(maxX-minX+120),(view?.clientHeight||620)/(maxY-minY+120))));setZoom(next);requestAnimationFrame(()=>view?.scrollTo({left:Math.max(0,(minX-50)*next),top:Math.max(0,(minY-50)*next),behavior:'smooth'}));};
+  const focusNodes=nodes=>{if(!nodes.length)return;const points=nodes.map(node=>positions[node.id]||node.position),minX=Math.min(...points.map(p=>p.x)),maxX=Math.max(...points.map(p=>p.x+185)),minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y+104)),view=viewport.current,next=Math.min(1.35,Math.max(.55,Math.min((view?.clientWidth||900)/(maxX-minX+160),(view?.clientHeight||620)/(maxY-minY+160))));setZoom(next);requestAnimationFrame(()=>view?.scrollTo({left:Math.max(0,(minX+maxX)/2*next-(view.clientWidth/2)),top:Math.max(0,(minY+maxY)/2*next-(view.clientHeight/2)),behavior:'smooth'}));};
+  const focusSearch=()=>{if(!mapSearchResults.length)return;const index=mapSearchIndex%mapSearchResults.length,node=mapSearchResults[index],key=groupKey(node);setCollapsedGroups(current=>{const next=new Set(current);next.delete(key);return next});setSelected(node.id);setSelectedLink(null);focusNodes([node]);setMapSearchIndex((index+1)%mapSearchResults.length)};
+  const panDown=event=>{if(event.target!==event.currentTarget)return;event.currentTarget.setPointerCapture(event.pointerId);pan.current={x:event.clientX,y:event.clientY,left:viewport.current.scrollLeft,top:viewport.current.scrollTop};event.currentTarget.classList.add('panning')};
+  const panMove=event=>{if(!pan.current)return;viewport.current.scrollLeft=pan.current.left-(event.clientX-pan.current.x);viewport.current.scrollTop=pan.current.top-(event.clientY-pan.current.y)};
+  const panUp=event=>{pan.current=null;event.currentTarget.classList.remove('panning')};
+  useEffect(()=>{const view=viewport.current;if(!view)return;const update=()=>setViewRect({x:view.scrollLeft/zoom,y:view.scrollTop/zoom,width:view.clientWidth/zoom,height:view.clientHeight/zoom});update();view.addEventListener('scroll',update,{passive:true});window.addEventListener('resize',update);return()=>{view.removeEventListener('scroll',update);window.removeEventListener('resize',update)}},[zoom,canvas.width,canvas.height]);
+  const miniNavigate=event=>{const rect=event.currentTarget.getBoundingClientRect(),x=(event.clientX-rect.left)/rect.width*canvas.width,y=(event.clientY-rect.top)/rect.height*canvas.height,view=viewport.current;view.scrollTo({left:Math.max(0,x*zoom-view.clientWidth/2),top:Math.max(0,y*zoom-view.clientHeight/2),behavior:'smooth'})};
   const showImpact=async node=>{if(impact?.deviceId===node.id){setImpact(null);return}try{const result=await api.getTopologyImpact(node.id);setImpact({...result.data,deviceId:node.id});}catch(error){toast(error.message,'error')}};
   const toggleGroup=key=>setCollapsedGroups(current=>{const next=new Set(current);next.has(key)?next.delete(key):next.add(key);return next});
   const loadDiscovery=useCallback(async()=>{
@@ -170,13 +182,14 @@ export default function Topology({isAdmin=false}){
 
     <div className="card topology-toolbar">
       <Filter size={16}/>
+      <label className="topology-search"><Search size={14}/><input value={mapSearch} onChange={e=>{setMapSearch(e.target.value);setMapSearchIndex(0)}} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();focusSearch()}}} placeholder="Nome, IP, modelo, empresa ou site"/><button disabled={!mapSearchResults.length} onClick={focusSearch} title="Centralizar resultado"><Crosshair size={14}/></button>{mapSearch&&<small>{mapSearchResults.length} encontrado(s)</small>}</label>
       <select className="form-select" value={filters.group} onChange={e=>setFilters({...filters,group:e.target.value})}><option value="">Todos os grupos</option>{data.filters.groups.map(value=><option key={value}>{value}</option>)}</select>
      <select className="form-select" value={filters.manufacturer} onChange={e=>setFilters({...filters,manufacturer:e.target.value})}><option value="">Todos os fabricantes</option>{data.filters.manufacturers.map(value=><option key={value}>{value}</option>)}</select>
       <select className="form-select" value={filters.tenant} onChange={e=>setFilters({...filters,tenant:e.target.value})}><option value="">Todas as empresas</option>{(data.filters.tenants||[]).map(value=><option key={value}>{value}</option>)}</select>
       <select className="form-select" value={filters.site} onChange={e=>setFilters({...filters,site:e.target.value})}><option value="">Todos os sites</option>{(data.filters.sites||[]).map(value=><option key={value}>{value}</option>)}</select>
       <select className="form-select" value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="">Todos os estados</option>{Object.entries(STATUS).map(([key,value])=><option key={key} value={key}>{value.label}</option>)}</select>
       <span>{visibleNodes.length} visível(is)</span>
-     <div className="topology-zoom"><button onClick={()=>setZoom(value=>Math.max(.5,value-.1))}><ZoomOut size={16}/></button><strong>{Math.round(zoom*100)}%</strong><button onClick={()=>setZoom(value=>Math.min(1.5,value+.1))}><ZoomIn size={16}/></button><button onClick={fit} title="Ajustar"><Maximize2 size={16}/></button></div>
+     <div className="topology-zoom">{selectedNode&&<button onClick={()=>focusNodes(visibleGroups.find(group=>group.nodes.some(node=>node.id===selectedNode.id))?.nodes||[selectedNode])} title="Ajustar ao site"><Building2 size={16}/></button>}{impact&&<button onClick={()=>focusNodes(data.nodes.filter(node=>impactedIds.has(node.id)))} title="Ajustar ao impacto"><AlertTriangle size={16}/></button>}<button onClick={()=>setZoom(value=>Math.max(.5,value-.1))}><ZoomOut size={16}/></button><strong>{Math.round(zoom*100)}%</strong><button onClick={()=>setZoom(value=>Math.min(1.5,value+.1))}><ZoomIn size={16}/></button><button onClick={fit} title="Ajustar toda a rede"><Maximize2 size={16}/></button></div>
    </div>
     <div className="topology-legend"><span><i className="legend-dot online"/> Online</span><span><i className="legend-dot warning"/> Alerta</span><span><i className="legend-dot critical"/> Crítico</span><span><i className="legend-dot offline"/> Indisponível</span><span><i className="legend-line online"/> Link saudável</span><span><i className="legend-line warning"/> Link em alerta</span><span><i className="legend-line critical"/> Link afetado</span><span><i className="legend-line fiber"/> Fibra</span><span><i className="legend-line vpn"/> VPN</span>{impact&&<button className="btn btn-ghost btn-sm" onClick={()=>setImpact(null)}>Limpar impacto</button>}</div>
 
@@ -184,9 +197,9 @@ export default function Topology({isAdmin=false}){
     <div className={'topology-workspace '+(fullscreen?'topology-workspace-fullscreen':'')}>
       <div className="topology-viewport" ref={viewport}>
         <div className="topology-scale" style={{width:canvas.width*zoom,height:canvas.height*zoom}}>
-          <div className="topology-canvas" style={{width:canvas.width,height:canvas.height,transform:`scale(${zoom})`}}>
+          <div className="topology-canvas" style={{width:canvas.width,height:canvas.height,transform:`scale(${zoom})`}} onPointerDown={panDown} onPointerMove={panMove} onPointerUp={panUp} onPointerCancel={panUp}>
             <div className="topology-site-layer">{visibleGroups.map(group=>{const collapsed=collapsedGroups.has(group.key),affected=impact&&group.nodes.some(node=>impactedIds.has(node.id));return <section key={group.key} className={`topology-site-group ${group.status} ${collapsed?'collapsed':''} ${impact&&!affected?'impact-dim':''}`} style={{left:group.x,top:group.y,width:group.width,height:collapsed?58:group.height}}><button onClick={()=>toggleGroup(group.key)} title={collapsed?'Expandir site':'Recolher site'}><Building2 size={15}/><span><strong>{group.site}</strong><small>{group.tenant}</small></span><em>{group.nodes.length} equipamentos · {group.tasks} incidentes</em>{collapsed?<ChevronDown size={15}/>:<ChevronUp size={15}/>}</button></section>})}</div>
-            <svg className="topology-links" width={canvas.width} height={canvas.height}>
+            <svg className="topology-links" width={canvas.width} height={canvas.height} onPointerDown={panDown} onPointerMove={panMove} onPointerUp={panUp} onPointerCancel={panUp}>
               {visibleLinks.map(link=>{const a=positions[link.sourceDeviceId],b=positions[link.targetDeviceId];if(!a||!b)return null;const affected=impact&&(impactedIds.has(link.sourceDeviceId)||impactedIds.has(link.targetDeviceId));return <g key={link.id} className={`topology-link ${link.linkType} health-${link.status} ${impact&&!affected?'impact-dim':''} ${selectedLink===link.id?'selected':''}`} onClick={()=>{setSelectedLink(link.id);setSelected(null)}}>
                 <line x1={a.x+82} y1={a.y+42} x2={b.x+82} y2={b.y+42}/>
                 <circle cx={(a.x+b.x)/2+82} cy={(a.y+b.y)/2+42} r="11"/>
@@ -199,6 +212,7 @@ export default function Topology({isAdmin=false}){
             </button>})}
           </div>
         </div>
+        <div className="topology-minimap" onClick={miniNavigate} title="Clique para navegar"><div className="topology-minimap-map">{visibleGroups.map(group=><i key={group.key} className={`group ${group.status}`} style={{left:`${group.x/canvas.width*100}%`,top:`${group.y/canvas.height*100}%`,width:`${group.width/canvas.width*100}%`,height:`${Math.max(58,group.height)/canvas.height*100}%`}}/>)}{visibleNodes.map(node=>{const point=positions[node.id]||node.position;return <b key={node.id} className={node.status} style={{left:`${point.x/canvas.width*100}%`,top:`${point.y/canvas.height*100}%`}}/>})}<span style={{left:`${viewRect.x/canvas.width*100}%`,top:`${viewRect.y/canvas.height*100}%`,width:`${Math.min(100,viewRect.width/canvas.width*100)}%`,height:`${Math.min(100,viewRect.height/canvas.height*100)}%`}}/></div><small>Minimapa</small></div>
       </div>
       {selectedNode&&<aside className="card topology-detail">
         <button className="topology-detail-close" onClick={()=>setSelected(null)}>×</button>
