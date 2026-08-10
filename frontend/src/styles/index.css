@@ -667,6 +667,12 @@ tr:last-child td { border-bottom: none; }
 .chat-feedback button { display:grid; place-items:center; width:27px; height:25px; border:1px solid transparent; border-radius:7px; background:transparent; color:var(--text-muted); cursor:pointer; }
 .chat-feedback button:hover,.chat-feedback button.active { border-color:var(--success); color:var(--success); background:color-mix(in srgb,var(--success) 10%,transparent); }
 .chat-feedback button.active.negative { border-color:var(--danger); color:var(--danger); background:color-mix(in srgb,var(--danger) 10%,transparent); }
+.chat-message-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:.25rem; margin-top:.45rem; padding-top:.4rem; border-top:1px solid var(--border-primary); }
+.chat-message-actions>button { display:inline-flex; align-items:center; gap:.25rem; padding:.28rem .42rem; border:1px solid transparent; border-radius:7px; background:transparent; color:var(--text-muted); font-size:.65rem; cursor:pointer; }
+.chat-message-actions>button:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); background:color-mix(in srgb,var(--primary) 8%,transparent); }
+.chat-message-actions>button:disabled { opacity:.45; cursor:not-allowed; }
+.chat-message-actions .chat-feedback { margin-top:0; margin-left:.15rem; }
+.chat-action-error { margin-top:.3rem; color:var(--danger); font-size:.67rem; text-align:right; }
 
 .chat-messages {
   flex: 1;

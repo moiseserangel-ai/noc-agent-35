@@ -1607,6 +1607,7 @@ model ChatMessage {
   model     String?
   knowledgeSources String?
   feedback  String? // positive|negative
+  deviceId  String? // equipamento fixado quando a mensagem foi gerada
   toolCalls String? // JSON string with tools used
   createdAt DateTime    @default(now())
 }

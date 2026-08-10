@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope, StopCircle, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope, StopCircle, ThumbsUp, ThumbsDown, Terminal, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../lib/api.js';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -17,6 +18,7 @@ function getSocket() {
 }
 
 export default function Chat() {
+  const navigate=useNavigate();
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -60,8 +62,8 @@ export default function Chat() {
     };
     s.on('chat:chunk', ({ text }) => setStreaming(prev => prev + text));
     s.on('chat:tool', (data) => setTools(prev => [...prev, data]));
-    s.on('chat:complete', ({ text, agentUsed, toolsUsed, provider, model, knowledgeSources, messageId }) => {
-      setMessages(prev => [...prev, { role: 'assistant', content: text, agentUsed, provider, model, knowledgeSources, id:messageId||Date.now() }]);
+    s.on('chat:complete', ({ text, agentUsed, toolsUsed, provider, model, knowledgeSources, messageId, deviceId }) => {
+      setMessages(prev => [...prev, { role: 'assistant', content: text, agentUsed, provider, model, knowledgeSources, deviceId, id:messageId||Date.now() }]);
       setStreaming('');
       setTools([]);
       setIsLoading(false);
@@ -115,6 +117,8 @@ export default function Chat() {
   const quickAction=text=>{if(!selectedDeviceId)return;setInput(text);};
   const cancelResponse=()=>{getSocket().emit('chat:cancel',{sessionId:activeSession});setStreaming('');setTools([]);setIsLoading(false);};
   const rateMessage=async(message,feedback)=>{if(!message.id)return;const value=message.feedback===feedback?null:feedback;try{await api.rateChatMessage(message.id,value);setMessages(rows=>rows.map(row=>row.id===message.id?{...row,feedback:value}:row));}catch{}};
+  const createTask=async message=>{if(!message.id||message.creatingTask)return;const deviceId=message.deviceId||selectedDeviceId;if(!deviceId)return;setMessages(rows=>rows.map(row=>row.id===message.id?{...row,creatingTask:true}:row));try{const response=await api.createTaskFromChatMessage(message.id,deviceId);setMessages(rows=>rows.map(row=>row.id===message.id?{...row,creatingTask:false,taskNumber:response.data.taskNumber}:row));}catch(error){setMessages(rows=>rows.map(row=>row.id===message.id?{...row,creatingTask:false,taskError:error.message||'Não foi possível criar a Task'}:row));}};
+  const openShortcut=(path,deviceId)=>navigate(deviceId?`${path}?deviceId=${encodeURIComponent(deviceId)}`:path);
 
   return (
     <div className="chat-workspace">
@@ -166,7 +170,8 @@ export default function Chat() {
                 {m.agentUsed && <div className="chat-message-meta"><Bot size={12}/> {m.agentUsed}{m.provider&&<> · {m.provider}</>}{m.model&&<> · {m.model}</>}</div>}
                 {m.role === 'assistant' ? <AgentResponse content={m.content} /> : <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>}
                 {m.role==='assistant'&&(()=>{let sources=m.knowledgeSources||[];if(typeof sources==='string')try{sources=JSON.parse(sources);}catch{sources=[];}return sources.length?<div className="chat-sources"><BookOpen size={13}/><span>Fontes: {[...new Set(sources)].join(' · ')}</span></div>:null;})()}
-                {m.role==='assistant'&&m.id&&<div className="chat-feedback"><button className={m.feedback==='positive'?'active':''} onClick={()=>rateMessage(m,'positive')} title="Resposta útil"><ThumbsUp size={13}/></button><button className={m.feedback==='negative'?'active negative':''} onClick={()=>rateMessage(m,'negative')} title="Resposta precisa melhorar"><ThumbsDown size={13}/></button></div>}
+                {m.role==='assistant'&&m.id&&<div className="chat-message-actions"><button disabled={m.creatingTask||(!m.deviceId&&!selectedDeviceId)} onClick={()=>createTask(m)} title="Criar uma Task pendente para revisão"><ClipboardList size={13}/>{m.taskNumber?` #TASK-${m.taskNumber}`:m.creatingTask?' Criando...':' Criar Task'}</button>{(m.deviceId||selectedDeviceId)&&<><button onClick={()=>openShortcut('/devices',m.deviceId||selectedDeviceId)} title="Abrir equipamento"><ExternalLink size={13}/> Equipamento</button><button onClick={()=>openShortcut('/terminal',m.deviceId||selectedDeviceId)} title="Abrir Terminal CLI"><Terminal size={13}/> Terminal</button></>}<button onClick={()=>openShortcut('/knowledge')} title="Abrir base de conhecimento"><BookOpen size={13}/> Documentação</button><span className="chat-feedback"><button className={m.feedback==='positive'?'active':''} onClick={()=>rateMessage(m,'positive')} title="Resposta útil"><ThumbsUp size={13}/></button><button className={m.feedback==='negative'?'active negative':''} onClick={()=>rateMessage(m,'negative')} title="Resposta precisa melhorar"><ThumbsDown size={13}/></button></span></div>}
+                {m.taskError&&<div className="chat-action-error">{m.taskError}</div>}
               </div>
             ))}
             {tools.length > 0 && tools.map((t, i) => (

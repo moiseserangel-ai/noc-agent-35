@@ -207,7 +207,7 @@ io.on('connection', (socket) => {
 
       // Save user message
       const savedUserMessage = await prisma.chatMessage.create({
-        data: { sessionId, role: 'user', content: message },
+        data: { sessionId, role: 'user', content: message, deviceId:selectedDevice?.id||null },
       });
       const history = await getSessionHistory(sessionId, savedUserMessage.id);
 
@@ -384,6 +384,7 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
           provider: result.provider||null,
           model: result.model||null,
           knowledgeSources: result.knowledgeSources?.length?JSON.stringify(result.knowledgeSources):null,
+          deviceId:selectedDevice?.id||null,
           toolCalls: result.toolsUsed.length > 0 ? JSON.stringify(result.toolsUsed) : null,
         },
       });
@@ -395,6 +396,7 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
         model: result.model||null,
         knowledgeSources: result.knowledgeSources||[],
         messageId:savedAssistantMessage.id,
+        deviceId:selectedDevice?.id||null,
         toolsUsed: result.toolsUsed,
       });
     } catch (err) {

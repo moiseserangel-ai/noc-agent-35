@@ -317,6 +317,7 @@ export const api = {
   getChatMessages: (sessionId) => request(`/chat/sessions/${sessionId}/messages`),
   deleteChatSession: (id) => request(`/chat/sessions/${id}`, { method: 'DELETE' }),
   rateChatMessage: (id, feedback) => request(`/chat/messages/${id}/feedback`, { method:'PATCH', body:JSON.stringify({feedback}) }),
+  createTaskFromChatMessage: (id, deviceId) => request(`/chat/messages/${id}/task`, { method:'POST', body:JSON.stringify({deviceId}) }),
 
   // Base de conhecimento
   getKnowledgeDocuments: () => request('/knowledge'),
