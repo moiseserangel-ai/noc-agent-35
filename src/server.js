@@ -71,6 +71,7 @@ import * as taskService from './services/task.service.js';
 import { runSlaMonitor } from './services/sla.service.js';
 import { notifyTask, runCriticalEscalations } from './services/notification.service.js';
 import { runAutomaticBackup } from './services/backup.service.js';
+import { maskChatSecrets } from './services/chat-document.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -202,7 +203,7 @@ io.on('connection', (socket) => {
   const chatControllers=new Map();
   socket.on('chat:cancel',({sessionId})=>{const controller=chatControllers.get(sessionId);if(controller){controller.abort();chatControllers.delete(sessionId);socket.emit('chat:cancelled',{sessionId});}});
 
-  socket.on('chat:message', async ({ sessionId, message, agentType = 'support', deviceId = null }) => {
+  socket.on('chat:message', async ({ sessionId, message, agentType = 'support', deviceId = null,attachmentIds=[] }) => {
     let responseController=null;
     try {
       if (socket.user.tenantId) throw new Error('Chat com agentes é restrito à equipe global do NOC');
@@ -218,12 +219,15 @@ io.on('connection', (socket) => {
       }
       const selectedDevice=deviceId?await prisma.device.findFirst({where:{id:String(deviceId),isActive:true},select:{id:true,type:true}}):null;
       if(deviceId&&!selectedDevice)throw new Error('Equipamento fixado não encontrado ou inativo');
-      const agentMessage=selectedDevice?`[EQUIPAMENTO FIXADO PELO USUÁRIO]\nID interno: ${selectedDevice.id}\nTipo: ${selectedDevice.type}\nUse somente o ID interno nas ferramentas; não solicite nem exponha Host/IP ou credenciais.\n\nSolicitação: ${message}`:message;
+      const attachments=Array.isArray(attachmentIds)&&attachmentIds.length?await prisma.chatAttachment.findMany({where:{id:{in:attachmentIds.slice(0,5).map(String)},sessionId,messageId:null},orderBy:{createdAt:'asc'}}):[];
+      const authorized=attachments.filter(item=>item.authorizedForAi),attachmentContext=authorized.length?`\n\n[ANEXOS AUTORIZADOS PELO USUÁRIO — conteúdo mascarado e limitado]\n${authorized.map(item=>`--- ${item.filename} ---\n${maskChatSecrets(item.content).slice(0,20000)}`).join('\n').slice(0,40000)}`:'';
+      const agentMessage=(selectedDevice?`[EQUIPAMENTO FIXADO PELO USUÁRIO]\nID interno: ${selectedDevice.id}\nTipo: ${selectedDevice.type}\nUse somente o ID interno nas ferramentas; não solicite nem exponha Host/IP ou credenciais.\n\nSolicitação: ${message}`:message)+attachmentContext;
 
       // Save user message
       const savedUserMessage = await prisma.chatMessage.create({
         data: { sessionId, role: 'user', content: message, deviceId:selectedDevice?.id||null },
       });
+      if(attachments.length){await prisma.chatAttachment.updateMany({where:{id:{in:attachments.map(item=>item.id)}},data:{messageId:savedUserMessage.id}});if(authorized.length)await prisma.chatAttachment.updateMany({where:{id:{in:authorized.map(item=>item.id)}},data:{includedAt:new Date()}});}
       const managedContext = await getSessionHistory(sessionId, savedUserMessage.id);
       const history=managedContext.history;
       socket.emit('chat:context',{summaryActive:managedContext.summaryActive,summarizedMessageCount:managedContext.summarizedMessageCount,recentMessageCount:managedContext.recentMessageCount});

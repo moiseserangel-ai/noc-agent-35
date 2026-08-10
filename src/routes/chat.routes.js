@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../database/client.js';
 import * as taskService from '../services/task.service.js';
+import { chatMarkdown, chatPdf, extractChatAttachment } from '../services/chat-document.service.js';
 
 const router = Router();
 
@@ -39,11 +40,17 @@ router.get('/sessions/:id/messages', async (req, res, next) => {
   try {
     const messages = await prisma.chatMessage.findMany({
       where: { sessionId: req.params.id },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'asc' },include:{attachments:{select:{id:true,filename:true,mimeType:true,size:true,authorizedForAi:true}}},
     });
     res.json({ success: true, data: messages });
   } catch (err) { next(err); }
 });
+
+router.post('/sessions/:id/attachments',async(req,res,next)=>{try{const session=await prisma.chatSession.findUnique({where:{id:req.params.id},select:{id:true,archivedAt:true}});if(!session)return res.status(404).json({success:false,error:'Conversa não encontrada'});if(session.archivedAt)return res.status(409).json({success:false,error:'Restaure a conversa antes de anexar arquivos'});const extracted=await extractChatAttachment(req.body);const row=await prisma.chatAttachment.create({data:{sessionId:session.id,...extracted,authorizedForAi:req.body.authorizedForAi===true},select:{id:true,filename:true,mimeType:true,size:true,authorizedForAi:true}});res.status(201).json({success:true,data:row,message:row.authorizedForAi?'Anexo pronto para ser enviado à IA na próxima mensagem':'Anexo armazenado sem autorização de envio à IA'});}catch(error){next(error);}});
+
+router.delete('/attachments/:id',async(req,res,next)=>{try{const row=await prisma.chatAttachment.findUnique({where:{id:req.params.id},select:{id:true,messageId:true}});if(!row)return res.status(404).json({success:false,error:'Anexo não encontrado'});if(row.messageId)return res.status(409).json({success:false,error:'O anexo já faz parte do histórico'});await prisma.chatAttachment.delete({where:{id:row.id}});res.json({success:true,message:'Anexo removido'});}catch(error){next(error);}});
+
+router.get('/sessions/:id/export.:format',async(req,res,next)=>{try{if(!['md','pdf'].includes(req.params.format))return res.status(400).json({success:false,error:'Formato inválido'});const session=await prisma.chatSession.findUnique({where:{id:req.params.id}});if(!session)return res.status(404).json({success:false,error:'Conversa não encontrada'});const messages=await prisma.chatMessage.findMany({where:{sessionId:session.id},orderBy:{createdAt:'asc'},include:{attachments:{select:{filename:true}}}}),base=String(session.title||'chat-ai').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9_-]+/gi,'-').replace(/^-|-$/g,'').slice(0,80)||'chat-ai';if(req.params.format==='md'){res.setHeader('Content-Type','text/markdown; charset=utf-8');res.setHeader('Content-Disposition',`attachment; filename="${base}.md"`);return res.send(chatMarkdown(session,messages))}const pdf=await chatPdf(session,messages);res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`attachment; filename="${base}.pdf"`);res.send(pdf);}catch(error){next(error);}});
 
 router.delete('/sessions/:id', async (req, res, next) => {
   try {

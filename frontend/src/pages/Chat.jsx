@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope, StopCircle, ThumbsUp, ThumbsDown, Terminal, ExternalLink, Pencil, Archive, RotateCcw } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Send, Plus, Trash2, MessageSquare, Wrench, Bot, Server, BookOpen, Search, Activity, ClipboardList, Stethoscope, StopCircle, ThumbsUp, ThumbsDown, Terminal, ExternalLink, Pencil, Archive, RotateCcw, Paperclip, FileDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../lib/api.js';
@@ -33,7 +33,13 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [tools, setTools] = useState([]);
   const [contextStats,setContextStats]=useState(null);
+  const [messageSearch,setMessageSearch]=useState('');
+  const [searchIndex,setSearchIndex]=useState(0);
+  const [pendingAttachments,setPendingAttachments]=useState([]);
+  const [authorizeAttachments,setAuthorizeAttachments]=useState(false);
+  const [attachmentError,setAttachmentError]=useState('');
   const messagesEnd = useRef(null);
+  const attachmentInput=useRef(null);
 
   useEffect(() => {
     api.getChatSessions().then(r => setSessions(r.data)).catch(() => {});
@@ -44,6 +50,7 @@ export default function Chat() {
   useEffect(() => {
     if (!activeSession) return;
     api.getChatMessages(activeSession).then(r => setMessages(r.data)).catch(() => {});
+    setPendingAttachments([]);setAttachmentError('');setMessageSearch('');
     const current=sessions.find(item=>item.id===activeSession);setContextStats(current?.summarizedMessageCount?{summaryActive:true,summarizedMessageCount:current.summarizedMessageCount}:null);
   }, [activeSession]);
 
@@ -113,15 +120,22 @@ export default function Chat() {
     if (!input.trim() || !activeSession || isLoading || currentSession?.archivedAt) return;
     const msg = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: msg, id: Date.now() }]);
+    const attached=pendingAttachments;setMessages(prev => [...prev, { role: 'user', content: msg, attachments:attached, id: Date.now() }]);
+    setPendingAttachments([]);
     setStreaming('');
     setTools([]);
     const s = getSocket();
     if (!s.connected) s.connect();
-    s.emit('chat:message', { sessionId: activeSession, message: msg, agentType, deviceId:selectedDeviceId||null });
+    s.emit('chat:message', { sessionId: activeSession, message: msg, agentType, deviceId:selectedDeviceId||null,attachmentIds:attached.map(item=>item.id) });
   };
   const filteredSessions=sessions.filter(session=>(sessionView==='archived'?Boolean(session.archivedAt):!session.archivedAt)&&(!sessionSearch.trim()||String(session.title||'Nova conversa').toLowerCase().includes(sessionSearch.trim().toLowerCase())));
   const currentSession=sessions.find(session=>session.id===activeSession);
+  const searchResults=useMemo(()=>{const term=messageSearch.trim().toLocaleLowerCase('pt-BR');return term?messages.filter(row=>String(row.content||'').toLocaleLowerCase('pt-BR').includes(term)).map(row=>String(row.id)):[]},[messages,messageSearch]);
+  useEffect(()=>{setSearchIndex(0)},[messageSearch,activeSession]);
+  const moveSearch=direction=>{if(!searchResults.length)return;const next=(searchIndex+direction+searchResults.length)%searchResults.length;setSearchIndex(next);document.getElementById(`chat-message-${searchResults[next]}`)?.scrollIntoView({behavior:'smooth',block:'center'});};
+  const uploadAttachment=async event=>{const file=event.target.files?.[0];event.target.value='';if(!file)return;setAttachmentError('');if(file.size>5*1024*1024){setAttachmentError('O arquivo excede o limite de 5 MB.');return}try{const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');reader.onerror=()=>reject(new Error('Falha ao ler arquivo'));reader.readAsDataURL(file)});const result=await api.uploadChatAttachment(activeSession,{filename:file.name,data,authorizedForAi:authorizeAttachments});setPendingAttachments(rows=>[...rows,result.data])}catch(error){setAttachmentError(error.message||'Falha ao anexar arquivo')}};
+  const removeAttachment=async item=>{try{await api.deleteChatAttachment(item.id);setPendingAttachments(rows=>rows.filter(row=>row.id!==item.id))}catch(error){setAttachmentError(error.message)}};
+  const exportConversation=async format=>{try{const result=await api.exportChatSession(activeSession,format),url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download=result.filename;link.click();URL.revokeObjectURL(url)}catch(error){setAttachmentError(error.message)}};
   const quickAction=text=>{if(!selectedDeviceId)return;setInput(text);};
   const cancelResponse=()=>{getSocket().emit('chat:cancel',{sessionId:activeSession});setStreaming('');setTools([]);setIsLoading(false);};
   const rateMessage=async(message,feedback)=>{if(!message.id)return;const value=message.feedback===feedback?null:feedback;try{await api.rateChatMessage(message.id,value);setMessages(rows=>rows.map(row=>row.id===message.id?{...row,feedback:value}:row));}catch{}};
@@ -171,12 +185,14 @@ export default function Chat() {
               {specialists.map(item=><option key={item.type} value={item.type}>🔧 {item.label}</option>)}
             </select></div>
           </div>
+          <div className="chat-history-tools"><label><Search size={13}/><input value={messageSearch} onChange={e=>setMessageSearch(e.target.value)} placeholder="Pesquisar nesta conversa"/></label>{messageSearch&&<div className="chat-search-navigation"><span>{searchResults.length?`${searchIndex+1}/${searchResults.length}`:'0 resultado'}</span><button disabled={!searchResults.length} onClick={()=>moveSearch(-1)}><ChevronLeft size={14}/></button><button disabled={!searchResults.length} onClick={()=>moveSearch(1)}><ChevronRight size={14}/></button></div>}<span className="chat-history-spacer"/><button onClick={()=>exportConversation('md')}><FileDown size={13}/> Markdown</button><button onClick={()=>exportConversation('pdf')}><FileDown size={13}/> PDF</button></div>
 
           <div className="chat-messages">
             {messages.map((m, i) => (
-              <div key={m.id || i} className={`chat-message ${m.role}`}>
+              <div id={`chat-message-${m.id}`} key={m.id || i} className={`chat-message ${m.role} ${searchResults[searchIndex]===String(m.id)?'search-current':''}`}>
                 {m.agentUsed && <div className="chat-message-meta"><Bot size={12}/> {m.agentUsed}{m.provider&&<> · {m.provider}</>}{m.model&&<> · {m.model}</>}</div>}
                 {m.role === 'assistant' ? <AgentResponse content={m.content} /> : <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>}
+                {m.attachments?.length>0&&<div className="chat-message-attachments">{m.attachments.map(file=><span key={file.id}><Paperclip size={12}/>{file.filename}<small>{file.authorizedForAi?'enviado à IA':'somente interno'}</small></span>)}</div>}
                 {m.role==='assistant'&&(()=>{let sources=m.knowledgeSources||[];if(typeof sources==='string')try{sources=JSON.parse(sources);}catch{sources=[];}return sources.length?<div className="chat-sources"><BookOpen size={13}/><span>Fontes: {[...new Set(sources)].join(' · ')}</span></div>:null;})()}
                 {m.role==='assistant'&&m.id&&<div className="chat-message-actions"><button disabled={m.creatingTask||(!m.deviceId&&!selectedDeviceId)} onClick={()=>createTask(m)} title="Criar uma Task pendente para revisão"><ClipboardList size={13}/>{m.taskNumber?` #TASK-${m.taskNumber}`:m.creatingTask?' Criando...':' Criar Task'}</button>{(m.deviceId||selectedDeviceId)&&<><button onClick={()=>openShortcut('/devices',m.deviceId||selectedDeviceId)} title="Abrir equipamento"><ExternalLink size={13}/> Equipamento</button><button onClick={()=>openShortcut('/terminal',m.deviceId||selectedDeviceId)} title="Abrir Terminal CLI"><Terminal size={13}/> Terminal</button></>}<button onClick={()=>openShortcut('/knowledge')} title="Abrir base de conhecimento"><BookOpen size={13}/> Documentação</button><span className="chat-feedback"><button className={m.feedback==='positive'?'active':''} onClick={()=>rateMessage(m,'positive')} title="Resposta útil"><ThumbsUp size={13}/></button><button className={m.feedback==='negative'?'active negative':''} onClick={()=>rateMessage(m,'negative')} title="Resposta precisa melhorar"><ThumbsDown size={13}/></button></span></div>}
                 {m.taskError&&<div className="chat-action-error">{m.taskError}</div>}
@@ -195,6 +211,9 @@ export default function Chat() {
 
           <div className="chat-input-area">
             <div className="chat-quick-actions"><button type="button" disabled={!selectedDeviceId||isLoading||Boolean(currentSession?.archivedAt)} onClick={()=>quickAction('Consulte o estado atual deste equipamento e apresente um resumo objetivo, sem realizar alterações.')}><Activity size={13}/> Consultar estado</button><button type="button" disabled={!selectedDeviceId||isLoading||Boolean(currentSession?.archivedAt)} onClick={()=>quickAction('Faça um diagnóstico somente leitura deste equipamento, apresente evidências e possíveis causas.')}><Stethoscope size={13}/> Diagnosticar</button><button type="button" disabled={!selectedDeviceId||isLoading||Boolean(currentSession?.archivedAt)} onClick={()=>quickAction('Prepare um plano de mudança para este equipamento com comandos, riscos, validação e rollback. Não execute alterações.')}><ClipboardList size={13}/> Preparar plano</button></div>
+            <div className="chat-attachment-controls"><input ref={attachmentInput} type="file" hidden accept=".txt,.log,.conf,.cfg,.md,.json,.xml,.yaml,.yml,.csv,.rsc,.pdf" onChange={uploadAttachment}/><button type="button" disabled={isLoading||Boolean(currentSession?.archivedAt)||pendingAttachments.length>=5} onClick={()=>attachmentInput.current?.click()}><Paperclip size={13}/> Anexar arquivo</button><label><input type="checkbox" checked={authorizeAttachments} onChange={e=>setAuthorizeAttachments(e.target.checked)}/><span>Autorizar envio do conteúdo mascarado ao provedor de IA</span></label></div>
+            {pendingAttachments.length>0&&<div className="chat-pending-attachments">{pendingAttachments.map(file=><span key={file.id}><Paperclip size={12}/><span>{file.filename}<small>{file.authorizedForAi?'será enviado à IA':'somente interno'}</small></span><button onClick={()=>removeAttachment(file)}><X size={12}/></button></span>)}</div>}
+            {attachmentError&&<div className="chat-attachment-error">{attachmentError}</div>}
             <textarea className="chat-input" rows={1} value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
