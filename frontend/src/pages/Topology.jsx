@@ -20,6 +20,8 @@ export default function Topology({isAdmin=false}){
   const [positions,setPositions]=useState({});
   const [filters,setFilters]=useState({group:'',manufacturer:'',site:'',status:''});
   const [selected,setSelected]=useState(null);
+  const [selectedLink,setSelectedLink]=useState(null);
+  const [impact,setImpact]=useState(null);
   const [zoom,setZoom]=useState(1);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
@@ -28,7 +30,7 @@ export default function Topology({isAdmin=false}){
  const [showDiscovery,setShowDiscovery]=useState(false);
   const [fullscreen,setFullscreen]=useState(false);
   const [discovery,setDiscovery]=useState({runs:[],suggestions:[]});
-  const [linkForm,setLinkForm]=useState({sourceDeviceId:'',targetDeviceId:'',linkType:'ethernet',label:''});
+  const [linkForm,setLinkForm]=useState({sourceDeviceId:'',targetDeviceId:'',linkType:'ethernet',label:'',sourceInterface:'',targetInterface:'',bandwidthMbps:''});
   const drag=useRef(null);
   const viewport=useRef(null);
   const toast=useToast();
@@ -62,6 +64,8 @@ export default function Topology({isAdmin=false}){
     return {width:Math.max(1300,...points.map(point=>point.x+240)),height:Math.max(720,...points.map(point=>point.y+180))};
   },[positions]);
   const selectedNode=data.nodes.find(node=>node.id===selected);
+  const selectedLinkData=data.links.find(link=>link.id===selectedLink);
+  const impactedIds=useMemo(()=>new Set([...(impact?.roots||[]).map(row=>row.deviceId),...(impact?.impacted||[]).map(row=>row.asset?.deviceId)].filter(Boolean)),[impact]);
 
   const exportMap = () => {
     const payload = { exportedAt: new Date().toISOString(), filters, summary: data.summary, nodes: visibleNodes, links: visibleLinks };
@@ -97,16 +101,16 @@ export default function Topology({isAdmin=false}){
     finally{setBusy(false);}
   };
   const organize=()=>{
-    const columns=Math.max(3,Math.ceil(Math.sqrt(Math.max(visibleNodes.length,1)*1.6)));
-    const next={...positions};
-    visibleNodes.forEach((node,index)=>{next[node.id]={x:110+(index%columns)*220,y:100+Math.floor(index/columns)*170};});
+    const degree=new Map(visibleNodes.map(node=>[node.id,0]));visibleLinks.forEach(link=>{degree.set(link.sourceDeviceId,(degree.get(link.sourceDeviceId)||0)+1);degree.set(link.targetDeviceId,(degree.get(link.targetDeviceId)||0)+1)});
+    const maxDegree=Math.max(1,...degree.values()),sites=[...new Set(visibleNodes.map(node=>node.site?.name||'Sem site'))],next={...positions};let siteOffset=100;
+    sites.forEach(site=>{const rows=[[],[],[]];visibleNodes.filter(node=>(node.site?.name||'Sem site')===site).sort((a,b)=>(degree.get(b.id)||0)-(degree.get(a.id)||0)).forEach(node=>{const d=degree.get(node.id)||0,tier=d>=Math.max(2,Math.ceil(maxDegree*.65))?0:d>=2?1:2;rows[tier].push(node)});rows.forEach((nodes,tier)=>nodes.forEach((node,index)=>{next[node.id]={x:siteOffset+index*205,y:90+tier*205}}));siteOffset+=Math.max(520,Math.max(...rows.map(row=>row.length))*205)+80});
     setPositions(next);setDirty(true);
   };
   const createLink=async event=>{
     event.preventDefault();setBusy(true);
     try{
       const result=await api.createTopologyLink(linkForm);
-      toast(result.message,'success');setShowLink(false);setLinkForm({sourceDeviceId:'',targetDeviceId:'',linkType:'ethernet',label:''});await load();
+      toast(result.message,'success');setShowLink(false);setLinkForm({sourceDeviceId:'',targetDeviceId:'',linkType:'ethernet',label:'',sourceInterface:'',targetInterface:'',bandwidthMbps:''});await load();
     }catch(error){toast(error.message,'error');}
     finally{setBusy(false);}
   };
@@ -114,7 +118,8 @@ export default function Topology({isAdmin=false}){
     if(!confirm('Remover esta conexão do mapa?'))return;
     try{const result=await api.deleteTopologyLink(id);toast(result.message,'success');await load();}catch(error){toast(error.message,'error');}
   };
-  const fit=()=>{setZoom(.8);viewport.current?.scrollTo({left:0,top:0,behavior:'smooth'});};
+  const fit=()=>{const points=visibleNodes.map(node=>positions[node.id]||node.position);if(!points.length)return;const minX=Math.min(...points.map(p=>p.x)),maxX=Math.max(...points.map(p=>p.x+185)),minY=Math.min(...points.map(p=>p.y)),maxY=Math.max(...points.map(p=>p.y+104)),view=viewport.current,next=Math.min(1.5,Math.max(.5,Math.min((view?.clientWidth||900)/(maxX-minX+120),(view?.clientHeight||620)/(maxY-minY+120))));setZoom(next);requestAnimationFrame(()=>view?.scrollTo({left:Math.max(0,(minX-50)*next),top:Math.max(0,(minY-50)*next),behavior:'smooth'}));};
+  const showImpact=async node=>{if(impact?.deviceId===node.id){setImpact(null);return}try{const result=await api.getTopologyImpact(node.id);setImpact({...result.data,deviceId:node.id});}catch(error){toast(error.message,'error')}};
   const loadDiscovery=useCallback(async()=>{
     try{setDiscovery((await api.getTopologyDiscovery()).data);}catch(error){toast(error.message,'error');}
   },[toast]);
@@ -166,7 +171,7 @@ export default function Topology({isAdmin=false}){
       <span>{visibleNodes.length} visível(is)</span>
      <div className="topology-zoom"><button onClick={()=>setZoom(value=>Math.max(.5,value-.1))}><ZoomOut size={16}/></button><strong>{Math.round(zoom*100)}%</strong><button onClick={()=>setZoom(value=>Math.min(1.5,value+.1))}><ZoomIn size={16}/></button><button onClick={fit} title="Ajustar"><Maximize2 size={16}/></button></div>
    </div>
-    <div className="topology-legend"><span><i className="legend-dot online"/> Online</span><span><i className="legend-dot warning"/> Alerta</span><span><i className="legend-dot critical"/> Crítico</span><span><i className="legend-dot offline"/> Indisponível</span><span><i className="legend-line fiber"/> Fibra</span><span><i className="legend-line vpn"/> VPN</span></div>
+    <div className="topology-legend"><span><i className="legend-dot online"/> Online</span><span><i className="legend-dot warning"/> Alerta</span><span><i className="legend-dot critical"/> Crítico</span><span><i className="legend-dot offline"/> Indisponível</span><span><i className="legend-line online"/> Link saudável</span><span><i className="legend-line warning"/> Link em alerta</span><span><i className="legend-line critical"/> Link afetado</span><span><i className="legend-line fiber"/> Fibra</span><span><i className="legend-line vpn"/> VPN</span>{impact&&<button className="btn btn-ghost btn-sm" onClick={()=>setImpact(null)}>Limpar impacto</button>}</div>
 
     {loading?<div className="loading-screen" style={{minHeight:420}}><div className="spinner"/></div>:!data.nodes.length?<div className="card empty-state"><Network/><p>Cadastre equipamentos para montar o mapa de rede.</p></div>:
     <div className={'topology-workspace '+(fullscreen?'topology-workspace-fullscreen':'')}>
@@ -174,14 +179,14 @@ export default function Topology({isAdmin=false}){
         <div className="topology-scale" style={{width:canvas.width*zoom,height:canvas.height*zoom}}>
           <div className="topology-canvas" style={{width:canvas.width,height:canvas.height,transform:`scale(${zoom})`}}>
             <svg className="topology-links" width={canvas.width} height={canvas.height}>
-              {visibleLinks.map(link=>{const a=positions[link.sourceDeviceId],b=positions[link.targetDeviceId];if(!a||!b)return null;return <g key={link.id} className={`topology-link ${link.linkType}`} onClick={()=>isAdmin&&removeLink(link.id)}>
+              {visibleLinks.map(link=>{const a=positions[link.sourceDeviceId],b=positions[link.targetDeviceId];if(!a||!b)return null;const affected=impact&&(impactedIds.has(link.sourceDeviceId)||impactedIds.has(link.targetDeviceId));return <g key={link.id} className={`topology-link ${link.linkType} health-${link.status} ${impact&&!affected?'impact-dim':''} ${selectedLink===link.id?'selected':''}`} onClick={()=>{setSelectedLink(link.id);setSelected(null)}}>
                 <line x1={a.x+82} y1={a.y+42} x2={b.x+82} y2={b.y+42}/>
                 <circle cx={(a.x+b.x)/2+82} cy={(a.y+b.y)/2+42} r="11"/>
                 <text x={(a.x+b.x)/2+82} y={(a.y+b.y)/2+46} textAnchor="middle">{link.linkType==='fiber'?'F':link.linkType==='vpn'?'V':'•'}</text>
-                {link.label&&<text className="topology-link-label" x={(a.x+b.x)/2+82} y={(a.y+b.y)/2+27} textAnchor="middle">{link.label}</text>}
+                {(link.label||link.bandwidthMbps)&&<text className="topology-link-label" x={(a.x+b.x)/2+82} y={(a.y+b.y)/2+27} textAnchor="middle">{link.label||`${link.bandwidthMbps} Mbps`}</text>}
               </g>})}
             </svg>
-           {visibleNodes.map(node=>{const point=positions[node.id]||node.position;const StateIcon=STATUS[node.status]?.icon||Activity;return <button key={node.id} type="button" className={`topology-node ${node.status} ${selected===node.id?'selected':''}`} style={{left:point.x,top:point.y}} onPointerDown={event=>pointerDown(event,node)} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onClick={()=>setSelected(node.id)}>
+           {visibleNodes.map(node=>{const point=positions[node.id]||node.position;const StateIcon=STATUS[node.status]?.icon||Activity;return <button key={node.id} type="button" className={`topology-node ${node.status} ${selected===node.id?'selected':''} ${impact&&!impactedIds.has(node.id)?'impact-dim':''} ${impact&&impactedIds.has(node.id)?'impact-highlight':''}`} style={{left:point.x,top:point.y}} onPointerDown={event=>pointerDown(event,node)} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onClick={()=>{setSelected(node.id);setSelectedLink(null)}}>
               <span className="topology-node-icon"><StateIcon size={20}/><b title={node.manufacturer||'Fabricante não informado'}>{vendorIcon(node.manufacturer)}</b></span><span><strong>{node.name}</strong><small>{node.hostname}{node.site?.name?` · ${node.site.name}`:''}</small></span><i>{node.tasks.length||''}</i>
             </button>})}
           </div>
@@ -195,11 +200,14 @@ export default function Topology({isAdmin=false}){
         <div className="topology-detail-metrics"><span><Cpu size={14}/> CPU <strong>{pct(selectedNode.metrics?.cpu)}</strong></span><span><MemoryStick size={14}/> Memória <strong>{pct(selectedNode.metrics?.memory)}</strong></span><span><HardDrive size={14}/> Disco <strong>{pct(selectedNode.metrics?.storage)}</strong></span></div>
         <small>Última coleta: {date(selectedNode.metrics?.collectedAt)}</small>
         {selectedNode.tasks.length>0&&<div className="topology-incidents"><h4>Incidentes ativos</h4>{selectedNode.tasks.slice(0,3).map(task=><Link key={task.id} to={`/tasks?task=${task.taskNumber}`}>#TASK-{task.taskNumber} · {task.priority}</Link>)}</div>}
+        {impact?.deviceId===selectedNode.id&&<div className="topology-impact-summary"><strong>Impacto CMDB</strong><span>{impact.summary?.impacted||0} dependência(s)</span><span>{impact.summary?.services||0} serviço(s)</span><span>{impact.summary?.clients||0} cliente(s)</span>{impact.unmappedDeviceIds?.length>0&&<small>Equipamento ainda não vinculado ao CMDB.</small>}</div>}
+        <button className="btn btn-secondary topology-impact-button" onClick={()=>showImpact(selectedNode)}><Network size={13}/> {impact?.deviceId===selectedNode.id?'Ocultar impacto':'Visualizar impacto'}</button>
         <div className="topology-actions"><Link className="btn btn-secondary" to={`/devices?device=${selectedNode.id}`}>Equipamento <ExternalLink size={13}/></Link><Link className="btn btn-secondary" to={`/terminal?device=${selectedNode.id}`}>Terminal <ExternalLink size={13}/></Link></div>
       </aside>}
+      {selectedLinkData&&!selectedNode&&<aside className="card topology-detail topology-link-detail"><button className="topology-detail-close" onClick={()=>setSelectedLink(null)}>×</button><div className={`topology-detail-state ${selectedLinkData.status}`}>{STATUS[selectedLinkData.status]?.label||selectedLinkData.status}</div><h3>{selectedLinkData.sourceNode?.name} ↔ {selectedLinkData.targetNode?.name}</h3><p>Estado inferido pelas duas pontas</p><dl><div><dt>Origem</dt><dd>{selectedLinkData.sourceInterface||'—'}</dd></div><div><dt>Destino</dt><dd>{selectedLinkData.targetInterface||'—'}</dd></div><div><dt>Tipo</dt><dd>{selectedLinkData.linkType}</dd></div><div><dt>Capacidade</dt><dd>{selectedLinkData.bandwidthMbps?`${selectedLinkData.bandwidthMbps} Mbps`:'Não informada'}</dd></div><div><dt>Descoberta</dt><dd>{selectedLinkData.source}</dd></div></dl>{isAdmin&&<button className="btn btn-danger" onClick={()=>removeLink(selectedLinkData.id)}>Remover conexão</button>}</aside>}
     </div>}
 
-    {showLink&&<div className="modal-overlay"><form className="modal card topology-link-modal" onSubmit={createLink}><h3><Link2 size={19}/> Adicionar conexão</h3><label>Origem<select className="form-select" required value={linkForm.sourceDeviceId} onChange={e=>setLinkForm({...linkForm,sourceDeviceId:e.target.value})}><option value="">Selecione</option>{data.nodes.map(node=><option key={node.id} value={node.id}>{node.name} · {node.hostname}</option>)}</select></label><label>Destino<select className="form-select" required value={linkForm.targetDeviceId} onChange={e=>setLinkForm({...linkForm,targetDeviceId:e.target.value})}><option value="">Selecione</option>{data.nodes.map(node=><option key={node.id} value={node.id}>{node.name} · {node.hostname}</option>)}</select></label><label>Tipo<select className="form-select" value={linkForm.linkType} onChange={e=>setLinkForm({...linkForm,linkType:e.target.value})}><option value="ethernet">Ethernet</option><option value="fiber">Fibra</option><option value="wireless">Wireless</option><option value="vpn">VPN</option><option value="logical">Lógica</option></select></label><label>Identificação<input className="form-input" maxLength="100" placeholder="Ex.: ether1 ↔ GE0/0/1" value={linkForm.label} onChange={e=>setLinkForm({...linkForm,label:e.target.value})}/></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={()=>setShowLink(false)}>Cancelar</button><button className="btn btn-primary" disabled={busy}><Link2 size={15}/> Adicionar</button></div></form></div>}
+    {showLink&&<div className="modal-overlay"><form className="modal card topology-link-modal" onSubmit={createLink}><h3><Link2 size={19}/> Adicionar conexão</h3><label>Origem<select className="form-select" required value={linkForm.sourceDeviceId} onChange={e=>setLinkForm({...linkForm,sourceDeviceId:e.target.value})}><option value="">Selecione</option>{data.nodes.map(node=><option key={node.id} value={node.id}>{node.name} · {node.hostname}</option>)}</select></label><label>Interface de origem<input className="form-input" maxLength="100" placeholder="Ex.: ether1 ou GE0/0/1" value={linkForm.sourceInterface} onChange={e=>setLinkForm({...linkForm,sourceInterface:e.target.value})}/></label><label>Destino<select className="form-select" required value={linkForm.targetDeviceId} onChange={e=>setLinkForm({...linkForm,targetDeviceId:e.target.value})}><option value="">Selecione</option>{data.nodes.map(node=><option key={node.id} value={node.id}>{node.name} · {node.hostname}</option>)}</select></label><label>Interface de destino<input className="form-input" maxLength="100" placeholder="Ex.: sfp-sfpplus1" value={linkForm.targetInterface} onChange={e=>setLinkForm({...linkForm,targetInterface:e.target.value})}/></label><label>Tipo<select className="form-select" value={linkForm.linkType} onChange={e=>setLinkForm({...linkForm,linkType:e.target.value})}><option value="ethernet">Ethernet</option><option value="fiber">Fibra</option><option value="wireless">Wireless</option><option value="vpn">VPN</option><option value="logical">Lógica</option></select></label><label>Capacidade (Mbps)<input className="form-input" type="number" min="1" max="1000000" placeholder="Ex.: 1000" value={linkForm.bandwidthMbps} onChange={e=>setLinkForm({...linkForm,bandwidthMbps:e.target.value})}/></label><label>Identificação<input className="form-input" maxLength="100" placeholder="Ex.: Uplink principal" value={linkForm.label} onChange={e=>setLinkForm({...linkForm,label:e.target.value})}/></label><div className="modal-actions"><button type="button" className="btn btn-secondary" onClick={()=>setShowLink(false)}>Cancelar</button><button className="btn btn-primary" disabled={busy}><Link2 size={15}/> Adicionar</button></div></form></div>}
     {showDiscovery&&<div className="modal-overlay topology-discovery-overlay"><section className="modal card topology-discovery-modal">
       <header><div><h3><ScanSearch size={20}/> Descoberta LLDP/MNDP</h3><p>Consulta somente leitura nos equipamentos MikroTik e Huawei cadastrados.</p></div><button className="btn-ghost" onClick={()=>setShowDiscovery(false)}>×</button></header>
       <div className="topology-discovery-run">

@@ -3,6 +3,7 @@ import prisma from '../database/client.js';
 import { createTopologyLink, saveTopologyPositions, topologyDashboard } from '../services/topology.service.js';
 import { approveTopologyNeighbor, ignoreTopologyNeighbor, startTopologyDiscovery, topologyDiscoveryDashboard } from '../services/topology-discovery.service.js';
 import { logAudit, requestIdentity } from '../services/audit.service.js';
+import { cmdbOperationalContext } from '../services/cmdb-operational-context.service.js';
 
 const router = Router();
 const admin = (req, res, next) => req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem editar o mapa' });
@@ -10,6 +11,8 @@ const admin = (req, res, next) => req.user.role === 'admin' ? next() : res.statu
 router.get('/', async (req, res, next) => {
   try { res.json({ success: true, data: await topologyDashboard() }); } catch (error) { next(error); }
 });
+
+router.get('/impact/:deviceId',async(req,res,next)=>{try{const device=await prisma.device.findFirst({where:{id:req.params.deviceId,isActive:true,...(req.user.tenantId&&{tenantId:req.user.tenantId})},select:{id:true}});if(!device)return res.status(404).json({success:false,error:'Equipamento não encontrado'});res.json({success:true,data:await cmdbOperationalContext([device.id])});}catch(error){next(error);}});
 
 router.get('/discovery', admin, async (req,res,next)=>{
   try{res.json({success:true,data:await topologyDiscoveryDashboard()});}catch(error){next(error);}

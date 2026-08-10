@@ -2213,6 +2213,7 @@ a.executive-health-card:hover { transform:translateY(-2px); border-color:var(--b
 .topology-link text { fill: var(--text-muted); font-size: 9px; pointer-events: none; }
 .topology-link .topology-link-label { font-size: 10px; font-weight: 700; paint-order: stroke; stroke: var(--bg-secondary); stroke-width: 4px; }
 .topology-link:hover line { stroke: var(--danger); stroke-width: 5; }
+.topology-link.health-online line { stroke:var(--success); }.topology-link.health-warning line { stroke:var(--warning); }.topology-link.health-critical line { stroke:var(--danger); stroke-width:4; }.topology-link.health-unknown line { stroke:var(--text-muted); }.topology-link.selected line { stroke-width:6; filter:drop-shadow(0 0 4px currentColor) }.topology-link.impact-dim,.topology-node.impact-dim { opacity:.16; filter:grayscale(.8) }.topology-node.impact-highlight { box-shadow:0 0 0 3px color-mix(in srgb,var(--danger) 35%,transparent),var(--shadow-lg) }
 .topology-node {
   position: absolute;
   display: flex;
@@ -2245,6 +2246,7 @@ a.executive-health-card:hover { transform:translateY(-2px); border-color:var(--b
 .legend-dot { width:9px; height:9px; border-radius:50%; background:var(--text-muted); }
 .legend-dot.online { background:var(--success); } .legend-dot.warning { background:var(--warning); } .legend-dot.critical { background:var(--danger); box-shadow:0 0 7px var(--danger); } .legend-dot.offline { background:#64748b; }
 .legend-line { width:22px; height:0; border-top:3px solid #64748b; } .legend-line.fiber { border-color:#a855f7; } .legend-line.vpn { border-color:#f59e0b; border-top-style:dashed; }
+.legend-line.online{border-color:var(--success)}.legend-line.warning{border-color:var(--warning)}.legend-line.critical{border-color:var(--danger)}
 .topology-workspace-fullscreen { position:fixed; inset:0; z-index:1000; padding:1.25rem; background:var(--bg-primary); overflow:auto; }
 .topology-node-icon b { position: absolute; right: -7px; bottom: -5px; min-width: 18px; padding: 1px 3px; border-radius: 5px; background: var(--bg-tertiary); color: var(--text-secondary); font-size: .5rem; line-height: 13px; text-align: center; }
 .topology-node.online .topology-node-icon { color: var(--success); }
@@ -2270,6 +2272,7 @@ a.executive-health-card:hover { transform:translateY(-2px); border-color:var(--b
 .topology-incidents { margin-top: 1rem; }.topology-incidents h4 { margin-bottom: .4rem; font-size: .75rem; }
 .topology-incidents a { display: block; padding: .4rem; color: var(--danger); font-size: .7rem; }
 .topology-actions { display: flex; gap: .4rem; margin-top: 1rem; }.topology-actions .btn { flex: 1; padding: .5rem; font-size: .68rem; }
+.topology-impact-button{width:100%;margin-top:.7rem}.topology-impact-summary{display:grid;gap:.3rem;margin-top:.8rem;padding:.65rem;border:1px solid color-mix(in srgb,var(--danger) 30%,var(--border-primary));border-radius:var(--radius-md);background:color-mix(in srgb,var(--danger) 7%,transparent);font-size:.7rem}.topology-impact-summary span{color:var(--text-secondary)}.topology-impact-summary small{color:var(--warning)}.topology-link-detail .btn-danger{width:100%;margin-top:.7rem}
 .topology-link-modal { width: min(460px, 100%); padding: 1.2rem; }
 .topology-link-modal h3 { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; }
 .topology-link-modal label { display: grid; gap: .35rem; margin-bottom: .75rem; color: var(--text-secondary); font-size: .75rem; font-weight: 600; }

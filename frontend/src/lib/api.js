@@ -228,6 +228,7 @@ export const api = {
     return {blob:await res.blob(),filename:res.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||'capacidade.csv'};
   },
   getTopology: () => request('/topology'),
+  getTopologyImpact: deviceId => request(`/topology/impact/${deviceId}`),
   saveTopologyPositions: positions => request('/topology/positions',{method:'PUT',body:JSON.stringify({positions})}),
   createTopologyLink: data => request('/topology/links',{method:'POST',body:JSON.stringify(data)}),
   deleteTopologyLink: id => request(`/topology/links/${id}`,{method:'DELETE'}),

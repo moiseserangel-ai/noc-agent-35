@@ -30,7 +30,7 @@ export async function topologyDashboard() {
     },
     orderBy: [{ group: 'asc' }, { name: 'asc' }],
   });
-  const links = await prisma.topologyLink.findMany({ orderBy: { createdAt: 'asc' } });
+  const rawLinks = await prisma.topologyLink.findMany({ orderBy: { createdAt: 'asc' } });
   const nodes = devices.map((device, index) => {
     const snapshot = device.capacitySnapshots[0] || null;
     const position = device.topologyNode || defaultPosition(index, devices.length);
@@ -57,6 +57,8 @@ export async function topologyDashboard() {
     };
   });
   const counts = Object.fromEntries(['online','warning','critical','offline','unknown'].map(status => [status, nodes.filter(node => node.status === status).length]));
+  const byId=new Map(nodes.map(node=>[node.id,node]));
+  const links=rawLinks.map(link=>{const sourceNode=byId.get(link.sourceDeviceId),targetNode=byId.get(link.targetDeviceId),states=[sourceNode?.status,targetNode?.status];const status=states.some(value=>['offline','critical'].includes(value))?'critical':states.includes('warning')?'warning':states.every(value=>value==='online')?'online':'unknown';return{...link,status,statusSource:'endpoints',sourceNode:sourceNode?{id:sourceNode.id,name:sourceNode.name,status:sourceNode.status}:null,targetNode:targetNode?{id:targetNode.id,name:targetNode.name,status:targetNode.status}:null};});
   return {
     nodes,
     links,
@@ -90,13 +92,16 @@ export async function createTopologyLink(input, username) {
   if (!sourceDeviceId || !targetDeviceId || sourceDeviceId === targetDeviceId) throw new Error('Selecione dois equipamentos diferentes');
   const count = await prisma.device.count({ where: { id: { in: [sourceDeviceId, targetDeviceId] }, isActive: true } });
   if (count !== 2) throw new Error('Equipamento de origem ou destino inválido');
-  const [source, target] = [sourceDeviceId, targetDeviceId].sort();
+  const [source, target] = [sourceDeviceId, targetDeviceId].sort(),sameDirection=source===sourceDeviceId;
   const linkType = ['ethernet','fiber','wireless','vpn','logical'].includes(input.linkType) ? input.linkType : 'ethernet';
   return prisma.topologyLink.create({
     data: {
       sourceDeviceId: source,
       targetDeviceId: target,
       label: String(input.label || '').trim().slice(0, 100) || null,
+      sourceInterface:String((sameDirection?input.sourceInterface:input.targetInterface)||'').trim().slice(0,100)||null,
+      targetInterface:String((sameDirection?input.targetInterface:input.sourceInterface)||'').trim().slice(0,100)||null,
+      bandwidthMbps:Number.isInteger(Number(input.bandwidthMbps))&&Number(input.bandwidthMbps)>0?Math.min(Number(input.bandwidthMbps),1000000):null,
       linkType,
       source: 'manual',
       createdBy: username,

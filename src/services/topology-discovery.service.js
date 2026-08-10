@@ -277,11 +277,12 @@ export async function approveTopologyNeighbor(id,username) {
   const neighbor=await prisma.topologyNeighbor.findUnique({where:{id},include:{localDevice:true,matchedDevice:true}});
   if(!neighbor?.matchedDeviceId)throw Object.assign(new Error('Vizinho não relacionado a um equipamento cadastrado'),{statusCode:400});
   const [sourceDeviceId,targetDeviceId]=[neighbor.localDeviceId,neighbor.matchedDeviceId].sort();
+  const sameDirection=sourceDeviceId===neighbor.localDeviceId,sourceInterface=sameDirection?neighbor.localInterface:neighbor.remoteInterface,targetInterface=sameDirection?neighbor.remoteInterface:neighbor.localInterface;
   const label=[neighbor.localInterface,neighbor.remoteInterface].filter(Boolean).join(' ↔ ')||null;
   const link=await prisma.topologyLink.upsert({
     where:{sourceDeviceId_targetDeviceId:{sourceDeviceId,targetDeviceId}},
-    update:{label,source:neighbor.protocol,updatedAt:new Date()},
-    create:{sourceDeviceId,targetDeviceId,label,linkType:'ethernet',source:neighbor.protocol,createdBy:username},
+    update:{label,sourceInterface:sourceInterface||null,targetInterface:targetInterface||null,source:neighbor.protocol,updatedAt:new Date()},
+    create:{sourceDeviceId,targetDeviceId,label,sourceInterface:sourceInterface||null,targetInterface:targetInterface||null,linkType:'ethernet',source:neighbor.protocol,createdBy:username},
   });
   await prisma.topologyNeighbor.updateMany({where:{OR:[
     {localDeviceId:neighbor.localDeviceId,matchedDeviceId:neighbor.matchedDeviceId},
