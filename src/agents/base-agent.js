@@ -90,7 +90,7 @@ export default class BaseAgent {
     const cfg = await getAiConfiguration();
     const risk = CRITICAL_REQUEST.test(String(userMessage)) ? 'critical' : CONFIGURATION_REQUEST.test(String(userMessage)) ? 'diagnostic' : 'simple';
     const selectedPrimary = cfg.routing[risk] || cfg.primary;
-    const order = [...new Set([selectedPrimary, cfg.primary, ...cfg.fallback])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
+    const order = [...new Set([selectedPrimary, cfg.primary, ...cfg.fallback, 'openai', 'gemini', 'claude'])].filter(p => providerRunners[p] && cfg.providers[p]?.apiKey);
     if (!order.length) throw new Error('Nenhum provedor de IA possui API key configurada');
     let lastError;
     for (const provider of order) {
@@ -102,10 +102,12 @@ export default class BaseAgent {
         continue;
       }
       const startedAt = Date.now();
+      let toolStarted = false;
       try {
         logger.info(`[${this.name}] provider=${provider} model=${cfg.providers[provider].model}`);
         if(_context.signal?.aborted)throw Object.assign(new Error('Resposta cancelada pelo usuário'),{name:'AbortError'});
-        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: contextualMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent, signal:_context.signal });
+        const providerEvent = event => { if (event?.type === 'tool_start') toolStarted = true; onEvent?.(event); };
+        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: contextualMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent:providerEvent, signal:_context.signal });
         await recordAiSuccess({ provider, model: cfg.providers[provider].model, agentName: this.name, usage: result.usage, durationMs: Date.now() - startedAt });
         return { ...result, provider, model: cfg.providers[provider].model, knowledgeSources };
       } catch (err) {
@@ -113,6 +115,8 @@ export default class BaseAgent {
         lastError = err;
         const failure = await recordAiFailure({ provider, model: cfg.providers[provider].model, agentName: this.name, error: err, durationMs: Date.now() - startedAt });
         logger.error(`[${this.name}] ${provider} falhou (${failure.kind}): ${err.message}`);
+        if (!failure.retryable || toolStarted) throw err;
+        onEvent?.({ type: 'provider_fallback', provider, reason: failure.kind });
       }
     }
     throw lastError || new Error('Todos os provedores configurados estão temporariamente indisponíveis. Consulte Consumo de IA.');

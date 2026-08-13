@@ -1,0 +1,107 @@
+# Operação do Inspetor de Tráfego NetFlow/IPFIX
+
+## Objetivo e arquitetura
+
+O módulo recebe NetFlow/IPFIX no Akvorado/ClickHouse, consolida amostras a cada cinco minutos e apresenta os resultados no NOC Agent. A detecção é assistida: observar tráfego ou classificar uma anomalia não altera o equipamento. Uma mitigação somente é executada após classificação como ataque, revisão e aprovação explícita de um administrador.
+
+Fluxo operacional: equipamento → coletor Akvorado → ClickHouse → NOC Agent → painel/Task/Telegram. A ausência de payload no NetFlow significa que domínio e aplicação podem ser apenas estimados por DNS e portas.
+
+## Configuração do MikroTik
+
+Substitua `IP_DO_COLETOR` pelo endereço do CT do Akvorado. Confirme a porta configurada no coletor; o exemplo usa UDP 2055. Restrinja o tráfego no firewall para permitir somente equipamento e coletor.
+
+### RouterOS 7
+
+```routeros
+/ip traffic-flow set enabled=yes interfaces=all cache-entries=64k active-flow-timeout=5m inactive-flow-timeout=15s
+/ip traffic-flow target add dst-address=IP_DO_COLETOR port=2055 version=ipfix v9-template-refresh=20 v9-template-timeout=1m comment="NOC Agent: exportacao NetFlow/IPFIX para o coletor"
+```
+
+Se a versão instalada não oferecer `ipfix`, utilize `version=9`. Em equipamentos de alto tráfego, selecione interfaces específicas em vez de `interfaces=all` e acompanhe CPU.
+
+### RouterOS 6
+
+```routeros
+/ip traffic-flow set enabled=yes interfaces=all cache-entries=64k active-flow-timeout=5m inactive-flow-timeout=15s
+/ip traffic-flow target add dst-address=IP_DO_COLETOR port=2055 version=9 v9-template-refresh=20 v9-template-timeout=1m comment="NOC Agent: exportacao NetFlow v9 para o coletor"
+```
+
+### Validação no MikroTik
+
+```routeros
+/ip traffic-flow print detail
+/ip traffic-flow target print detail
+/tool sniffer quick ip-address=IP_DO_COLETOR port=2055
+```
+
+No NOC Agent, abra **Inspeção de tráfego**, use **Coletar agora** e confirme que o equipamento aparece em **Saúde dos exportadores** como Online. O nome do exportador deve corresponder ao equipamento cadastrado para associar incidentes e Tasks corretamente.
+
+## Linha de base e detecção
+
+A linha de base exige 288 amostras, aproximadamente 24 horas com coleta a cada cinco minutos. Antes disso, o painel mostra aprendizado. Depois, desvios são comparados com o percentil 95 recente. Detectores nativos incluem varredura de portas, flood TCP/UDP/ICMP, amplificação UDP, volume anormal e exportador sem comunicação.
+
+Use o perfil por equipamento para ajustar limites e IPs confiáveis. Valores muito baixos geram falsos positivos; altere gradualmente e valide o histórico.
+
+## Regras personalizadas
+
+Uma regra pode filtrar equipamento, protocolo, porta, IP de origem/destino, país e volume mínimo. Antes de salvar, use **Testar sem notificar**: a simulação consulta cinco minutos, não salva, não cria Task e não envia mensagem.
+
+Modos disponíveis:
+
+- Somente painel: registra a anomalia sem ação externa.
+- Criar Task: abre incidente, sem Telegram.
+- Telegram: envia mensagem sem Task.
+- Task + Telegram: abre incidente e envia mensagem.
+
+Configure prioridade, número de coletas para confirmação e intervalo de recorrência. Um Chat ID vazio usa os destinatários globais.
+
+## Silenciamento e recorrência
+
+Use **Silenciamento programado** para manutenção. Escolha equipamento/regra, início, fim e motivo. Durante a janela, a ocorrência fica registrada como suprimida, mas não cria Task, notificação ou mitigação.
+
+O controle de recorrência evita ações repetidas para o mesmo evento depois de uma ocorrência recente. O padrão global é 60 minutos e pode ser substituído por regra. A recorrência é registrada na anomalia e, quando houver, na linha do tempo da Task anterior.
+
+## Notificações
+
+O histórico informa canal, destinatário, data, status e falha resumida. Somente administradores podem reenviar Telegram/WhatsApp; o reenvio exige confirmação e gera novo registro auditável. Para falhas, valide token, Chat ID, conectividade DNS/HTTPS e a configuração global de notificações.
+
+## Saúde dos exportadores
+
+Estados: Online (há fluxo recente), Atrasado (dentro da tolerância) e Sem comunicação (tolerância excedida). O padrão é 15 minutos e criação de Task. O monitor respeita silenciamentos, não duplica incidentes e resolve automaticamente a Task quando a exportação retorna.
+
+Antes de concluir que o roteador caiu, valide rota e firewall UDP, alvo do traffic-flow, relógio/NTP, nome do exportador, CPU e serviço do coletor.
+
+## Classificação e mitigação assistida
+
+Classifique como ataque, falso positivo ou tráfego legítimo e informe justificativa. Falso positivo e legítimo suprimem eventos equivalentes por 30 dias.
+
+A mitigação aceita somente anomalia confirmada como ataque e IP público externo. O sistema recusa endereços privados, reservados, DNS públicos protegidos e ativos existentes no CMDB/IPAM. Antes da mudança, cria backup do MikroTik; exige regra `drop` previamente controlada para a address-list `NOC-ASSISTED-BLOCK`; aplica bloqueio temporário com comentário, valida e mantém rollback. Nunca aprove uma mitigação sem revisar origem, destino, impacto e comando.
+
+## Retenção
+
+Padrões: métricas 30 dias; anomalias, notificações e silenciamentos 180 dias; fluxos brutos 15 dias. A limpeza automática roda no máximo uma vez ao dia. A prévia mostra quantidades elegíveis. A limpeza manual exige confirmação e preserva anomalias ativas.
+
+Antes de reduzir prazos, confirme requisitos contratuais, forenses e de compliance. Exporte relatórios necessários e mantenha backup do banco.
+
+## Diagnóstico rápido
+
+1. Confirme que o exportador aparece e atualiza a última coleta.
+2. Valide UDP entre roteador e coletor.
+3. Verifique o alvo e a versão NetFlow/IPFIX no RouterOS.
+4. Teste a integração do inspetor e a consulta dos últimos cinco minutos.
+5. Verifique silenciamentos, IPs confiáveis, recorrência e limites do perfil.
+6. Consulte o histórico de notificações e os logs do NOC Agent/Akvorado.
+7. Não desligue detectores nem reduza limites de forma ampla durante uma investigação.
+
+## Checklist de mudança
+
+- Backup atual do equipamento disponível.
+- Coletor, IP, porta e protocolo documentados.
+- Firewall permite apenas origem/destino necessários.
+- CPU e volume do roteador observados após ativação.
+- Exportador Online no painel.
+- Regra testada antes de ativar.
+- Canal de notificação validado.
+- Janela de manutenção cadastrada quando aplicável.
+- Evidências e justificativa registradas na Task.
+- Recuperação e rollback validados.

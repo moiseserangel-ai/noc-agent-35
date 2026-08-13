@@ -7,14 +7,14 @@ let collecting=false;
 const number=value=>{const parsed=Number(value);return Number.isFinite(parsed)?parsed:null;};
 const round=value=>value===null?null:Math.round(value*100)/100;
 
-async function capacityConfig(){
+export async function capacityConfig(){
   const rows=await prisma.settings.findMany({where:{key:{in:['zabbix_url','zabbix_api_token']}}});
   const values=Object.fromEntries(rows.map(row=>[row.key,row.encrypted?decrypt(row.value):row.value]));
   const base=String(values.zabbix_url||'').trim().replace(/\/+$/,'');
   return {url:base?`${base}${base.endsWith('api_jsonrpc.php')?'':'/api_jsonrpc.php'}`:'',token:String(values.zabbix_api_token||'').trim()};
 }
 
-async function zabbixCall(config,method,params){
+export async function zabbixCall(config,method,params){
   const body={jsonrpc:'2.0',method,params,id:Date.now()};
   const response=await fetch(config.url,{method:'POST',headers:{'content-type':'application/json-rpc','authorization':`Bearer ${config.token}`},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
   const data=await response.json().catch(()=>({}));

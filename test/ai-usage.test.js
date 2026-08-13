@@ -14,4 +14,11 @@ test('distingue cota esgotada de rate limit temporário', () => {
   assert.equal(classifyAiError(Object.assign(new Error('You exceeded your current quota and billing'), { status: 429 })).kind, 'quota');
   assert.equal(classifyAiError(Object.assign(new Error('Too many requests'), { status: 429, retryAfter: '12' })).kind, 'rate_limit');
   assert.equal(classifyAiError(Object.assign(new Error('Unauthorized'), { status: 401 })).kind, 'auth');
+  const anthropicCredit = classifyAiError(Object.assign(new Error('Your credit balance is too low to access the Anthropic API'), { status: 400 }));
+  assert.equal(anthropicCredit.kind, 'quota');
+  assert.equal(anthropicCredit.retryable, true);
+  const geminiTemporary = classifyAiError(Object.assign(new Error('Quota exceeded. Please retry in 18.8s'), { status: 429 }));
+  assert.equal(geminiTemporary.kind, 'rate_limit');
+  assert.equal(geminiTemporary.retryAfterSeconds, 19);
+  assert.equal(classifyAiError(Object.assign(new Error('Invalid request payload'), { status: 400 })).retryable, false);
 });

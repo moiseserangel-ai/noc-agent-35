@@ -23,6 +23,7 @@ import Changes from './pages/Changes.jsx';
 import Discovery from './pages/Discovery.jsx';
 import Capacity from './pages/Capacity.jsx';
 import Topology from './pages/Topology.jsx';
+import FlowInspector from './pages/FlowInspector.jsx';
 import Runbooks from './pages/Runbooks.jsx';
 import Notifications from './pages/Notifications.jsx';
 import OnCall from './pages/OnCall.jsx';
@@ -200,6 +201,7 @@ export default function App() {
               <Route path="discovery" element={user?.role==='admin' ? <Discovery /> : <Navigate to="/" replace />} />
               <Route path="capacity" element={<Capacity isAdmin={user?.role==='admin'} />} />
               <Route path="topology" element={<Topology isAdmin={user?.role==='admin'} />} />
+              <Route path="flow-inspector" element={['admin','operator'].includes(user?.role)?<FlowInspector isAdmin={user?.role==='admin'}/>:<Navigate to="/" replace/>}/>
               <Route path="runbooks" element={['admin','operator'].includes(user?.role) ? <Runbooks isAdmin={user?.role==='admin'} user={user} /> : <Navigate to="/" replace />} />
               <Route path="notifications" element={<Notifications isAdmin={user?.role==='admin'} />} />
               <Route path="on-call" element={user?.role==='admin' ? <OnCall /> : <Navigate to="/" replace />} />

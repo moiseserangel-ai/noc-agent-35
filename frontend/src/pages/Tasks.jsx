@@ -255,14 +255,14 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
                     {workflowForms[t.id]?.note && <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => workflow(t, 'comment')}><MessageSquare size={15} /> Comentar</button>}
                   </div>
                 </div>}
-                {canOperate && ['pending', 'in_progress', 'failed', 'awaiting_approval'].includes(t.status) && <div onClick={e => e.stopPropagation()} style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {canOperate && ['pending', 'in_progress', 'diagnosing', 'failed', 'awaiting_approval'].includes(t.status) && <div onClick={e => e.stopPropagation()} style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   {isAdmin&&t.status==='awaiting_approval'&&<><button className="btn btn-success" disabled={processing===t.id} onClick={()=>approve(t,true)}><ShieldCheck size={15}/> Aprovar e executar</button><button className="btn btn-secondary" disabled={processing===t.id} onClick={()=>approve(t,false)}><XCircle size={15}/> Rejeitar</button></>}
                   <select className="form-select" style={{ maxWidth: 300 }} value={selectedDevices[t.id] || t.deviceId || ''} onChange={e => setSelectedDevices(v => ({ ...v, [t.id]: e.target.value }))}>
                     <option value="">Selecione o equipamento</option>
                     {devices.map(d => <option key={d.id} value={d.id}>{d.name} — {d.hostname}</option>)}
                   </select>
-                  <button className="btn btn-primary" disabled={processing === t.id} onClick={() => reprocess(t)}>
-                    <RefreshCw size={15} /> {processing === t.id ? 'Processando...' : 'Reprocessar com agente'}
+                  <button className="btn btn-primary" disabled={processing === t.id || t.status === 'diagnosing'} onClick={() => reprocess(t)}>
+                    <RefreshCw size={15} /> {processing === t.id || t.status === 'diagnosing' ? 'Processando...' : 'Reprocessar com agente'}
                   </button>
                   <button className="btn btn-secondary" disabled={processing === t.id} onClick={() => complete(t)}>
                     <CheckCircle size={15} /> Concluir manualmente

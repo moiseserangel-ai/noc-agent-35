@@ -1,4 +1,4 @@
-const APPROVAL_SIGNAL = /responda\s+com\s+sim|aguardando\s+aprova[cç][aã]o|modo\s+(?:de\s+)?somente\s+leitura|bloqueio\s+(?:de|para)\s+(?:comandos\s+de\s+)?altera[cç][aã]o|comando\s+de\s+altera[cç][aã]o\s+bloqueado/i;
+const APPROVAL_SIGNAL = /responda\s+com(?:\s|[*_`])+sim|\b(?:sim|aprovar)\b[\s\S]{0,80}\b(?:aplicar|executar|remo[cç][aã]o|altera[cç][aã]o)\b|comandos?\s*\([^)]*sem\s+executar\s+nesta\s+fase[^)]*\)|\bsem\s+executar\s+nesta\s+fase\b|aguardando\s+aprova[cç][aã]o|modo\s+(?:de\s+)?somente\s+leitura|bloqueio\s+(?:de|para)\s+(?:comandos\s+de\s+)?altera[cç][aã]o|comando\s+de\s+altera[cç][aã]o\s+bloqueado/i;
 
 export function specialistResultNeedsApproval(workType, text = '') {
   return workType === 'configuration' || APPROVAL_SIGNAL.test(String(text));

@@ -1,0 +1,22 @@
+<clickhouse>
+  <users>
+    <noc_agent>
+      <!-- Substitua pelo SHA-256 da senha antes do primeiro deploy. -->
+      <password_sha256_hex>CHANGE_ME_SHA256</password_sha256_hex>
+      <networks>
+        <ip>192.168.250.65/32</ip>
+      </networks>
+      <profile>readonly</profile>
+      <quota>default</quota>
+      <access_management>0</access_management>
+    </noc_agent>
+  </users>
+  <profiles>
+    <readonly>
+      <readonly>1</readonly>
+      <max_execution_time>15</max_execution_time>
+      <max_result_rows>10000</max_result_rows>
+      <result_overflow_mode>break</result_overflow_mode>
+    </readonly>
+  </profiles>
+</clickhouse>

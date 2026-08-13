@@ -67,12 +67,25 @@ export async function getAllTasks({ status, source, priority, sla, limit = 50,te
   if (sla === 'breached') where.slaResolveBreachedAt = { not: null };
   if(tenantId)where.tenantId=tenantId;
 
-  return prisma.task.findMany({
-    where,
-    include: { device: true },
-    orderBy: { createdAt: 'desc' },
+  const include = { device: true };
+  if (status) return prisma.task.findMany({ where, include, orderBy: { createdAt: 'desc' }, take: limit });
+
+  // Uma task ativa nunca deve desaparecer atrás do limite do histórico.
+  const terminal = ['resolved', 'completed', 'validated', 'closed', 'cancelled'];
+  const active = await prisma.task.findMany({
+    where: { ...where, status: { notIn: terminal } },
+    include,
+    orderBy: { updatedAt: 'desc' },
     take: limit,
   });
+  if (active.length >= limit) return active;
+  const history = await prisma.task.findMany({
+    where: { ...where, status: { in: terminal }, id: { notIn: active.map(task => task.id) } },
+    include,
+    orderBy: { createdAt: 'desc' },
+    take: limit - active.length,
+  });
+  return [...active, ...history];
 }
 
 export async function getTaskStats(tenantId=null) {

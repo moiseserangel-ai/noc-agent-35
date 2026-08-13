@@ -22,14 +22,16 @@ export function classifyAiError(error) {
   const message = compact(error?.message).toLowerCase();
   const retryAfterHeader = error?.retryAfter || error?.headers?.get?.('retry-after') || error?.headers?.['retry-after'];
   const retryAfter = Math.max(0, Number(retryAfterHeader) || 0);
-  if (status === 429 || /rate.?limit|too many requests/.test(message)) {
-    const quota = /quota|billing|credit|limit:\s*0|exceeded your current quota/.test(message);
-    return { kind: quota ? 'quota' : 'rate_limit', retryAfterSeconds: retryAfter || (quota ? 3600 : 60) };
+  const messageRetry = Number(message.match(/retry in\s+([\d.]+)s/)?.[1] || message.match(/retrydelay["':\s]+([\d.]+)s/)?.[1] || 0);
+  if (/billing|credit balance|credits remaining|insufficient_quota|credit_balance_exhausted|limit:\s*0/.test(message)) {
+    return { kind: 'quota', retryAfterSeconds: retryAfter || 3600, retryable: true };
   }
-  if (status === 401 || status === 403 || /api key|unauthorized|permission/.test(message)) return { kind: 'auth', retryAfterSeconds: 900 };
-  if (status === 404 || /model.*not found|model.*no longer/.test(message)) return { kind: 'model', retryAfterSeconds: 900 };
-  if (status >= 500) return { kind: 'provider', retryAfterSeconds: 60 };
-  return { kind: 'unknown', retryAfterSeconds: 30 };
+  if (status === 429 || /rate.?limit|too many requests|quota exceeded|exceeded your current quota/.test(message)) return { kind: 'rate_limit', retryAfterSeconds: retryAfter || Math.ceil(messageRetry) || 60, retryable: true };
+  if (status === 401 || status === 403 || /api key|unauthorized|permission/.test(message)) return { kind: 'auth', retryAfterSeconds: 900, retryable: true };
+  if (status === 404 || /model.*not found|model.*no longer/.test(message)) return { kind: 'model', retryAfterSeconds: 900, retryable: true };
+  if (status >= 500 || /timeout|timed out|econnreset|econnrefused|enotfound|fetch failed|network/.test(message)) return { kind: 'provider', retryAfterSeconds: 60, retryable: true };
+  if (status >= 400 && status < 500) return { kind: 'request', retryAfterSeconds: 0, retryable: false };
+  return { kind: 'unknown', retryAfterSeconds: 0, retryable: false };
 }
 
 export async function providerAvailability(provider) {
@@ -51,9 +53,9 @@ export async function recordAiSuccess({ provider, model, agentName, usage, durat
 }
 
 export async function recordAiFailure({ provider, model, agentName, error, durationMs }) {
-  const { kind, retryAfterSeconds } = classifyAiError(error);
-  const cooldownUntil = new Date(Date.now() + retryAfterSeconds * 1000);
-  const stateStatus = kind === 'quota' ? 'quota_exhausted' : 'cooldown';
+  const { kind, retryAfterSeconds, retryable } = classifyAiError(error);
+  const cooldownUntil = retryable ? new Date(Date.now() + retryAfterSeconds * 1000) : null;
+  const stateStatus = kind === 'quota' ? 'quota_exhausted' : retryable ? 'cooldown' : 'available';
   await prisma.$transaction([
     prisma.aiUsageLog.create({ data: { provider, model, agentName, status: 'error', errorKind: kind, errorMessage: compact(error?.message), durationMs } }),
     prisma.aiProviderState.upsert({
@@ -62,7 +64,7 @@ export async function recordAiFailure({ provider, model, agentName, error, durat
       update: { status: stateStatus, reason: compact(error?.message), cooldownUntil, consecutiveErrors: { increment: 1 }, lastErrorAt: new Date() },
     }),
   ]);
-  return { kind, cooldownUntil };
+  return { kind, cooldownUntil, retryable };
 }
 
 export async function recordAiSkipped({ provider, model, agentName, reason }) {

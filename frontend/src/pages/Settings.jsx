@@ -10,7 +10,7 @@ const SECTIONS = [
     fields: [
       { key: 'ai_provider', label: 'Provedor principal', type: 'select', options: [['claude','Claude'],['openai','OpenAI'],['gemini','Gemini']] },
       { key: 'ai_incident_mode', label: 'Automação de incidentes', type: 'select', defaultValue: 'hybrid', options: [['hybrid','Híbrido — automático apenas High/Disaster'],['manual','Manual — IA somente pelo botão'],['automatic','Automático — IA em todos os alertas']], helperText: 'No modo híbrido, Warning e Average criam a Task sem consumir IA.' },
-      { key: 'ai_fallback_order', label: 'Ordem de fallback', type: 'text', placeholder: 'openai,gemini,claude', helperText: 'Lista separada por vírgulas. Provedores sem chave são ignorados.' },
+      { key: 'ai_fallback_order', label: 'Ordem de fallback', type: 'text', placeholder: 'openai,gemini,claude', helperText: 'Prioridade opcional. Mesmo vazio, o sistema tenta automaticamente todos os provedores com chave configurada.' },
       { key: 'ai_simple_provider', label: 'Provedor para consultas simples', type: 'select', defaultValue: 'openai', options: [['openai','OpenAI'],['gemini','Gemini'],['claude','Claude']] },
       { key: 'ai_diagnostic_provider', label: 'Provedor para diagnóstico/configuração', type: 'select', defaultValue: 'openai', options: [['openai','OpenAI'],['claude','Claude'],['gemini','Gemini']] },
       { key: 'ai_critical_provider', label: 'Provedor para mudanças críticas', type: 'select', defaultValue: 'claude', options: [['claude','Claude'],['openai','OpenAI'],['gemini','Gemini']], helperText: 'Usado como primeira opção em incidentes críticos e alterações de alto risco.' },

@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { path: '/discovery', label: 'Descoberta de rede', icon: Radar, roles: ['admin'] },
   { path: '/capacity', label: 'Capacidade', icon: Gauge },
   { path: '/topology', label: 'Mapa de rede', icon: Network },
+  { path: '/flow-inspector', label: 'Inspeção de tráfego', icon: Activity, roles: ['admin','operator'] },
   { path: '/tasks', label: 'Tasks', icon: ListTodo },
   { path: '/notifications', label: 'Notificações', icon: Bell },
   { path: '/on-call', label: 'Plantão NOC', icon: CalendarClock, roles: ['admin'] },

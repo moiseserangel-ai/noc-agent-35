@@ -1517,13 +1517,129 @@ model TopologyLink {
   bandwidthMbps  Int?
   linkType       String   @default("ethernet") // ethernet|fiber|wireless|vpn|logical
   source         String   @default("manual") // manual|lldp|cdp
+  monitoringEnabled Boolean @default(true)
+  warningUtilization Float @default(75)
+  criticalUtilization Float @default(90)
+  warningLatencyMs Float @default(100)
+  warningPacketLoss Float @default(5)
+  confirmationSamples Int @default(2)
+  recoverySamples Int @default(2)
+  degradationState String @default("normal") // normal|degraded
+  activeTaskId String?
+  degradationStartedAt DateTime?
   createdBy      String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  telemetry      TopologyLinkTelemetry[]
 
   @@unique([sourceDeviceId, targetDeviceId])
   @@index([targetDeviceId])
   @@index([source, updatedAt])
+}
+
+model TopologyLinkTelemetry {
+  id              String       @id @default(uuid())
+  linkId          String
+  link            TopologyLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  inputBps        Float?
+  outputBps       Float?
+  capacityBps     Float?
+  utilization    Float?
+  latencyMs       Float?
+  baselineLatencyMs Float?
+  latencyDeviationPct Float?
+  latencyAnomaly  Boolean      @default(false)
+  anomalyReason   String?
+  packetLoss      Float?
+  status          String       @default("unknown") // online|warning|critical|unknown
+  evidence        String?
+  collectedAt     DateTime     @default(now())
+
+  @@index([linkId, collectedAt])
+  @@index([collectedAt])
+}
+
+model FlowMetricSnapshot {
+  id              String   @id @default(uuid())
+  exporterAddress String
+  exporterName    String
+  flows           Int
+  bytes           Float
+  packets         Float
+  uniqueSources   Int
+  uniqueDestinations Int
+  topSource       String?
+  topDestination  String?
+  topPort         Int?
+  anomalyScore    Float    @default(0)
+  learning        Boolean  @default(true)
+  collectedAt     DateTime @default(now())
+
+  @@index([exporterName, collectedAt])
+  @@index([collectedAt])
+}
+
+model FlowAnomaly {
+  id              String   @id @default(uuid())
+  fingerprint     String   @unique
+  exporterAddress String
+  exporterName    String
+  type            String
+  severity        String
+  title           String
+  description     String
+  evidence        String?
+  sourceAddress   String?
+  destinationAddress String?
+  protocol        String?
+  port            Int?
+  flows           Int?
+  packets         Float?
+  bytes           Float?
+  confidence      Int      @default(50)
+  incidentKey     String?
+  consecutiveCount Int     @default(1)
+  recoveryCount   Int      @default(0)
+  taskId          String?
+  status          String   @default("observed") // observed|confirmed|resolved|suppressed
+  classification  String?  // attack|false_positive|legitimate
+  classifiedBy    String?
+  classifiedAt    DateTime?
+  resolution      String?
+  firstSeenAt     DateTime
+  lastSeenAt      DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, lastSeenAt])
+  @@index([exporterName, lastSeenAt])
+  @@index([incidentKey, status])
+}
+
+model FlowMitigation {
+  id              String   @id @default(uuid())
+  anomalyId       String
+  taskId          String?
+  deviceId        String
+  deviceName      String
+  targetIp        String
+  addressList     String   @default("NOC-ASSISTED-BLOCK")
+  durationMinutes Int      @default(30)
+  command         String
+  validationCommand String
+  rollbackCommand String
+  status          String   @default("proposed") // proposed|active|expired|rolled_back|rejected|failed
+  requestedBy     String
+  approvedBy      String?
+  approvedAt      DateTime?
+  executedAt      DateTime?
+  expiresAt       DateTime?
+  result          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([anomalyId, status])
+  @@index([status, expiresAt])
 }
 
 model TopologySnapshot {

@@ -6,6 +6,7 @@ import { logAudit, requestIdentity } from '../services/audit.service.js';
 import { cmdbOperationalContext } from '../services/cmdb-operational-context.service.js';
 import { captureTopologySnapshot, compareTopologySnapshots, createTopologyChangeTask, listTopologySnapshots, setTopologyBaseline } from '../services/topology-history.service.js';
 import { topologyPdf } from '../services/topology-export.service.js';
+import { collectTopologyLinkTelemetry, topologyLinkTelemetryHistory, updateTopologyLinkPolicy } from '../services/topology-telemetry.service.js';
 
 const router = Router();
 const admin = (req, res, next) => req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem editar o mapa' });
@@ -21,6 +22,9 @@ router.post('/history/:id/baseline',admin,async(req,res,next)=>{try{const row=aw
 router.get('/history/compare',async(req,res,next)=>{try{res.json({success:true,data:await compareTopologySnapshots(String(req.query.from||''),String(req.query.to||''))});}catch(error){next(error);}});
 router.post('/history/change-task',admin,async(req,res,next)=>{try{const result=await createTopologyChangeTask(String(req.body.from||''),String(req.body.to||''),req.user.username);res.status(result.existing?200:201).json({success:true,data:{id:result.task.id,taskNumber:result.task.taskNumber},message:result.existing?`Task #TASK-${result.task.taskNumber} já acompanha esta mudança`:`Task #TASK-${result.task.taskNumber} criada`});}catch(error){next(error);}});
 router.post('/export.pdf',async(req,res,next)=>{try{const pdf=await topologyPdf(req.body);await logAudit({...requestIdentity(req),action:'export_pdf',resource:'topology',status:'success',details:{scope:req.body.scope||'network',devices:Array.isArray(req.body.deviceIds)?req.body.deviceIds.length:null}});res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition',`attachment; filename="mapa-rede-${new Date().toISOString().slice(0,10)}.pdf"`);res.send(pdf);}catch(error){next(error);}});
+router.post('/telemetry/collect',admin,async(req,res,next)=>{try{const result=await collectTopologyLinkTelemetry({username:req.user.username});res.json({success:true,data:result,message:`Telemetria coletada para ${result.collected} conexão(ões)`});}catch(error){next(error);}});
+router.get('/links/:id/telemetry',async(req,res,next)=>{try{res.json({success:true,data:await topologyLinkTelemetryHistory(req.params.id,req.query.hours)});}catch(error){next(error);}});
+router.patch('/links/:id/policy',admin,async(req,res,next)=>{try{const row=await updateTopologyLinkPolicy(req.params.id,req.body);await logAudit({...requestIdentity(req),action:'update_policy',resource:'topology_link',resourceId:row.id,status:'success',details:req.body});res.json({success:true,data:row,message:'Política de monitoramento atualizada'});}catch(error){next(error);}});
 
 router.get('/discovery', admin, async (req,res,next)=>{
   try{res.json({success:true,data:await topologyDiscoveryDashboard()});}catch(error){next(error);}

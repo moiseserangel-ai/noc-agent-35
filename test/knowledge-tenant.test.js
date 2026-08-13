@@ -17,7 +17,7 @@ test('tenant search sees shared documents and its own documents only', () => {
   assert.match(service, /OR: tenantId \? \[\{ tenantId: null \}, \{ tenantId \}\] : \[\{ tenantId: null \}\]/);
   assert.doesNotMatch(service, /in: \[null, tenantId\]/);
   assert.match(service, /knowledgeContext\(query, agentName, tenantId = undefined\)/);
-  assert.match(agent, /knowledgeContext\(userMessage, this\.name, tenantId\)/);
+  assert.match(agent, /knowledgeContext\(knowledgeQuery, this\.name, tenantId\)/);
 });
 
 test('knowledge routes validate tenant ownership metadata', () => {

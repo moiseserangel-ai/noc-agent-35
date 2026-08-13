@@ -31,7 +31,7 @@ export async function topologyDashboard() {
     },
     orderBy: [{ group: 'asc' }, { name: 'asc' }],
   });
-  const rawLinks = await prisma.topologyLink.findMany({ orderBy: { createdAt: 'asc' } });
+  const rawLinks = await prisma.topologyLink.findMany({ include:{telemetry:{orderBy:{collectedAt:'desc'},take:1}},orderBy: { createdAt: 'asc' } });
   const nodes = devices.map((device, index) => {
     const snapshot = device.capacitySnapshots[0] || null;
     const position = device.topologyNode || defaultPosition(index, devices.length);
@@ -60,7 +60,7 @@ export async function topologyDashboard() {
   });
   const counts = Object.fromEntries(['online','warning','critical','offline','unknown'].map(status => [status, nodes.filter(node => node.status === status).length]));
   const byId=new Map(nodes.map(node=>[node.id,node]));
-  const links=rawLinks.map(link=>{const sourceNode=byId.get(link.sourceDeviceId),targetNode=byId.get(link.targetDeviceId),states=[sourceNode?.status,targetNode?.status];const status=states.some(value=>['offline','critical'].includes(value))?'critical':states.includes('warning')?'warning':states.every(value=>value==='online')?'online':'unknown';return{...link,status,statusSource:'endpoints',sourceNode:sourceNode?{id:sourceNode.id,name:sourceNode.name,status:sourceNode.status}:null,targetNode:targetNode?{id:targetNode.id,name:targetNode.name,status:targetNode.status}:null};});
+  const links=rawLinks.map(link=>{const sourceNode=byId.get(link.sourceDeviceId),targetNode=byId.get(link.targetDeviceId),states=[sourceNode?.status,targetNode?.status],latest=link.telemetry[0]||null,fresh=latest&&Date.now()-new Date(latest.collectedAt).getTime()<20*60_000,endpointStatus=states.some(value=>['offline','critical'].includes(value))?'critical':states.includes('warning')?'warning':states.every(value=>value==='online')?'online':'unknown',status=fresh&&latest.status!=='unknown'?latest.status:endpointStatus;return{...link,telemetry:latest,status,statusSource:fresh&&latest.status!=='unknown'?'zabbix':'endpoints',sourceNode:sourceNode?{id:sourceNode.id,name:sourceNode.name,status:sourceNode.status}:null,targetNode:targetNode?{id:targetNode.id,name:targetNode.name,status:targetNode.status}:null};});
   return {
     nodes,
     links,

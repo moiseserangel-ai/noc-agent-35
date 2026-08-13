@@ -55,6 +55,7 @@ import { resumeKnowledgeImportJobs } from './services/knowledge.service.js';
 import { runDeviceBackupScheduler } from './services/device-backup.service.js';
 import { runComplianceEscalations, runComplianceExceptionReminders, runComplianceScheduler } from './services/compliance.service.js';
 import { runCapacityScheduler } from './services/capacity.service.js';
+import { collectTopologyLinkTelemetry } from './services/topology-telemetry.service.js';
 import { runRunbookScheduleScheduler } from './services/runbook-schedule.service.js';
 import { resumeInterruptedBatches } from './services/runbook-batch.service.js';
 import { syncStatusServices } from './services/status-page.service.js';
@@ -62,6 +63,8 @@ import { runMonthlyReportScheduler } from './services/monthly-report.service.js'
 import { runCmdbInventoryScheduler } from './services/cmdb-inventory.service.js';
 import { runCmdbLifecycleMonitor } from './services/cmdb-lifecycle.service.js';
 import { runVulnerabilityScheduler } from './services/vulnerability.service.js';
+import flowInspectorRoutes from './routes/flow-inspector.routes.js';
+import { runFlowInspectorScheduler } from './services/flow-inspector.service.js';
 import { runCommercialExpiryScheduler } from './services/commercial-expiry.service.js';
 
 import prisma from './database/client.js';
@@ -118,6 +121,7 @@ app.use('/api/changes', authMiddleware,globalOnly, requireRoles('admin', 'operat
 app.use('/api/discovery', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, discoveryRoutes);
 app.use('/api/capacity', authMiddleware,globalOnly, auditMutation, capacityRoutes);
 app.use('/api/topology', authMiddleware,globalOnly, auditMutation, topologyRoutes);
+app.use('/api/flow-inspector',authMiddleware,globalOnly,requireRoles('admin','operator'),auditMutation,flowInspectorRoutes);
 app.use('/api/runbooks', authMiddleware,globalOnly, requireRoles('admin', 'operator'), auditMutation, runbookRoutes);
 app.use('/api/notifications', authMiddleware,globalOnly, auditMutation, notificationRoutes);
 app.use('/api/on-call', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, onCallRoutes);
@@ -205,6 +209,7 @@ io.on('connection', (socket) => {
 
   socket.on('chat:message', async ({ sessionId, message, agentType = 'support', deviceId = null,attachmentIds=[] }) => {
     let responseController=null;
+    let directTask=null;
     try {
       if (socket.user.tenantId) throw new Error('Chat com agentes é restrito à equipe global do NOC');
       if (!['admin', 'operator'].includes(socket.user.role)) throw new Error('Sem permissão para usar agentes');
@@ -219,9 +224,16 @@ io.on('connection', (socket) => {
       }
       const selectedDevice=deviceId?await prisma.device.findFirst({where:{id:String(deviceId),isActive:true},select:{id:true,type:true}}):null;
       if(deviceId&&!selectedDevice)throw new Error('Equipamento fixado não encontrado ou inativo');
+      const directWorkType=agentType!=='support'?inferWorkType(message,'dashboard'):null;
+      if(agentType!=='support'&&directWorkType==='configuration'){
+        if(!selectedDevice)throw new Error('Fixe o equipamento antes de solicitar uma configuração');
+        directTask=await taskService.createTask({source:`dashboard:${sessionId}`,originalMessage:message,deviceId:selectedDevice.id,priority:'medium',workType:'configuration'});
+        await taskService.updateTask(directTask.id,{status:'diagnosing',agentUsed:agentType});
+      }
       const attachments=Array.isArray(attachmentIds)&&attachmentIds.length?await prisma.chatAttachment.findMany({where:{id:{in:attachmentIds.slice(0,5).map(String)},sessionId,messageId:null},orderBy:{createdAt:'asc'}}):[];
       const authorized=attachments.filter(item=>item.authorizedForAi),attachmentContext=authorized.length?`\n\n[ANEXOS AUTORIZADOS PELO USUÁRIO — conteúdo mascarado e limitado]\n${authorized.map(item=>`--- ${item.filename} ---\n${maskChatSecrets(item.content).slice(0,20000)}`).join('\n').slice(0,40000)}`:'';
-      const agentMessage=(selectedDevice?`[EQUIPAMENTO FIXADO PELO USUÁRIO]\nID interno: ${selectedDevice.id}\nTipo: ${selectedDevice.type}\nUse somente o ID interno nas ferramentas; não solicite nem exponha Host/IP ou credenciais.\n\nSolicitação: ${message}`:message)+attachmentContext;
+      const directPlanning=directTask?configurationPlanningInstruction('configuration',directTask.taskNumber):'';
+      const agentMessage=(selectedDevice?`[EQUIPAMENTO FIXADO PELO USUÁRIO]\nID interno: ${selectedDevice.id}\nTipo: ${selectedDevice.type}\nUse somente o ID interno nas ferramentas; não solicite nem exponha Host/IP ou credenciais.\n\nSolicitação: ${message}${directPlanning}`:message)+attachmentContext;
 
       // Save user message
       const savedUserMessage = await prisma.chatMessage.create({
@@ -312,10 +324,18 @@ io.on('connection', (socket) => {
         }
       }, { history, tenantId: socket.user.tenantId || undefined, signal:responseController.signal });
 
+      if(directTask){
+        const proposal=String(result.text||'').includes(`#TASK-${directTask.taskNumber}`)?result.text:`${result.text}\n\nResponda com SIM para aplicar ou NÃO para cancelar. #TASK-${directTask.taskNumber}`;
+        result.text=proposal;
+        await taskService.updateTask(directTask.id,{status:'awaiting_approval',diagnosis:proposal,proposedSolution:proposal});
+        await taskService.addTaskMessage(directTask.id,'agent',proposal,agentType);
+      }
+
       // Handle automatic routing if Support Agent was used
       if (agentType === 'support') {
         const jsonMatch = result.text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
+          let routedTask = null;
           try {
             const classification = JSON.parse(jsonMatch[0]);
             
@@ -337,6 +357,7 @@ io.on('connection', (socket) => {
                   priority: classification.priority || 'medium',
                   workType: inferWorkType(originalRequest, 'dashboard', classification.requestType),
                 });
+                routedTask = dashboardTask;
                 const taskNum = dashboardTask.taskNumber;
                 await taskService.updateTask(dashboardTask.id, { status: 'diagnosing', agentUsed: deviceType });
                 const prompt = `Você recebeu uma solicitação do NOC.
@@ -387,7 +408,14 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
               socket.emit('chat:chunk', { text: answer });
             }
           } catch (e) {
-            logger.warn(`Could not parse JSON for specialist routing: ${e.message}`);
+            if (routedTask) {
+              const failureMessage = `Falha ao processar com o agente especialista: ${e.message}`;
+              await taskService.updateTask(routedTask.id, { status: 'failed', diagnosis: failureMessage });
+              await taskService.addTaskMessage(routedTask.id, 'system', failureMessage);
+              result.text += `\n\n⚠️ **Task #${routedTask.taskNumber} não foi concluída pelo agente.** Ela ficou disponível para reprocessamento ou resolução manual.`;
+              socket.emit('chat:chunk', { text: `\n\n⚠️ **Task #${routedTask.taskNumber} não foi concluída pelo agente.** Ela ficou disponível para reprocessamento ou resolução manual.` });
+              logger.error(`Specialist routing failed for Task #${routedTask.taskNumber}: ${e.message}`);
+            } else logger.warn(`Could not parse JSON for specialist routing: ${e.message}`);
           }
         } else {
           // If no JSON was found, just emit the whole text
@@ -422,6 +450,7 @@ ${configurationPlanningInstruction(dashboardTask.workType, taskNum)}`;
       });
     } catch (err) {
       logger.error(`Chat error: ${err.message}`);
+      if(directTask)await taskService.updateTask(directTask.id,{status:'failed',diagnosis:`Falha ao preparar a mudança: ${err.message}`}).catch(()=>{});
       if(err.name==='AbortError')socket.emit('chat:cancelled',{sessionId});else socket.emit('chat:error', { error: err.message });
     } finally {
       if(responseController&&chatControllers.get(sessionId)===responseController)chatControllers.delete(sessionId);
@@ -524,9 +553,14 @@ runComplianceEscalations(io).catch(err => logger.error(`Initial compliance escal
 
 const capacityMonitor = setInterval(() => {
   runCapacityScheduler().catch(err => logger.error(`Capacity scheduler error: ${err.message}`));
+  collectTopologyLinkTelemetry().catch(err => logger.error(`Topology telemetry scheduler error: ${err.message}`));
 }, 15 * 60_000);
 capacityMonitor.unref();
 runCapacityScheduler().catch(err => logger.error(`Initial capacity scheduler error: ${err.message}`));
+collectTopologyLinkTelemetry().catch(err => logger.error(`Initial topology telemetry scheduler error: ${err.message}`));
+const flowInspectorMonitor=setInterval(()=>runFlowInspectorScheduler(),5*60_000);
+flowInspectorMonitor.unref();
+runFlowInspectorScheduler();
 
 const runbookScheduleMonitor = setInterval(runRunbookScheduleScheduler,60_000);
 runbookScheduleMonitor.unref();
@@ -546,6 +580,7 @@ process.on('SIGTERM', async () => {
   clearInterval(complianceEscalationMonitor);
   clearInterval(commercialExpiryMonitor);
   clearInterval(capacityMonitor);
+  clearInterval(flowInspectorMonitor);
   clearInterval(runbookScheduleMonitor);
   clearInterval(vulnerabilityMonitor);
   logger.info('SIGTERM received, shutting down...');
@@ -564,6 +599,7 @@ process.on('SIGINT', async () => {
   clearInterval(complianceExceptionMonitor);
   clearInterval(complianceEscalationMonitor);
   clearInterval(capacityMonitor);
+  clearInterval(flowInspectorMonitor);
   clearInterval(runbookScheduleMonitor);
   clearInterval(vulnerabilityMonitor);
   logger.info('SIGINT received, shutting down...');
