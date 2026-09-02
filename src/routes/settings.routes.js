@@ -11,7 +11,7 @@ import { listAnthropicModels } from '../services/anthropic-model.service.js';
 
 const router = Router();
 
-const SENSITIVE_KEYS = ['claude_api_key', 'openai_api_key', 'gemini_api_key', 'evolution_api_key', 'telegram_bot_token', 'zabbix_webhook_token', 'zabbix_api_token', 'nvd_api_key', 'netbox_api_token', 'flow_inspector_password', 'dashboard_password', 'encryption_key'];
+const SENSITIVE_KEYS = ['claude_api_key', 'openai_api_key', 'gemini_api_key', 'evolution_api_key', 'telegram_bot_token', 'zabbix_webhook_token', 'zabbix_api_token', 'nvd_api_key', 'abuseipdb_api_key', 'netbox_api_token', 'flow_inspector_password', 'dashboard_password', 'encryption_key'];
 const validateEscalationSettings = settings => {
   const map = Object.fromEntries(settings.map(item => [item.key, item.value]));
   const relevant = settings.some(item => String(item.key).startsWith('critical_escalation_'));

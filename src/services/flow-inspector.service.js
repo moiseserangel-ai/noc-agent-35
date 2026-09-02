@@ -7,6 +7,12 @@ import { addTaskMessage, createTask, updateTask } from "./task.service.js";
 import { executeManagedDeviceCommand } from "./cli.service.js";
 import { logAudit } from "./audit.service.js";
 import {
+  calculateFlowRisk,
+  correlateFlowAnomalies,
+  flowCorrelationKind,
+} from "./flow-correlation.service.js";
+import { cachedIpReputations, enrichConfirmedAnomalyReputation, reputationRiskPoints } from "./ip-reputation.service.js";
+import {
   getNotificationConfig,
   notifyTask,
   retryNotificationLog,
@@ -1379,6 +1385,25 @@ async function detectThreats() {
       anomaly.consecutiveCount >= number(raw.confirmationCount || 2) &&
       anomaly.status === "observed"
     ) {
+      const related = await prisma.flowAnomaly.findMany({
+        where: {
+          id: { not: anomaly.id },
+          status: "confirmed",
+          taskId: { not: null },
+          lastSeenAt: { gte: new Date(Date.now() - 15 * 60000) },
+        },
+        orderBy: { lastSeenAt: "desc" },
+        take: 100,
+      });
+      const parent = related.find(candidate => flowCorrelationKind(anomaly, candidate));
+      if (parent) {
+        const relation = flowCorrelationKind(anomaly, parent), relationLabel = relation === "distributed" ? "possível ataque distribuído contra o mesmo serviço" : relation === "multi_target" ? "mesma origem observada em outro equipamento" : "possível sequência de ataque em portas diferentes";
+        await addTaskMessage(parent.taskId, "system", `Evento correlacionado pelo NetFlow: ${relationLabel}. ${row.sourceAddress || "Origem desconhecida"} → ${row.destinationAddress || "destino múltiplo"} ${row.protocol}${row.port ? `/${row.port}` : ""} em ${row.exporterName}. Nenhuma mitigação foi executada.`);
+        const confirmed = await prisma.flowAnomaly.update({ where: { id: anomaly.id }, data: { status: "confirmed", taskId: parent.taskId } });
+        enrichConfirmedAnomalyReputation(confirmed).catch(() => {});
+        stored++;
+        continue;
+      }
       const device = await prisma.device.findFirst({
           where: {
             OR: [
@@ -1438,6 +1463,7 @@ async function detectThreats() {
         where: { id: anomaly.id },
         data: { status: "confirmed", taskId: task.id },
       });
+      enrichConfirmedAnomalyReputation(anomaly).catch(() => {});
     }
     stored++;
   }
@@ -1766,7 +1792,8 @@ export async function flowInspectorDashboard() {
         row.sourceAddress,
         row.destinationAddress,
       ]),
-    ]);
+    ]),
+    reputations = await cachedIpReputations(anomalies.map(row => row.sourceAddress));
   for (const row of snapshots) {
     const current = learningByExporter.get(row.exporterName) || {
       exporterName: row.exporterName,
@@ -1802,21 +1829,33 @@ export async function flowInspectorDashboard() {
         ),
       };
     }),
+    correlations = correlateFlowAnomalies(anomalies),
+    correlationByAnomaly = new Map(correlations.flatMap(group => group.anomalyIds.map(id => [id, group]))),
     publicAnomalies = anomalies.map((row) => {
       let stored = {};
       try {
         stored = JSON.parse(row.evidence || "{}");
       } catch {}
+      const sourceIdentity = stored.sourceIdentity || inventory.get(stripV4(row.sourceAddress)) || null,
+        destinationIdentity = stored.destinationIdentity || inventory.get(stripV4(row.destinationAddress)) || null,
+        correlation = correlationByAnomaly.get(row.id),
+        reputation = reputations[stripV4(row.sourceAddress)] || null,
+        risk = calculateFlowRisk(row, {
+          relatedEvents: correlation?.eventCount || 1,
+          exporters: correlation?.exporters.length || 1,
+          sources: correlation?.sources.length || (row.sourceAddress ? 1 : 0),
+          protectedDestination: Boolean(destinationIdentity),
+          criticality: destinationIdentity?.criticality,
+        }),
+        riskScore = Math.min(100, risk.score + reputationRiskPoints(reputation));
       return {
         ...row,
-        sourceIdentity:
-          stored.sourceIdentity ||
-          inventory.get(stripV4(row.sourceAddress)) ||
-          null,
-        destinationIdentity:
-          stored.destinationIdentity ||
-          inventory.get(stripV4(row.destinationAddress)) ||
-          null,
+        sourceIdentity,
+        destinationIdentity,
+        riskScore,
+        riskLevel: riskScore >= 80 ? "critical" : riskScore >= 60 ? "high" : riskScore >= 35 ? "medium" : "low",
+        correlationId: correlation?.id || null,
+        reputation,
       };
     });
   const healthConfig = await getFlowExporterHealthConfig(),
@@ -1864,6 +1903,7 @@ export async function flowInspectorDashboard() {
     topPorts,
     snapshots,
     anomalies: publicAnomalies,
+    correlations,
     exporterHealth,
     exporterHealthConfig: healthConfig,
     infrastructure,

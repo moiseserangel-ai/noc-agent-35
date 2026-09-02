@@ -713,6 +713,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ classification, resolution }),
     }),
+  checkFlowIpReputation: (ip) =>
+    request(`/flow-inspector/reputation/${encodeURIComponent(ip)}`, { method: "POST" }),
   getFlowMitigations: () => request("/flow-inspector/mitigations"),
   prepareFlowMitigation: (id, durationMinutes = 30) =>
     request(`/flow-inspector/anomalies/${id}/mitigation`, {
@@ -724,6 +726,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ confirmed: true }),
     }),
+  prepareFlowMitigationBatch: (anomalyIds,durationMinutes=30) => request("/flow-inspector/mitigations/batch/prepare",{method:"POST",body:JSON.stringify({anomalyIds,durationMinutes})}),
+  approveFlowMitigationBatch: (mitigationIds) => request("/flow-inspector/mitigations/batch/approve",{method:"POST",body:JSON.stringify({mitigationIds,confirmed:true})}),
   getTopologyImpact: (deviceId) => request(`/topology/impact/${deviceId}`),
   getTopologyHistory: () => request("/topology/history"),
   createTopologySnapshot: (baseline) =>

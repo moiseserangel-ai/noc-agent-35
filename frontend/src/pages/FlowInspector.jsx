@@ -1276,6 +1276,9 @@ export default function FlowInspector({ isAdmin = false }) {
     [busy, setBusy] = useState(false),
     [selectedExporter, setSelectedExporter] = useState("all"),
     [search, setSearch] = useState(""),
+    [reputationBusy, setReputationBusy] = useState(""),
+    [batchAnomalies, setBatchAnomalies] = useState([]),
+    [batchProposals, setBatchProposals] = useState([]),
     toast = useToast();
   const [trafficFilters, setTrafficFilters] = useState({
       minutes: "15",
@@ -1785,6 +1788,13 @@ export default function FlowInspector({ isAdmin = false }) {
       setBusy(false);
     }
   };
+  const checkReputation = async row => {
+    if (!row.sourceAddress) return;
+    setReputationBusy(row.id);
+    try { const result=await api.checkFlowIpReputation(row.sourceAddress); toast(result.message,"success"); await load(true); }
+    catch(error){ toast(error.message,"error"); }
+    finally { setReputationBusy(""); }
+  };
   const prepareMitigation = async (row) => {
     const duration = Number(
       window.prompt(
@@ -1821,6 +1831,20 @@ export default function FlowInspector({ isAdmin = false }) {
     } finally {
       setBusy(false);
     }
+  };
+  const toggleBatch = (setter,id) => setter(values=>values.includes(id)?values.filter(value=>value!==id):values.length<10?[...values,id]:values);
+  const prepareBatch = async () => {
+    if(batchAnomalies.length<2)return toast("Selecione ao menos dois IPs.","error");
+    const duration=Number(window.prompt("Duração do lote em minutos (5 a 240):","30")); if(!duration)return;
+    setBusy(true);
+    try{const result=await api.prepareFlowMitigationBatch(batchAnomalies,duration);setBatchAnomalies([]);setBatchProposals(result.data.proposals.map(row=>row.id));toast(result.message,"success");await load(true)}catch(error){toast(error.message,"error")}finally{setBusy(false)}
+  };
+  const approveBatch = async () => {
+    if(batchProposals.length<2)return toast("Selecione ao menos duas propostas.","error");
+    const selected=mitigations.filter(row=>batchProposals.includes(row.id));
+    if(!window.confirm(`Aplicar ${selected.length} bloqueios temporários?\n\n${selected.map(row=>`${row.targetIp} → ${row.deviceName}`).join("\n")}\n\nSe um item falhar, todo o lote será revertido.`))return;
+    setBusy(true);
+    try{const result=await api.approveFlowMitigationBatch(batchProposals);setBatchProposals([]);toast(result.message,"success");await load(true)}catch(error){toast(error.message,"error")}finally{setBusy(false)}
   };
   const timeline = useMemo(() => {
     const rows = [...(data?.snapshots || [])]
@@ -1883,6 +1907,9 @@ export default function FlowInspector({ isAdmin = false }) {
     scopedAnomalies = activeAnomalies.filter(
       (row) =>
         selectedExporter === "all" || row.exporterName === selectedExporter,
+    ),
+    scopedCorrelations = (data.correlations || []).filter(
+      (row) => selectedExporter === "all" || row.exporters.includes(selectedExporter),
     ),
     totals = scopedExporters.reduce(
       (sum, row) => ({
@@ -2454,8 +2481,18 @@ export default function FlowInspector({ isAdmin = false }) {
           ) : (
             scopedAnomalies.map((row) => (
               <article className={`flow-anomaly ${row.severity}`} key={row.id}>
-                <strong>{row.title}</strong>
+                <div className="flow-anomaly-head">
+                  <strong>{row.title}</strong>
+                  <span className={`flow-risk ${row.riskLevel}`}>Risco {row.riskScore}/100</span>
+                </div>
                 <p>{row.description}</p>
+                {row.reputation && (
+                  <p className="flow-reputation">
+                    AbuseIPDB: <strong>{row.reputation.abuseConfidenceScore}%</strong> · {row.reputation.totalReports} denúncia(s)
+                    {row.reputation.countryCode ? ` · ${row.reputation.countryCode}` : ""}
+                    {row.reputation.isp ? ` · ${row.reputation.isp}` : ""}
+                  </p>
+                )}
                 {(row.sourceIdentity || row.destinationIdentity) && (
                   <p className="flow-identity">
                     {row.sourceIdentity && (
@@ -2471,11 +2508,36 @@ export default function FlowInspector({ isAdmin = false }) {
                   {row.exporterName} ·{" "}
                   {new Date(row.lastSeenAt).toLocaleString("pt-BR")}
                 </small>
+                {row.sourceAddress && !row.reputation && (
+                  <button className="btn btn-ghost btn-sm flow-reputation-button" disabled={reputationBusy===row.id} onClick={()=>checkReputation(row)}>
+                    {reputationBusy===row.id ? "Consultando..." : "Consultar reputação"}
+                  </button>
+                )}
               </article>
             ))
           )}
         </section>
       </div>
+      {!!scopedCorrelations.length && (
+        <section className="card flow-correlations">
+          <header className="flow-section-title">
+            <div>
+              <span className="flow-kicker">Correlação local</span>
+              <h3>Campanhas e eventos relacionados</h3>
+            </div>
+            <small>Janela móvel de 15 minutos · sem uso de API externa</small>
+          </header>
+          <div className="flow-correlation-grid">
+            {scopedCorrelations.map(row => (
+              <article key={row.id} className={`flow-correlation ${row.riskLevel}`}>
+                <div><strong>{row.title}</strong><span className={`flow-risk ${row.riskLevel}`}>{row.riskScore}/100</span></div>
+                <p>{row.eventCount} eventos · {row.exporters.length} equipamentos · {row.sources.length} origens</p>
+                <small>{row.exporters.join(" · ")} · última ocorrência {new Date(row.lastSeenAt).toLocaleString("pt-BR")}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       {scopedAnomalies.some(
         (row) =>
           ["observed", "confirmed"].includes(row.status) && !row.classification,
@@ -2498,6 +2560,7 @@ export default function FlowInspector({ isAdmin = false }) {
             )
             .map((row) => (
               <article key={row.id}>
+                <input type="checkbox" aria-label={`Selecionar ${row.sourceAddress} para lote`} checked={batchAnomalies.includes(row.id)} disabled={busy} onChange={()=>toggleBatch(setBatchAnomalies,row.id)}/>
                 <div>
                   <strong>{row.title}</strong>
                   <span>
@@ -2572,8 +2635,10 @@ export default function FlowInspector({ isAdmin = false }) {
                 </button>
               </article>
             ))}
+          {batchAnomalies.length>0&&<div className="flow-batch-bar"><span>{batchAnomalies.length}/10 IPs selecionados</span><button className="btn btn-danger btn-sm" disabled={busy||batchAnomalies.length<2} onClick={prepareBatch}>Preparar lote</button></div>}
           {mitigations.map((row) => (
             <article key={row.id}>
+              {row.status==="proposed"&&isAdmin&&<input type="checkbox" aria-label={`Selecionar proposta ${row.targetIp}`} checked={batchProposals.includes(row.id)} disabled={busy} onChange={()=>toggleBatch(setBatchProposals,row.id)}/>}
               <div>
                 <strong>
                   {row.targetIp} · {row.deviceName}
@@ -2594,6 +2659,7 @@ export default function FlowInspector({ isAdmin = false }) {
               )}
             </article>
           ))}
+          {isAdmin&&batchProposals.length>0&&<div className="flow-batch-bar"><span>{batchProposals.length}/10 propostas revisadas</span><button className="btn btn-danger btn-sm" disabled={busy||batchProposals.length<2} onClick={approveBatch}>Aplicar lote selecionado</button></div>}
         </section>
       )}
     </div>

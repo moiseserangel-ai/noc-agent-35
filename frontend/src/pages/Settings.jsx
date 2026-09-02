@@ -115,6 +115,13 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Inteligência de ameaças', icon: Shield,
+    fields: [
+      { key:'abuseipdb_api_key',label:'API Key do AbuseIPDB',type:'password',placeholder:'Chave privada',helperText:'Consulta reputação de IPs públicos confirmados. A chave é armazenada criptografada.' },
+      { key:'flow_reputation_daily_limit',label:'Limite local diário',type:'number',placeholder:'25',helperText:'Proteção adicional contra consumo excessivo. Resultados ficam em cache por 24 horas.' },
+    ],
+  },
+  {
     title: 'Segurança',
     icon: Key,
     fields: [

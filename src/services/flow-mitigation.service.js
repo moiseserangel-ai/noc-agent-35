@@ -9,6 +9,11 @@ const MAX_ACTIVE_BLOCKS = 20;
 const reservedDns = new Set(['8.8.8.8','8.8.4.4','1.1.1.1','1.0.0.1','9.9.9.9','149.112.112.112']);
 const canonical = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '').split('').sort().join('');
 const quote = value => String(value).replaceAll('\\','\\\\').replaceAll('"','\\"');
+export function normalizeFlowBatchIds(values) {
+  const ids=[...new Set((Array.isArray(values)?values:[]).map(String).map(value=>value.trim()).filter(Boolean))];
+  if(ids.length<2||ids.length>10)throw Object.assign(new Error('Selecione entre 2 e 10 itens para a mitigação em lote'),{statusCode:400});
+  return ids;
+}
 
 export function publicMitigationTarget(ip) {
   if (net.isIP(ip) !== 4 || reservedDns.has(ip)) return false;
@@ -81,6 +86,55 @@ export async function approveFlowMitigation(id, { username, confirmed }) {
   if (!validation.success || !String(validation.output || '').includes(row.targetIp)) { await executeManagedDeviceCommand({ device, command: row.rollbackCommand, changeComment: `Rollback da mitigação ${row.targetIp}`, approved: true, agentName: 'flow-mitigation' }); await prisma.flowMitigation.update({ where: { id }, data: { status: 'failed', approvedBy: username, approvedAt: new Date(), result: 'Validação falhou; rollback executado.' } }); throw new Error('A validação da mitigação falhou; rollback executado automaticamente'); }
   const now = new Date(), updated = await prisma.flowMitigation.update({ where: { id }, data: { status: 'active', approvedBy: username, approvedAt: now, executedAt: now, expiresAt: new Date(now.getTime() + row.durationMinutes * 60000), result: String(validation.output).slice(0,4000) } });
   if (row.taskId) await addTaskMessage(row.taskId, 'system', `Mitigação temporária aprovada por ${username}: IP ${row.targetIp} na lista ${ADDRESS_LIST} por ${row.durationMinutes} minutos.`); return updated;
+}
+
+export async function prepareFlowMitigationBatch(anomalyIds, { durationMinutes = 30, username }) {
+  const ids = normalizeFlowBatchIds(anomalyIds);
+  const anomalies = await prisma.flowAnomaly.findMany({ where:{id:{in:ids}} });
+  if (anomalies.length !== ids.length || anomalies.some(row => row.status !== 'confirmed' || row.classification !== 'attack')) throw Object.assign(new Error('Todas as anomalias do lote devem estar confirmadas como ataque'), { statusCode:409 });
+  const existing=await prisma.flowMitigation.findMany({where:{anomalyId:{in:ids},status:{in:['proposed','active']}}});
+  if(existing.length)throw Object.assign(new Error('Uma ou mais anomalias já possuem mitigação proposta ou ativa'),{statusCode:409});
+  const devices=await prisma.device.findMany({where:{isActive:true,type:'mikrotik'}}),deviceByAnomaly=new Map();
+  for(const anomaly of anomalies){await assertTargetIsSafe(String(anomaly.sourceAddress||''));const device=devices.find(row=>canonical(row.name)===canonical(anomaly.exporterName)||canonical(row.hostname)===canonical(anomaly.exporterName));if(!device)throw Object.assign(new Error(`Não foi possível relacionar ${anomaly.exporterName} a um MikroTik cadastrado`),{statusCode:400});deviceByAnomaly.set(anomaly.id,device)}
+  for(const device of new Set(deviceByAnomaly.values())){const requested=anomalies.filter(row=>deviceByAnomaly.get(row.id).id===device.id).length,active=await prisma.flowMitigation.count({where:{deviceId:device.id,status:'active',expiresAt:{gt:new Date()}}});if(active+requested>MAX_ACTIVE_BLOCKS)throw Object.assign(new Error(`${device.name} excederia o limite de ${MAX_ACTIVE_BLOCKS} bloqueios ativos`),{statusCode:409})}
+  const proposals = [];
+  for (const id of ids) proposals.push(await prepareFlowMitigation(id,{durationMinutes,username}));
+  return { proposals, count:proposals.length, durationMinutes:proposals[0]?.durationMinutes || 30 };
+}
+
+export async function approveFlowMitigationBatch(mitigationIds, { username, confirmed }) {
+  if (confirmed !== true) throw Object.assign(new Error('Confirmação explícita obrigatória'), { statusCode:400 });
+  const ids=normalizeFlowBatchIds(mitigationIds);
+  const rows=await prisma.flowMitigation.findMany({where:{id:{in:ids},status:'proposed'}});
+  if(rows.length!==ids.length)throw Object.assign(new Error('Uma ou mais propostas não estão disponíveis'),{statusCode:409});
+  if(new Set(rows.map(row=>`${row.deviceId}:${row.targetIp}`)).size!==rows.length)throw Object.assign(new Error('O lote contém o mesmo IP duplicado no mesmo equipamento'),{statusCode:400});
+  for(const row of rows)await assertTargetIsSafe(row.targetIp);
+  const devices=new Map();
+  for(const row of rows){if(!devices.has(row.deviceId)){const device=await prisma.device.findUnique({where:{id:row.deviceId}});if(!device||device.type!=='mikrotik')throw Object.assign(new Error(`Equipamento indisponível para ${row.targetIp}`),{statusCode:400});devices.set(row.deviceId,device)}}
+  for(const [deviceId,device] of devices){
+    if(!await managedRulesReady(device))throw Object.assign(new Error(`Execução bloqueada em ${device.name}: regras controladas não estão prontas`),{statusCode:409});
+    const requested=rows.filter(row=>row.deviceId===deviceId).length,current=await activeBlockCount(device);
+    if(current+requested>MAX_ACTIVE_BLOCKS)throw Object.assign(new Error(`${device.name} excederia o limite de ${MAX_ACTIVE_BLOCKS} bloqueios ativos`),{statusCode:409});
+  }
+  for(const device of devices.values())await runDeviceBackup(device.id,{type:'pre_mitigation',username});
+  const applied=[];
+  try{
+    for(const row of rows){
+      const device=devices.get(row.deviceId),result=await executeManagedDeviceCommand({device,command:row.command,changeComment:`Mitigação assistida em lote do IP ${row.targetIp}`,approved:true,agentName:'flow-mitigation'});
+      if(!result.success)throw new Error(`${row.targetIp}: ${result.output||'falha na aplicação'}`);
+      applied.push(row);
+      const validation=await executeManagedDeviceCommand({device,command:row.validationCommand,approved:false});
+      if(!validation.success||!String(validation.output||'').includes(row.targetIp))throw new Error(`${row.targetIp}: validação não confirmou o bloqueio`);
+    }
+  }catch(error){
+    for(const row of [...applied].reverse())await executeManagedDeviceCommand({device:devices.get(row.deviceId),command:row.rollbackCommand,changeComment:`Rollback integral do lote: ${row.targetIp}`,approved:true,agentName:'flow-mitigation'}).catch(()=>{});
+    await prisma.flowMitigation.updateMany({where:{id:{in:ids}},data:{status:'failed',approvedBy:username,approvedAt:new Date(),result:`Lote revertido integralmente: ${String(error.message).slice(0,3500)}`}});
+    throw new Error(`Falha na mitigação em lote; ${applied.length} alteração(ões) revertida(s). ${error.message}`);
+  }
+  const now=new Date();
+  for(const row of rows)await prisma.flowMitigation.update({where:{id:row.id},data:{status:'active',approvedBy:username,approvedAt:now,executedAt:now,expiresAt:new Date(now.getTime()+row.durationMinutes*60000),result:'Aplicado e validado como parte de mitigação supervisionada em lote.'}});
+  for(const taskId of new Set(rows.map(row=>row.taskId).filter(Boolean)))await addTaskMessage(taskId,'system',`Mitigação supervisionada em lote aprovada por ${username}: ${rows.length} IP(s), duração de até ${Math.max(...rows.map(row=>row.durationMinutes))} minutos. Todos os itens foram validados.`);
+  return {status:'active',count:rows.length,ids,executedAt:now};
 }
 
 export async function listFlowMitigations() { const now = new Date(); await prisma.flowMitigation.updateMany({ where: { status: 'active', expiresAt: { lte: now } }, data: { status: 'expired' } }); return prisma.flowMitigation.findMany({ orderBy: { createdAt: 'desc' }, take: 100 }); }

@@ -29,8 +29,10 @@ import {
 } from "../services/flow-inspector.service.js";
 import {
   approveFlowMitigation,
+  approveFlowMitigationBatch,
   listFlowMitigations,
   prepareFlowMitigation,
+  prepareFlowMitigationBatch,
 } from "../services/flow-mitigation.service.js";
 import {
   getFlowIntegration,
@@ -38,6 +40,7 @@ import {
   saveFlowIntegration,
   testFlowIntegration,
 } from "../services/flow-integration.service.js";
+import { getIpReputation } from "../services/ip-reputation.service.js";
 const router = Router();
 router.get("/integration", async (req, res, next) => {
   try {
@@ -117,6 +120,10 @@ router.get("/test", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+router.post("/reputation/:ip", async (req,res,next)=>{
+  try { res.json({success:true,data:await getIpReputation(req.params.ip),message:"Reputação consultada e armazenada em cache"}); }
+  catch(error){ next(error); }
 });
 router.get("/search", async (req, res, next) => {
   try {
@@ -410,6 +417,8 @@ router.post("/anomalies/:id/mitigation", async (req, res, next) => {
     next(error);
   }
 });
+router.post("/mitigations/batch/prepare",async(req,res,next)=>{try{res.status(201).json({success:true,data:await prepareFlowMitigationBatch(req.body.anomalyIds,{durationMinutes:req.body.durationMinutes,username:req.user.username}),message:"Proposta em lote preparada para revisão"})}catch(error){next(error)}});
+router.post("/mitigations/batch/approve",async(req,res,next)=>{try{if(req.user.role!=="admin")return res.status(403).json({success:false,error:"Somente administradores podem executar mitigação em lote"});res.json({success:true,data:await approveFlowMitigationBatch(req.body.mitigationIds,{username:req.user.username,confirmed:req.body.confirmed}),message:"Mitigação em lote aplicada e validada"})}catch(error){next(error)}});
 router.post("/mitigations/:id/approve", async (req, res, next) => {
   try {
     if (req.user.role !== "admin")

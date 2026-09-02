@@ -248,6 +248,37 @@
 .flow-anomaly small {
   color: var(--text-secondary);
 }
+.flow-reputation { color: var(--text-secondary); }
+.flow-reputation strong { color: var(--danger); }
+.flow-reputation-button { margin-top: 0.45rem; }
+.flow-batch-bar { position: sticky; bottom: 0.75rem; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem; margin: 0.6rem 0; border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border-primary)); border-radius: 9px; background: color-mix(in srgb, var(--bg-primary) 92%, transparent); box-shadow: var(--shadow-md); }
+.flow-batch-bar span { font-size: 0.75rem; font-weight: 700; }
+.flow-anomaly-head,
+.flow-correlation > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.flow-risk {
+  flex: 0 0 auto;
+  padding: 0.18rem 0.42rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warning) 14%, var(--bg-secondary));
+  color: var(--warning);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+.flow-risk.high,
+.flow-risk.critical { background: color-mix(in srgb, var(--danger) 13%, var(--bg-secondary)); color: var(--danger); }
+.flow-risk.low { background: color-mix(in srgb, var(--success) 13%, var(--bg-secondary)); color: var(--success); }
+.flow-correlations { margin-top: 1rem; }
+.flow-correlation-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.65rem; }
+.flow-correlation { padding: 0.8rem; border: 1px solid var(--border-primary); border-left: 3px solid var(--warning); border-radius: 8px; background: var(--bg-secondary); }
+.flow-correlation.high,
+.flow-correlation.critical { border-left-color: var(--danger); }
+.flow-correlation p { margin: 0.4rem 0; font-size: 0.75rem; }
+.flow-correlation small { color: var(--text-secondary); }
 .flow-safe {
   min-height: 150px;
 }

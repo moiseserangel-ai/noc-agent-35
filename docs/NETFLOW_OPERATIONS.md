@@ -46,6 +46,22 @@ A linha de base exige 288 amostras, aproximadamente 24 horas com coleta a cada c
 
 Use o perfil por equipamento para ajustar limites e IPs confiáveis. Valores muito baixos geram falsos positivos; altere gradualmente e valide o histórico.
 
+## Correlação local e pontuação de risco
+
+O painel correlaciona anomalias ativas em uma janela móvel de 15 minutos, sem consultar APIs externas. São reconhecidos três padrões: a mesma origem em vários equipamentos, várias origens contra o mesmo destino e serviço, e uma possível sequência de ataque em portas diferentes. O agrupamento mostra eventos, equipamentos, origens e risco consolidado.
+
+Cada anomalia recebe risco de 0 a 100 calculado por severidade, confiança, recorrência, volume, quantidade de eventos relacionados, dispersão entre exportadores e criticidade do destino no inventário. A pontuação auxilia a priorização, mas não confirma ataque nem autoriza mitigação por conta própria.
+
+Quando uma nova anomalia confirmada estiver relacionada a outra Task NetFlow aberta nos últimos 15 minutos, o sistema adiciona a evidência à Task existente em vez de criar outra. A linha do tempo registra o motivo da correlação e continua informando que nenhuma mitigação foi executada.
+
+## Reputação de endereços públicos
+
+Configure a **API Key do AbuseIPDB** em **Configurações → Inteligência de ameaças**. A chave é armazenada criptografada. O limite local padrão é 25 consultas por dia e pode ser ajustado pelo administrador; cada resultado válido permanece em cache por 24 horas.
+
+O sistema consulta automaticamente a origem pública quando confirma uma nova anomalia. Também é possível usar **Consultar reputação** no cartão do evento. A consulta considera os últimos 90 dias e exibe confiança de abuso, denúncias, país e provedor. A reputação pode acrescentar até 20 pontos ao risco, mas nunca classifica o evento como ataque nem executa bloqueio sozinha.
+
+Sem chave, com limite atingido ou durante falha do provedor, a detecção local continua funcionando. Códigos 429 são tratados como esgotamento de cota e resultados vencidos não são apresentados como atuais.
+
 ## Regras personalizadas
 
 Uma regra pode filtrar equipamento, protocolo, porta, IP de origem/destino, país e volume mínimo. Antes de salvar, use **Testar sem notificar**: a simulação consulta cinco minutos, não salva, não cria Task e não envia mensagem.
@@ -90,6 +106,14 @@ A mitigação aceita somente anomalia confirmada como ataque e IP público exter
 Cada MikroTik protegido deve possuir exatamente duas regras controladas e ativas: uma em `input` e outra em `forward`, ambas com `action=drop`, `src-address-list=NOC-ASSISTED-BLOCK` e `in-interface-list=OPERADORAS`. A regra de `forward` deve ficar antes do FastTrack, e a de `input` antes das permissões de entrada. Os comentários esperados são `NOC Agent: mitigacao assistida - input` e `NOC Agent: mitigacao assistida - forward`.
 
 Após a aprovação explícita do administrador, o sistema adiciona o IP com expiração e comentário auditável, confirma sua presença no equipamento e executa rollback automático se a validação falhar. A expiração ou o rollback remove somente a entrada criada pelo NOC Agent. O teste de implantação usa um endereço reservado de documentação por poucos segundos e o remove imediatamente; nunca use endereço real para esse teste. Nunca aprove uma mitigação sem revisar origem, destino, impacto e comando.
+
+### Mitigação supervisionada em lote
+
+Para uma campanha confirmada, selecione entre 2 e 10 eventos classificados como ataque e use **Preparar lote**. O sistema valida todos os endereços, relaciona os exportadores aos MikroTik, verifica duplicidade e capacidade, mas ainda não altera os equipamentos. A duração padrão recomendada é 30 minutos.
+
+O administrador deve revisar e selecionar as propostas antes de **Aplicar lote selecionado**. A execução confirma as regras controladas, verifica novamente os limites e cria um backup por equipamento. Cada entrada é aplicada e validada individualmente. Se qualquer aplicação ou validação falhar, todas as entradas já aplicadas pelo lote são removidas em ordem reversa e o lote inteiro fica marcado como falha.
+
+O limite operacional é de 10 itens por lote e 20 bloqueios ativos por equipamento. O mesmo IP pode fazer parte do lote em equipamentos diferentes, mas não pode ser duplicado no mesmo equipamento. Não há bloqueio por prefixo, país ou ASN. A aprovação continua exclusiva do administrador, e a Task recebe o resultado consolidado da operação.
 
 ## Retenção
 
