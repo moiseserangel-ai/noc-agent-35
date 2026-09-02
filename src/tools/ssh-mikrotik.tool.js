@@ -101,7 +101,7 @@ export async function sshMikrotikExec({ deviceId, command, changeComment }) {
         stream.on('close', async () => {
           clearTimeout(timeout);
           const result = (output + errorOutput).trim();
-          const commandOk = !/(failure:|bad command|syntax error|expected end)/i.test(result);
+          const commandOk = !/(failure:|bad command|syntax error|expected end|no such item)/i.test(result);
           let auditNote = '';
           if (normalizedComment && commandOk) {
             const context = getExecutionContext();

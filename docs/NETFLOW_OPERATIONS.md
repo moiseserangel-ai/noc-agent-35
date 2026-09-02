@@ -85,7 +85,11 @@ O painel também apresenta fluxos por minuto, atraso, equipamento relacionado, c
 
 Classifique como ataque, falso positivo ou tráfego legítimo e informe justificativa. Falso positivo e legítimo suprimem eventos equivalentes por 30 dias.
 
-A mitigação aceita somente anomalia confirmada como ataque e IP público externo. O sistema recusa endereços privados, reservados, DNS públicos protegidos e ativos existentes no CMDB/IPAM. Antes da mudança, cria backup do MikroTik; exige regra `drop` previamente controlada para a address-list `NOC-ASSISTED-BLOCK`; aplica bloqueio temporário com comentário, valida e mantém rollback. Nunca aprove uma mitigação sem revisar origem, destino, impacto e comando.
+A mitigação aceita somente anomalia confirmada como ataque e IP público externo. O sistema recusa endereços privados, reservados, faixas de documentação e benchmark, DNS públicos protegidos, IPs confiáveis e ativos existentes no CMDB/IPAM. Antes da mudança, cria backup do MikroTik, repete as validações de segurança e confirma que o limite de 20 bloqueios ativos não foi atingido.
+
+Cada MikroTik protegido deve possuir exatamente duas regras controladas e ativas: uma em `input` e outra em `forward`, ambas com `action=drop`, `src-address-list=NOC-ASSISTED-BLOCK` e `in-interface-list=OPERADORAS`. A regra de `forward` deve ficar antes do FastTrack, e a de `input` antes das permissões de entrada. Os comentários esperados são `NOC Agent: mitigacao assistida - input` e `NOC Agent: mitigacao assistida - forward`.
+
+Após a aprovação explícita do administrador, o sistema adiciona o IP com expiração e comentário auditável, confirma sua presença no equipamento e executa rollback automático se a validação falhar. A expiração ou o rollback remove somente a entrada criada pelo NOC Agent. O teste de implantação usa um endereço reservado de documentação por poucos segundos e o remove imediatamente; nunca use endereço real para esse teste. Nunca aprove uma mitigação sem revisar origem, destino, impacto e comando.
 
 ## Retenção
 
