@@ -28,6 +28,8 @@ Se a versão instalada não oferecer `ipfix`, utilize `version=9`. Em equipament
 
 O intervalo `v9-template-timeout=1m` deve ser mantido em todos os exportadores. Após uma reinicialização, o NetFlow v9 perde o estado de sessão e o coletor precisa receber novamente o template para interpretar os registros. Intervalos longos, como 30 minutos, podem fazer o painel indicar ausência de coleta mesmo com UDP chegando ao coletor.
 
+Quando o caminho até o coletor utiliza uma interface dinâmica, como L2TP, prefira `src-address=0.0.0.0` no alvo NetFlow. O RouterOS selecionará o endereço pela rota ativa e poderá recriar o socket após a reconexão do túnel. Fixar como origem um endereço dinâmico pode interromper a exportação quando a interface L2TP é recriada, mesmo que ela receba novamente o mesmo IP.
+
 ### Validação no MikroTik
 
 ```routeros
