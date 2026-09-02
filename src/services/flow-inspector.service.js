@@ -425,7 +425,7 @@ export async function saveFlowRecurrenceConfig(input) {
 const cleanExporterHealth = (value) => ({
   enabled: value?.enabled !== false,
   timeoutMinutes: Math.max(
-    10,
+    5,
     Math.min(1440, Math.round(number(value?.timeoutMinutes) || 15)),
   ),
   notificationMode: ["panel", "task", "task_telegram"].includes(

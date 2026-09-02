@@ -26,6 +26,8 @@ Se a versão instalada não oferecer `ipfix`, utilize `version=9`. Em equipament
 /ip traffic-flow target add dst-address=IP_DO_COLETOR port=2055 version=9 v9-template-refresh=20 v9-template-timeout=1m comment="NOC Agent: exportacao NetFlow v9 para o coletor"
 ```
 
+O intervalo `v9-template-timeout=1m` deve ser mantido em todos os exportadores. Após uma reinicialização, o NetFlow v9 perde o estado de sessão e o coletor precisa receber novamente o template para interpretar os registros. Intervalos longos, como 30 minutos, podem fazer o painel indicar ausência de coleta mesmo com UDP chegando ao coletor.
+
 ### Validação no MikroTik
 
 ```routeros
@@ -67,7 +69,9 @@ O histórico informa canal, destinatário, data, status e falha resumida. Soment
 
 ## Saúde dos exportadores
 
-Estados: Online (há fluxo recente), Atrasado (dentro da tolerância) e Sem comunicação (tolerância excedida). O padrão é 15 minutos e criação de Task. O monitor respeita silenciamentos, não duplica incidentes e resolve automaticamente a Task quando a exportação retorna.
+Estados: Online (há fluxo recente), Atrasado (dentro da tolerância) e Sem comunicação (tolerância excedida). O padrão é 15 minutos e criação de Task; ambientes com templates renovados a cada minuto podem reduzir a tolerância para 5 minutos. O monitor respeita silenciamentos, não duplica incidentes e resolve automaticamente a Task quando a exportação retorna.
+
+Após reiniciar um equipamento, valide que ele reaparece no painel em aproximadamente um minuto. Se não retornar em até cinco minutos, confirme o alvo UDP 2055, a rota até o coletor e a renovação do template antes de reiniciar serviços.
 
 Antes de concluir que o roteador caiu, valide rota e firewall UDP, alvo do traffic-flow, relógio/NTP, nome do exportador, CPU e serviço do coletor.
 
