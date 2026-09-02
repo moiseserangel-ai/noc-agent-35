@@ -273,6 +273,9 @@ function ExporterHealth({ rows, config, setConfig, onSave, busy, isAdmin }) {
                 {row.exporterAddress || "Endereço não informado"} · última
                 coleta {new Date(row.lastSeenAt).toLocaleString("pt-BR")}
               </span>
+              <span>{integer(row.flowsPerMinute)} fluxos/min · atraso {integer(row.ageSeconds)}s{row.device ? ` · ${row.device.model || row.device.type} · ${row.device.osVersion || "versão não informada"}` : " · sem vínculo com Equipamentos"}</span>
+              <small>{row.probableReason}</small>
+              {row.watchdog?.lastAttemptAt && <small>Último watchdog: {new Date(row.watchdog.lastAttemptAt).toLocaleString("pt-BR")} · {row.watchdog.status === "executed" ? "recuperação executada" : row.watchdog.status}</small>}
             </div>
             <b>{labels[row.status]}</b>
           </article>
@@ -299,12 +302,18 @@ function ExporterHealth({ rows, config, setConfig, onSave, busy, isAdmin }) {
               }
             >
               <option value="10">10 minutos</option>
+              <option value="5">5 minutos</option>
               <option value="15">15 minutos</option>
               <option value="30">30 minutos</option>
               <option value="60">1 hora</option>
               <option value="180">3 horas</option>
             </select>
           </label>
+          <label>
+            <input type="checkbox" checked={config.autoRecovery !== false} onChange={(e) => setConfig((v) => ({ ...v, autoRecovery: e.target.checked }))}/>{" "}
+            Watchdog reinicia somente o Traffic Flow
+          </label>
+          <label><span>Intervalo entre tentativas</span><select value={config.recoveryCooldownMinutes || 60} onChange={(e)=>setConfig((v)=>({...v,recoveryCooldownMinutes:e.target.value}))}><option value="30">30 minutos</option><option value="60">1 hora</option><option value="180">3 horas</option><option value="1440">24 horas</option></select></label>
           <label>
             <span>Ação</span>
             <select
@@ -325,6 +334,11 @@ function ExporterHealth({ rows, config, setConfig, onSave, busy, isAdmin }) {
       )}
     </section>
   );
+}
+
+function InfrastructureHealth({ data }) {
+  if (!data) return null;
+  return <section className={`card flow-infrastructure ${data.status}`}><header className="flow-section-title"><div><span className="flow-kicker">CT 109</span><h3>Saúde do coletor</h3></div><b>{data.status === "online" ? "Saudável" : data.status === "warning" ? "Atenção" : "Crítico"}</b></header><div className="flow-infrastructure-grid"><article><Database/><span>ClickHouse</span><strong>{data.clickhouse === "online" ? "Online" : "Indisponível"}</strong><small>{data.clickhouseMemoryBytes ? `${size(data.clickhouseMemoryBytes)} RAM` : ""}</small></article><article><Activity/><span>Processamento</span><strong>{data.collector === "receiving" ? `Recebendo · ${integer(data.lagSeconds)}s` : "Atrasado"}</strong><small>{data.clickhouseUptimeSeconds ? `uptime ${Math.floor(data.clickhouseUptimeSeconds/86400)} dias` : ""}</small></article><article><Database/><span>Disco utilizado</span><strong>{data.diskUsedPercent == null ? "—" : `${data.diskUsedPercent}%`}</strong><small>{data.diskFreeBytes == null ? "" : `${size(data.diskFreeBytes)} livres`}</small></article><article><Database/><span>Base NetFlow</span><strong>{data.dataBytes == null ? "—" : size(data.dataBytes)}</strong><small>{data.loadAverage1 == null ? "" : `carga 1 min: ${Number(data.loadAverage1).toFixed(2)}`}</small></article></div>{data.error&&<p>{data.error}</p>}</section>;
 }
 
 function RetentionPolicy({ data, setData, onSave, onExecute, busy, isAdmin }) {
@@ -1329,6 +1343,8 @@ export default function FlowInspector({ isAdmin = false }) {
       enabled: true,
       timeoutMinutes: 15,
       notificationMode: "task",
+      autoRecovery: true,
+      recoveryCooldownMinutes: 60,
     }),
     [exporterHealthBusy, setExporterHealthBusy] = useState(false);
   const [retention, setRetention] = useState(null),
@@ -1931,6 +1947,7 @@ export default function FlowInspector({ isAdmin = false }) {
         busy={exporterHealthBusy}
         isAdmin={isAdmin}
       />
+      <InfrastructureHealth data={data.infrastructure}/>
       <RetentionPolicy
         data={retention}
         setData={setRetention}

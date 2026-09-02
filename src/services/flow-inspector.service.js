@@ -4,6 +4,8 @@ import logger from "../utils/logger.js";
 import dns from "node:dns/promises";
 import crypto from "node:crypto";
 import { addTaskMessage, createTask, updateTask } from "./task.service.js";
+import { executeManagedDeviceCommand } from "./cli.service.js";
+import { logAudit } from "./audit.service.js";
 import {
   getNotificationConfig,
   notifyTask,
@@ -246,6 +248,8 @@ const customRuleKey = "flow_custom_rules";
 const silenceKey = "flow_silence_windows";
 const recurrenceKey = "flow_recurrence_minutes";
 const exporterHealthKey = "flow_exporter_health";
+const exporterWatchdogKey = "flow_exporter_watchdog_state";
+const infrastructureStateKey = "flow_infrastructure_state";
 const retentionKey = "flow_retention_policy";
 const retentionRunKey = "flow_retention_last_run";
 const cleanProfile = (value) => ({
@@ -424,6 +428,8 @@ export async function saveFlowRecurrenceConfig(input) {
 }
 const cleanExporterHealth = (value) => ({
   enabled: value?.enabled !== false,
+  autoRecovery: value?.autoRecovery !== false,
+  recoveryCooldownMinutes: Math.max(30, Math.min(1440, Math.round(number(value?.recoveryCooldownMinutes) || 60))),
   timeoutMinutes: Math.max(
     5,
     Math.min(1440, Math.round(number(value?.timeoutMinutes) || 15)),
@@ -434,6 +440,31 @@ const cleanExporterHealth = (value) => ({
     ? value.notificationMode
     : "task",
 });
+async function exporterWatchdogState() {
+  const row = await prisma.settings.findUnique({ where: { key: exporterWatchdogKey } });
+  try { return JSON.parse(row?.value || "{}"); } catch { return {}; }
+}
+async function saveExporterWatchdogState(state) {
+  await prisma.settings.upsert({ where: { key: exporterWatchdogKey }, update: { value: JSON.stringify(state), encrypted: false }, create: { key: exporterWatchdogKey, value: JSON.stringify(state), encrypted: false } });
+}
+async function attemptExporterRecovery({ exporterName, anomaly, task, config }) {
+  if (!config.autoRecovery) return null;
+  const state = await exporterWatchdogState(), previous = state[exporterName] || {};
+  if (previous.lastAttemptAt && Date.now() - new Date(previous.lastAttemptAt).getTime() < config.recoveryCooldownMinutes * 60000) return previous;
+  const device = await prisma.device.findFirst({ where: { name: exporterName, isActive: true } });
+  const result = { lastAttemptAt: new Date().toISOString(), status: "skipped", reason: "Equipamento não relacionado ou sem suporte MikroTik", deviceId: device?.id || null };
+  if (device?.type === "mikrotik") {
+    const command = "/ip traffic-flow set enabled=no\n:delay 2s\n/ip traffic-flow set enabled=yes";
+    const execution = await executeManagedDeviceCommand({ device, command, changeComment: "NOC Agent: watchdog recupera exportador NetFlow", approved: true, agentName: "flow-exporter-watchdog" });
+    result.status = execution.success ? "executed" : "failed";
+    result.reason = execution.success ? "Traffic Flow reinicializado; aguardando validação por novos fluxos" : String(execution.output || "Falha na recuperação").slice(0, 500);
+    if (task?.id) await addTaskMessage(task.id, "system", `Watchdog NetFlow: ${result.reason}. Nenhum roteador ou túnel foi reiniciado.`).catch(() => {});
+    await logAudit({ username: "system", displayName: "Watchdog NetFlow", role: "system", action: "recover_exporter", resource: "flow_exporter", resourceId: anomaly.id, status: execution.success ? "success" : "failure", details: { exporterName, deviceId: device.id, result: result.reason } }).catch(() => {});
+  }
+  state[exporterName] = result;
+  await saveExporterWatchdogState(state);
+  return result;
+}
 export async function getFlowExporterHealthConfig() {
   const row = await prisma.settings.findUnique({
     where: { key: exporterHealthKey },
@@ -582,10 +613,16 @@ export async function executeFlowRetention({ automatic = false } = {}) {
         new Date(row.endsAt).getTime() >= now - policy.silencesDays * 86400000,
     ),
   );
-  if (counts.rawFlows > 0)
-    await query(
-      `ALTER TABLE default.flows DELETE WHERE TimeReceived < now() - INTERVAL ${policy.rawFlowsDays} DAY`,
-    );
+  let rawFlowsPending = 0;
+  if (counts.rawFlows > 0) {
+    try {
+      await query(`ALTER TABLE default.flows DELETE WHERE TimeReceived < now() - INTERVAL ${policy.rawFlowsDays} DAY`);
+    } catch (error) {
+      if (!/readonly|read.?only/i.test(error.message)) throw error;
+      rawFlowsPending = counts.rawFlows;
+      logger.warn(`Retenção bruta NetFlow pendente: usuário ClickHouse somente leitura (${counts.rawFlows} fluxo(s))`);
+    }
+  }
   await prisma.settings.upsert({
     where: { key: retentionRunKey },
     update: { value: new Date().toISOString(), encrypted: false },
@@ -598,7 +635,7 @@ export async function executeFlowRetention({ automatic = false } = {}) {
   logger.info(
     `Retenção NetFlow ${automatic ? "automática" : "manual"}: ${JSON.stringify(counts)}`,
   );
-  return { policy, deleted: counts };
+  return { policy, deleted: { ...counts, rawFlows: rawFlowsPending ? 0 : counts.rawFlows }, rawFlowsPending };
 }
 async function maybeRunFlowRetention() {
   const row = await prisma.settings.findUnique({
@@ -1495,6 +1532,7 @@ async function evaluateExporterHealth(activeNames) {
           lastSeenAt: new Date(),
         },
       });
+    let recoveryTask = null;
     if (cfg.notificationMode !== "panel") {
       const device = await prisma.device.findFirst({
           where: {
@@ -1528,7 +1566,9 @@ async function evaluateExporterHealth(activeNames) {
         where: { id: created.id },
         data: { taskId: task.id },
       });
+      recoveryTask = task;
     }
+    await attemptExporterRecovery({ exporterName, anomaly: created, task: recoveryTask, config: cfg }).catch((error) => logger.error(`Flow watchdog ${exporterName}: ${error.message}`));
     alerts++;
   }
   return alerts;
@@ -1780,22 +1820,35 @@ export async function flowInspectorDashboard() {
       };
     });
   const healthConfig = await getFlowExporterHealthConfig(),
+    watchdog = await exporterWatchdogState(),
     latestByExporter = new Map();
   for (const row of snapshots)
     if (!latestByExporter.has(row.exporterName))
       latestByExporter.set(row.exporterName, row);
   const liveNames = new Set(live.map((row) => row.exporterName)),
+    exporterNames = [...latestByExporter.keys()],
+    devices = await prisma.device.findMany({ where: { name: { in: exporterNames }, isActive: true }, select: { id: true, name: true, hostname: true, type: true, model: true, osVersion: true } }),
+    deviceByName = new Map(devices.map((row) => [row.name, row])),
+    liveByName = new Map(live.map((row) => [row.exporterName, row])),
+    activeOffline = new Map(anomalies.filter((row) => row.type === "exporter_offline" && row.status === "confirmed").map((row) => [row.exporterName, row])),
     exporterHealth = [...latestByExporter.values()].map((row) => ({
       exporterName: row.exporterName,
       exporterAddress: row.exporterAddress,
       lastSeenAt: row.collectedAt,
+      ageSeconds: Math.max(0, Math.round((Date.now() - new Date(row.collectedAt).getTime()) / 1000)),
+      flowsPerMinute: liveByName.has(row.exporterName) ? Math.round(number(liveByName.get(row.exporterName).flows) / 5) : 0,
+      device: deviceByName.get(row.exporterName) || null,
+      watchdog: watchdog[row.exporterName] || null,
+      activeTaskId: activeOffline.get(row.exporterName)?.taskId || null,
+      probableReason: liveNames.has(row.exporterName) ? "Exportação e processamento normais" : watchdog[row.exporterName]?.status === "failed" ? watchdog[row.exporterName].reason : deviceByName.get(row.exporterName) ? "Sem registros recentes; verificar túnel, rota, template e Traffic Flow" : "Exportador não relacionado a um equipamento cadastrado",
       status: liveNames.has(row.exporterName)
         ? "online"
         : Date.now() - new Date(row.collectedAt).getTime() >=
             healthConfig.timeoutMinutes * 60000
           ? "offline"
           : "delayed",
-    }));
+    })),
+    infrastructure = await flowInfrastructureHealth();
   return {
     mode: "observation",
     learning,
@@ -1813,8 +1866,44 @@ export async function flowInspectorDashboard() {
     anomalies: publicAnomalies,
     exporterHealth,
     exporterHealthConfig: healthConfig,
+    infrastructure,
     updatedAt: new Date(),
   };
+}
+
+async function flowInfrastructureHealth() {
+  try {
+    const [disks, parts, lag, metrics] = await Promise.all([
+      query("SELECT name, free_space freeBytes, total_space totalBytes FROM system.disks"),
+      query("SELECT sum(bytes_on_disk) dataBytes FROM system.parts WHERE active AND database='default'"),
+      query("SELECT dateDiff('second', max(TimeReceived), now()) lagSeconds FROM default.flows"),
+      query("SELECT metric, value FROM system.asynchronous_metrics WHERE metric IN ('MemoryResident','LoadAverage1','Uptime')"),
+    ]);
+    const metric = Object.fromEntries(metrics.map((row) => [row.metric, number(row.value)])), disk = disks[0] || {}, freeBytes = number(disk.freeBytes), totalBytes = number(disk.totalBytes), usedPercent = totalBytes ? Math.round((1 - freeBytes / totalBytes) * 1000) / 10 : null, lagSeconds = number(lag[0]?.lagSeconds);
+    return { status: usedPercent >= 90 || lagSeconds >= 300 ? "critical" : usedPercent >= 80 || lagSeconds >= 60 ? "warning" : "online", clickhouse: "online", collector: lagSeconds < 300 ? "receiving" : "delayed", lagSeconds, diskFreeBytes: freeBytes, diskTotalBytes: totalBytes, diskUsedPercent: usedPercent, dataBytes: number(parts[0]?.dataBytes), clickhouseMemoryBytes: metric.MemoryResident || null, loadAverage1: metric.LoadAverage1 || null, clickhouseUptimeSeconds: metric.Uptime || null, checkedAt: new Date() };
+  } catch (error) {
+    return { status: "critical", clickhouse: "offline", collector: "unknown", error: String(error.message).slice(0, 300), checkedAt: new Date() };
+  }
+}
+
+async function reconcileFlowInfrastructure() {
+  const health = await flowInfrastructureHealth(), row = await prisma.settings.findUnique({ where: { key: infrastructureStateKey } });
+  let state = {}; try { state = JSON.parse(row?.value || "{}"); } catch {}
+  state.consecutiveCritical = health.status === "critical" ? number(state.consecutiveCritical) + 1 : 0;
+  state.lastCheckAt = new Date().toISOString(); state.lastStatus = health.status;
+  const incidentKey = "flow-infrastructure:ct109", open = await prisma.task.findFirst({ where: { incidentKey, status: { in: openTaskStatuses } }, orderBy: { createdAt: "desc" } });
+  if (state.consecutiveCritical >= 2 && !open) {
+    const message = `Infraestrutura do Inspetor de Tráfego em estado crítico.\nClickHouse: ${health.clickhouse}\nProcessamento: ${health.collector}\nAtraso: ${health.lagSeconds ?? "sem dados"}s\nDisco utilizado: ${health.diskUsedPercent ?? "sem dados"}%\n${health.error || "Verifique o CT 109 e os containers Akvorado/ClickHouse."}`;
+    const task = await createTask({ source: "flow_inspector", workType: "incident", priority: "critical", originalMessage: message, incident: { incidentKey, incidentOpenedAt: new Date(), lastSeenAt: new Date() } });
+    await addTaskMessage(task.id, "system", "Alerta confirmado após duas verificações consecutivas. Nenhum container foi reiniciado automaticamente.");
+    await notifyTask(task, "opened", { message }).catch(() => {}); state.taskId = task.id;
+  } else if (open && health.status === "online") {
+    const now = new Date(), resolution = "Infraestrutura do Inspetor de Tráfego normalizada e validada automaticamente.";
+    const task = await updateTask(open.id, { status: "resolved", resolvedAt: now, validatedAt: now, resolutionType: "flow_infrastructure_recovered", resolutionSummary: resolution });
+    await addTaskMessage(open.id, "system", resolution); await notifyTask(task, "resolved", { message: resolution }).catch(() => {}); state.taskId = null;
+  } else if (open) await prisma.task.update({ where: { id: open.id }, data: { lastSeenAt: new Date() } });
+  await prisma.settings.upsert({ where: { key: infrastructureStateKey }, update: { value: JSON.stringify(state), encrypted: false }, create: { key: infrastructureStateKey, value: JSON.stringify(state), encrypted: false } });
+  return health;
 }
 
 export async function testFlowInspector() {
@@ -1899,6 +1988,7 @@ export async function searchFlowTraffic(input = {}) {
 export async function runFlowInspectorScheduler() {
   try {
     const result = await collectFlowObservation();
+    await reconcileFlowInfrastructure();
     await maybeRunFlowRetention();
     return result;
   } catch (error) {

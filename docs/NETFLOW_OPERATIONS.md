@@ -77,6 +77,10 @@ Após reiniciar um equipamento, valide que ele reaparece no painel em aproximada
 
 Antes de concluir que o roteador caiu, valide rota e firewall UDP, alvo do traffic-flow, relógio/NTP, nome do exportador, CPU e serviço do coletor.
 
+O watchdog pode executar uma única reinicialização do serviço Traffic Flow após a confirmação da indisponibilidade. Há cooldown padrão de 60 minutos por exportador. A ação não reinicia roteador, interface, túnel ou container; seu resultado é registrado na Task e na auditoria. Se os fluxos não retornarem, a investigação permanece manual.
+
+O painel também apresenta fluxos por minuto, atraso, equipamento relacionado, causa provável e a última tentativa do watchdog. A seção **Saúde do coletor** acompanha ClickHouse, atraso de processamento, uso de disco, tamanho da base, memória do processo e uptime. Estados críticos confirmados em duas verificações criam uma única Task e são resolvidos automaticamente após a normalização.
+
 ## Classificação e mitigação assistida
 
 Classifique como ataque, falso positivo ou tráfego legítimo e informe justificativa. Falso positivo e legítimo suprimem eventos equivalentes por 30 dias.
