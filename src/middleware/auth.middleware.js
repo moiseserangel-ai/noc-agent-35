@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import prisma from '../database/client.js';
+import { isViewerRole } from '../security/roles.js';
 
 export async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -31,7 +32,7 @@ export function requireRoles(...roles) {
 }
 
 export function readOnlyForViewer(req, res, next) {
-  if (req.user?.role === 'viewer' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+  if (isViewerRole(req.user?.role) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     return res.status(403).json({ success: false, error: 'Perfil de visualização não pode realizar alterações' });
   }
   next();

@@ -8,14 +8,17 @@ const router = Router();
 const actor = req => req.user?.name || req.user?.username || 'Sistema';
 const clean = (value,max=4000) => String(value||'').trim().slice(0,max);
 const allowedTypes = ['standard','normal','emergency'];
+const tenantChangeScope=req=>req.user.tenantId?{devices:{some:{device:{tenantId:req.user.tenantId}},every:{device:{tenantId:req.user.tenantId}}}}:{};
+
+router.param('id',async(req,res,next,id)=>{try{if(!req.user.tenantId)return next();const row=await prisma.changeRequest.findFirst({where:{id,...tenantChangeScope(req)},select:{id:true}});if(!row)return res.status(404).json({success:false,error:'Mudança não encontrada'});next();}catch(error){next(error);}});
 
 router.get('/',async(req,res,next)=>{
   try{
-    const where={};
+    const where={...tenantChangeScope(req)};
     if(req.query.status)where.status=String(req.query.status);
     if(req.query.type)where.changeType=String(req.query.type);
     const rows=await prisma.changeRequest.findMany({where,include:changeInclude,orderBy:{createdAt:'desc'},take:Math.min(Math.max(Number(req.query.limit)||100,1),500)});
-    const summary=await prisma.changeRequest.groupBy({by:['status'],_count:{_all:true}});
+    const summary=await prisma.changeRequest.groupBy({by:['status'],where:tenantChangeScope(req),_count:{_all:true}});
     res.json({success:true,data:{rows,summary:Object.fromEntries(summary.map(item=>[item.status,item._count._all]))}});
   }catch(error){next(error);}
 });
@@ -33,7 +36,7 @@ router.get('/:id/cmdb-impact',async(req,res,next)=>{try{const row=await prisma.c
 router.post('/',async(req,res,next)=>{
   try{
     const deviceIds=[...new Set((Array.isArray(req.body.deviceIds)?req.body.deviceIds:[]).map(String))];
-    const devices=await prisma.device.findMany({where:{id:{in:deviceIds},isActive:true,type:{in:['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros']}}});
+    const devices=await prisma.device.findMany({where:{id:{in:deviceIds},isActive:true,type:{in:['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros']},...(req.user.tenantId&&{tenantId:req.user.tenantId})}});
     if(!devices.length||devices.length!==deviceIds.length)return res.status(400).json({success:false,error:'Selecione equipamentos de rede compatíveis e ativos'});
     const input={
       title:clean(req.body.title,140),description:clean(req.body.description),reason:clean(req.body.reason,2000),
@@ -46,7 +49,8 @@ router.post('/',async(req,res,next)=>{
     const window=validateChangeWindow(input.windowStart,input.windowEnd);
     if(input.changeType!=='emergency'&&!window.start)return res.status(400).json({success:false,error:'Mudanças normais e padrão exigem janela de manutenção'});
     const cmdbContext=await cmdbOperationalContext(deviceIds),risk=calculateChangeRisk(input,devices.length,cmdbContext.summary);
-    const task=req.body.taskId?await prisma.task.findUnique({where:{id:String(req.body.taskId)}}):null;
+    const task=req.body.taskId?await prisma.task.findFirst({where:{id:String(req.body.taskId),...(req.user.tenantId&&{tenantId:req.user.tenantId})}}):null;
+    if(req.body.taskId&&!task)return res.status(404).json({success:false,error:'Task não encontrada'});
     const row=await prisma.changeRequest.create({data:{
       number:await nextChangeNumber(),title:input.title,description:input.description,reason:input.reason,changeType:input.changeType,
       riskLevel:risk.level,riskScore:risk.score,impact:input.impact,executionPlan:input.executionPlan,validationPlan:input.validationPlan,
@@ -90,7 +94,7 @@ router.post('/:id/submit',async(req,res,next)=>{
 
 router.post('/:id/approval',async(req,res,next)=>{
   try{
-    if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem aprovar mudanças'});
+    if(!['admin','tenant_admin'].includes(req.user.role))return res.status(403).json({success:false,error:'Somente administradores podem aprovar mudanças'});
     const current=await prisma.changeRequest.findUnique({where:{id:req.params.id},include:changeInclude});
     if(!current||current.status!=='awaiting_approval')return res.status(409).json({success:false,error:'A mudança não está aguardando aprovação'});
     if(req.body.approved!==true){
@@ -141,7 +145,7 @@ router.post('/:id/validate',async(req,res,next)=>{
 
 router.post('/:id/rollback',async(req,res,next)=>{
   try{
-    if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem solicitar rollback'});
+    if(!['admin','tenant_admin'].includes(req.user.role))return res.status(403).json({success:false,error:'Somente administradores podem solicitar rollback'});
     const current=await prisma.changeRequest.findUnique({where:{id:req.params.id},include:changeInclude});
     if(!current||!['in_progress','failed_validation','completed'].includes(current.status))return res.status(409).json({success:false,error:'Rollback indisponível neste estado'});
     const taskIds=await createRollbackTasks(current,actor(req));

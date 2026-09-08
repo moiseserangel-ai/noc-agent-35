@@ -129,7 +129,7 @@ async function saveProposalRevision(task,{type,content,feedback,actor,role}){
 
 router.post('/:id/proposal-revisions',async(req,res,next)=>{
   try{
-    if(!['admin','operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Somente administradores e operadores podem revisar propostas'});
+    if(!['admin','operator','tenant_admin','tenant_operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Somente administradores e operadores podem revisar propostas'});
     const task=await taskService.getTaskById(req.params.id);
     if(!task)return res.status(404).json({success:false,error:'Task não encontrada'});
     if(task.status!=='awaiting_approval'||!task.proposedSolution)return res.status(409).json({success:false,error:'A Task não possui uma proposta aguardando revisão'});
@@ -160,7 +160,7 @@ router.post('/:id/proposal-revisions',async(req,res,next)=>{
 
 router.post('/:id/proposal-comparison',async(req,res,next)=>{
   try{
-    if(!['admin','operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Sem permissão para comparar propostas'});
+    if(!['admin','operator','tenant_admin','tenant_operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Sem permissão para comparar propostas'});
     const task=await taskService.getTaskById(req.params.id);
     if(!task?.deviceId||!task.proposedSolution)return res.status(400).json({success:false,error:'A Task precisa ter equipamento e proposta definidos'});
     const actor=String(req.user.name||req.user.username||'Operador').slice(0,100);
@@ -300,7 +300,7 @@ router.get('/:id/cmdb-impact',async(req,res,next)=>{try{const task=await taskSer
 
 router.post('/:id/runbooks/:runbookId/simulate',async(req,res,next)=>{
   try{
-    if(!['admin','operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Sem permissão para simular runbooks'});
+    if(!['admin','operator','tenant_admin','tenant_operator'].includes(req.user.role))return res.status(403).json({success:false,error:'Sem permissão para simular runbooks'});
     const task=await taskService.getTaskById(req.params.id);
     if(!task)return res.status(404).json({success:false,error:'Task não encontrada'});
     if(!task.deviceId||!task.device?.isActive)return res.status(409).json({success:false,error:'Vincule um equipamento ativo à Task antes da simulação'});

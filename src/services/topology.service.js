@@ -15,9 +15,9 @@ export function defaultPosition(index, total) {
   return { x: 110 + (index % columns) * 210, y: 100 + Math.floor(index / columns) * 160 };
 }
 
-export async function topologyDashboard() {
+export async function topologyDashboard(tenantId = null) {
   const devices = await prisma.device.findMany({
-    where: { isActive: true },
+    where: { isActive: true, ...(tenantId && { tenantId }) },
     include: {
       topologyNode: true,
       tenant: { select: { id:true,name:true } },
@@ -31,7 +31,11 @@ export async function topologyDashboard() {
     },
     orderBy: [{ group: 'asc' }, { name: 'asc' }],
   });
-  const rawLinks = await prisma.topologyLink.findMany({ include:{telemetry:{orderBy:{collectedAt:'desc'},take:1}},orderBy: { createdAt: 'asc' } });
+  const deviceIds = devices.map(device => device.id);
+  const rawLinks = deviceIds.length ? await prisma.topologyLink.findMany({
+    where: { sourceDeviceId: { in: deviceIds }, targetDeviceId: { in: deviceIds } },
+    include:{telemetry:{orderBy:{collectedAt:'desc'},take:1}},orderBy: { createdAt: 'asc' }
+  }) : [];
   const nodes = devices.map((device, index) => {
     const snapshot = device.capacitySnapshots[0] || null;
     const position = device.topologyNode || defaultPosition(index, devices.length);

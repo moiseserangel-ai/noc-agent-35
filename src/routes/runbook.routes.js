@@ -14,6 +14,12 @@ const actorId=req=>String(req.user?.sub||req.user?.id||req.user?.username||actor
 const definition=row=>({variables:JSON.parse(row.variables||'[]'),steps:JSON.parse(row.steps||'[]')});
 const include={_count:{select:{executions:true}}};
 const revisionData=(row,createdBy)=>({runbookId:row.id,version:row.version,name:row.name,description:row.description,category:row.category,deviceType:row.deviceType,riskLevel:row.riskLevel,variables:row.variables,steps:row.steps,createdBy});
+const tenantDeviceScope=req=>req.user.tenantId?{device:{tenantId:req.user.tenantId}}:{};
+const scopedInclude=req=>({_count:{select:{executions:req.user.tenantId?{where:tenantDeviceScope(req)}:true}}});
+const globalOperation=(req,res,next)=>req.user.tenantId?res.status(403).json({success:false,error:'Operação reservada à equipe global'}):next();
+
+router.use('/batches',globalOperation);
+router.use('/schedules',globalOperation);
 
 router.get('/templates',async(req,res)=>res.json({success:true,data:listRunbookTemplates()}));
 
@@ -31,17 +37,17 @@ router.post('/templates/:key/import',async(req,res,next)=>{try{
 
 router.get('/',async(req,res,next)=>{try{
   const where={...(req.user.role!=='admin'?{status:'published'}:req.query.status&&{status:String(req.query.status)}),...(req.query.deviceType&&{deviceType:{in:['any',String(req.query.deviceType)]}})};
-  const rows=await prisma.runbook.findMany({where,include,orderBy:[{status:'asc'},{updatedAt:'desc'}]});
+  const rows=await prisma.runbook.findMany({where,include:scopedInclude(req),orderBy:[{status:'asc'},{updatedAt:'desc'}]});
   res.json({success:true,data:rows.map(publicRunbook)});
 }catch(error){next(error);}});
 
 router.get('/executions',async(req,res,next)=>{try{
-  const rows=await prisma.runbookExecution.findMany({where:{...(req.query.runbookId&&{runbookId:String(req.query.runbookId)}),...(req.query.deviceId&&{deviceId:String(req.query.deviceId)})},include:{runbook:{select:{name:true,version:true}},device:{select:{name:true,type:true}}},orderBy:{createdAt:'desc'},take:Math.min(Number(req.query.limit)||100,300)});
+  const rows=await prisma.runbookExecution.findMany({where:{...(req.query.runbookId&&{runbookId:String(req.query.runbookId)}),...(req.query.deviceId&&{deviceId:String(req.query.deviceId)}),...tenantDeviceScope(req)},include:{runbook:{select:{name:true,version:true}},device:{select:{name:true,type:true}}},orderBy:{createdAt:'desc'},take:Math.min(Number(req.query.limit)||100,300)});
   res.json({success:true,data:rows.map(publicExecution)});
 }catch(error){next(error);}});
 
 router.get('/executions/:executionId/config-diff',async(req,res,next)=>{try{
-  const execution=await prisma.runbookExecution.findUnique({where:{id:req.params.executionId},include:{beforeBackup:true,afterBackup:true,device:{select:{name:true,hostname:true}}}});
+  const execution=await prisma.runbookExecution.findFirst({where:{id:req.params.executionId,...tenantDeviceScope(req)},include:{beforeBackup:true,afterBackup:true,device:{select:{name:true,hostname:true}}}});
   if(!execution)return res.status(404).json({success:false,error:'Execução não encontrada'});
   if(!execution.beforeBackup||!execution.afterBackup)return res.status(409).json({success:false,error:'Esta execução não possui snapshots anterior e posterior'});
   const diff=compareConfigurations(decryptSnapshot(execution.beforeBackup),decryptSnapshot(execution.afterBackup));
@@ -53,9 +59,9 @@ router.get('/executions/:executionId/config-diff',async(req,res,next)=>{try{
 router.get('/metrics',async(req,res,next)=>{try{
   const since=new Date(Date.now()-30*24*60*60_000);
   const [executions,byRunbook,byDeviceType]=await Promise.all([
-    prisma.runbookExecution.findMany({where:{createdAt:{gte:since},mode:{in:['execution','rollback']}},select:{status:true,mode:true,createdAt:true,startedAt:true,completedAt:true}}),
-    prisma.runbookExecution.groupBy({by:['runbookId'],where:{createdAt:{gte:since},mode:'execution'},_count:{_all:true},orderBy:{_count:{runbookId:'desc'}},take:8}),
-    prisma.runbookExecution.findMany({where:{createdAt:{gte:since},mode:'execution'},select:{status:true,device:{select:{type:true}}}}),
+    prisma.runbookExecution.findMany({where:{createdAt:{gte:since},mode:{in:['execution','rollback']},...tenantDeviceScope(req)},select:{status:true,mode:true,createdAt:true,startedAt:true,completedAt:true}}),
+    prisma.runbookExecution.groupBy({by:['runbookId'],where:{createdAt:{gte:since},mode:'execution',...tenantDeviceScope(req)},_count:{_all:true},orderBy:{_count:{runbookId:'desc'}},take:8}),
+    prisma.runbookExecution.findMany({where:{createdAt:{gte:since},mode:'execution',...tenantDeviceScope(req)},select:{status:true,device:{select:{type:true}}}}),
   ]);
   const ids=byRunbook.map(item=>item.runbookId);const names=await prisma.runbook.findMany({where:{id:{in:ids}},select:{id:true,name:true}});
   const completed=executions.filter(item=>item.status==='completed').length;
@@ -133,7 +139,7 @@ router.delete('/schedules/:scheduleId',async(req,res,next)=>{try{
 }catch(error){next(error);}});
 
 router.get('/:id',async(req,res,next)=>{try{
-  const row=await prisma.runbook.findUnique({where:{id:req.params.id},include:{...include,executions:{include:{device:{select:{name:true,type:true}}},orderBy:{createdAt:'desc'},take:30}}});
+  const row=await prisma.runbook.findUnique({where:{id:req.params.id},include:{...scopedInclude(req),executions:{where:tenantDeviceScope(req),include:{device:{select:{name:true,type:true}}},orderBy:{createdAt:'desc'},take:30}}});
   if(!row)return res.status(404).json({success:false,error:'Runbook não encontrado'});
   if(req.user.role!=='admin'&&row.status!=='published')return res.status(404).json({success:false,error:'Runbook não encontrado'});
   res.json({success:true,data:publicRunbook(row)});
@@ -165,13 +171,14 @@ router.put('/:id',async(req,res,next)=>{try{
 
 router.get('/:id/revisions',async(req,res,next)=>{try{
   const runbook=await prisma.runbook.findUnique({where:{id:req.params.id}});
-  if(!runbook)return res.status(404).json({success:false,error:'Runbook não encontrado'});
-  await prisma.runbookRevision.upsert({where:{runbookId_version:{runbookId:runbook.id,version:runbook.version}},update:{},create:revisionData(runbook,runbook.updatedBy)});
+  if(!runbook||(req.user.tenantId&&runbook.status!=='published'))return res.status(404).json({success:false,error:'Runbook não encontrado'});
+  if(!req.user.tenantId)await prisma.runbookRevision.upsert({where:{runbookId_version:{runbookId:runbook.id,version:runbook.version}},update:{},create:revisionData(runbook,runbook.updatedBy)});
   const rows=await prisma.runbookRevision.findMany({where:{runbookId:runbook.id},orderBy:{version:'desc'}});
   res.json({success:true,data:rows.map(row=>({...row,variables:JSON.parse(row.variables),steps:JSON.parse(row.steps)}))});
 }catch(error){next(error);}});
 
 router.get('/:id/compare',async(req,res,next)=>{try{
+  if(req.user.tenantId){const runbook=await prisma.runbook.findFirst({where:{id:req.params.id,status:'published'},select:{id:true}});if(!runbook)return res.status(404).json({success:false,error:'Runbook não encontrado'});}
   const versions=[Number(req.query.from),Number(req.query.to)];
   if(versions.some(value=>!Number.isInteger(value)))return res.status(400).json({success:false,error:'Informe as versões para comparação'});
   const rows=await prisma.runbookRevision.findMany({where:{runbookId:req.params.id,version:{in:versions}}});
@@ -224,7 +231,7 @@ router.post('/:id/archive',async(req,res,next)=>{try{
 }catch(error){next(error);}});
 
 async function context(req){
-  const [runbook,device]=await Promise.all([prisma.runbook.findUnique({where:{id:req.params.id}}),prisma.device.findFirst({where:{id:String(req.body.deviceId||''),isActive:true}})]);
+  const [runbook,device]=await Promise.all([prisma.runbook.findUnique({where:{id:req.params.id}}),prisma.device.findFirst({where:{id:String(req.body.deviceId||''),isActive:true,...(req.user.tenantId&&{tenantId:req.user.tenantId})}})]);
   if(!runbook)throw Object.assign(new Error('Runbook não encontrado'),{statusCode:404});
   if(!device)throw Object.assign(new Error('Equipamento não encontrado ou inativo'),{statusCode:404});
   if(runbook.deviceType!=='any'&&runbook.deviceType!==device.type)throw Object.assign(new Error('Runbook incompatível com o equipamento'),{statusCode:400});
@@ -241,7 +248,7 @@ router.post('/:id/simulate',async(req,res,next)=>{try{
 }catch(error){next(error);}});
 
 router.post('/:id/execute',async(req,res,next)=>{try{
-  if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem executar runbooks'});
+  if(!['admin','tenant_admin'].includes(req.user.role))return res.status(403).json({success:false,error:'Somente administradores podem executar runbooks'});
   if(req.body.confirmed!==true)return res.status(400).json({success:false,error:'Confirmação explícita obrigatória'});
   const data=await context(req);
   if(data.runbook.status!=='published')return res.status(409).json({success:false,error:'Somente runbooks publicados podem ser executados'});
@@ -254,8 +261,8 @@ router.post('/:id/execute',async(req,res,next)=>{try{
 }catch(error){next(error);}});
 
 router.post('/executions/:executionId/rollback/prepare',async(req,res,next)=>{try{
-  if(req.user.role!=='admin')return res.status(403).json({success:false,error:'Somente administradores podem preparar rollback'});
-  const execution=await prisma.runbookExecution.findUnique({where:{id:req.params.executionId},include:{device:true,beforeBackup:true,afterBackup:true}});
+  if(!['admin','tenant_admin'].includes(req.user.role))return res.status(403).json({success:false,error:'Somente administradores podem preparar rollback'});
+  const execution=await prisma.runbookExecution.findFirst({where:{id:req.params.executionId,...tenantDeviceScope(req)},include:{device:true,beforeBackup:true,afterBackup:true}});
   if(!execution||execution.mode!=='execution'||execution.status!=='completed')return res.status(404).json({success:false,error:'Execução concluída não encontrada'});
   const row=await prepareRunbookRollback({execution,device:execution.device,requestedBy:actor(req)});
   await logAudit({...requestIdentity(req),action:'prepare_rollback',resource:'runbook_execution',resourceId:row.id,details:{sourceExecutionId:execution.id,deviceId:execution.deviceId}});
@@ -264,8 +271,8 @@ router.post('/executions/:executionId/rollback/prepare',async(req,res,next)=>{tr
 }catch(error){next(error);}});
 
 router.post('/executions/:executionId/rollback',async(req,res,next)=>{try{
-  if(req.user.role!=='admin'||req.body.confirmed!==true)return res.status(403).json({success:false,error:'Rollback exige administrador e confirmação explícita'});
-  const execution=await prisma.runbookExecution.findUnique({where:{id:req.params.executionId},include:{device:true}});
+  if(!['admin','tenant_admin'].includes(req.user.role)||req.body.confirmed!==true)return res.status(403).json({success:false,error:'Rollback exige administrador e confirmação explícita'});
+  const execution=await prisma.runbookExecution.findFirst({where:{id:req.params.executionId,...tenantDeviceScope(req)},include:{device:true}});
   if(!execution||execution.mode!=='execution')return res.status(404).json({success:false,error:'Execução não encontrada'});
   const preparation=await prisma.runbookExecution.findFirst({where:{id:String(req.body.preparationId||''),runbookId:execution.runbookId,deviceId:execution.deviceId,inputHash:execution.inputHash,mode:'rollback_simulation',status:'completed',createdAt:{gte:new Date(Date.now()-30*60_000)}}});
   if(!preparation)return res.status(409).json({success:false,error:'Prepare e revise o rollback nos últimos 30 minutos antes da execução'});

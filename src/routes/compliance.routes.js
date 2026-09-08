@@ -10,6 +10,10 @@ import { verifyAuditChain } from '../services/audit.service.js';
 import crypto from 'node:crypto';
 
 const router = Router();
+const globalAdmin=(req,res,next)=>req.user.role==='admin'&&!req.user.tenantId?next():res.status(403).json({success:false,error:'Recurso reservado ao administrador da plataforma'});
+const tenantDeviceWhere=(req,id)=>({id:String(id||''),...(req.user.tenantId&&{tenantId:req.user.tenantId})});
+
+router.use('/governance',globalAdmin);
 
 router.get('/governance', async(_req,res,next)=>{
   try{
@@ -76,35 +80,35 @@ router.put('/scopes/:id/devices',async(req,res,next)=>{
   }catch(error){next(error);}
 });
 
-router.get('/', async (_req,res,next) => {
+router.get('/', async (req,res,next) => {
   try {
     await ensureComplianceProfiles();
     const devices = await prisma.device.findMany({
-      where:{isActive:true,type:{in:['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux']}},
+      where:{isActive:true,type:{in:['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux']},...(req.user.tenantId&&{tenantId:req.user.tenantId})},
       orderBy:{name:'asc'},
       select:{id:true,name:true,hostname:true,type:true,manufacturer:true,model:true,osVersion:true,compliancePolicy:true,complianceScans:{take:2,orderBy:{startedAt:'desc'},select:{id:true,profile:true,status:true,score:true,previousScore:true,passed:true,failed:true,regressions:true,recoveries:true,alertTaskId:true,error:true,type:true,startedAt:true,completedAt:true}},_count:{select:{complianceScans:true}}},
     });
     const latest = devices.map(item=>item.complianceScans[0]).filter(scan=>scan?.status==='completed');
-    const activeExceptions=await prisma.complianceException.count({where:{revokedAt:null,startsAt:{lte:new Date()},expiresAt:{gt:new Date()}}});
+    const activeExceptions=await prisma.complianceException.count({where:{revokedAt:null,startsAt:{lte:new Date()},expiresAt:{gt:new Date()},...(req.user.tenantId&&{device:{tenantId:req.user.tenantId}})}});
     res.json({success:true,data:{profile:COMPLIANCE_PROFILE,devices,summary:{devices:devices.length,monitored:devices.filter(item=>item.compliancePolicy?.enabled).length,averageScore:latest.length?Math.round(latest.reduce((sum,item)=>sum+(item.score||0),0)/latest.length):0,nonCompliant:latest.filter(item=>(item.score||0)<80).length,activeExceptions}}});
   } catch(error){next(error);}
 });
 
-router.get('/dashboard', async(_req,res,next)=>{
+router.get('/dashboard', async(req,res,next)=>{
   try{
     const since=new Date(Date.now()-30*86400000);
-    const scans=await prisma.complianceScan.findMany({where:{status:'completed',startedAt:{gte:since}},include:{device:{select:{id:true,name:true,hostname:true,compliancePolicy:{select:{minimumScore:true}}}},findings:{select:{status:true,severity:true}}},orderBy:{startedAt:'desc'}});
+    const scans=await prisma.complianceScan.findMany({where:{status:'completed',startedAt:{gte:since},...(req.user.tenantId&&{device:{tenantId:req.user.tenantId}})},include:{device:{select:{id:true,name:true,hostname:true,compliancePolicy:{select:{minimumScore:true}}}},findings:{select:{status:true,severity:true}}},orderBy:{startedAt:'desc'}});
     const latestMap=new Map();
     scans.forEach(scan=>{if(!latestMap.has(scan.deviceId))latestMap.set(scan.deviceId,scan);});
     const latest=[...latestMap.values()];
     const scores=latest.map(scan=>scan.score||0);
     const belowTarget=latest.filter(scan=>(scan.score||0)<(scan.device.compliancePolicy?.minimumScore||80));
     const criticalFindings=latest.reduce((sum,scan)=>sum+scan.findings.filter(item=>item.status==='non_compliant'&&item.severity==='critical').length,0);
-    const expiring=await prisma.complianceException.findMany({where:{revokedAt:null,startsAt:{lte:new Date()},expiresAt:{gt:new Date(),lte:new Date(Date.now()+7*86400000)}},include:{device:{select:{name:true}}},orderBy:{expiresAt:'asc'},take:20});
+    const expiring=await prisma.complianceException.findMany({where:{revokedAt:null,startsAt:{lte:new Date()},expiresAt:{gt:new Date(),lte:new Date(Date.now()+7*86400000)},...(req.user.tenantId&&{device:{tenantId:req.user.tenantId}})},include:{device:{select:{name:true}}},orderBy:{expiresAt:'asc'},take:20});
     const days=new Map();
     scans.forEach(scan=>{const key=scan.startedAt.toLocaleDateString('sv-SE',{timeZone:'America/Porto_Velho'});const row=days.get(key)||{date:key,total:0,count:0};row.total+=scan.score||0;row.count++;days.set(key,row);});
     const trend=[...days.values()].sort((a,b)=>a.date.localeCompare(b.date)).map(row=>({date:row.date,score:Math.round(row.total/row.count),scans:row.count}));
-    res.json({success:true,data:{summary:{monitored:latest.length,averageScore:scores.length?Math.round(scores.reduce((sum,value)=>sum+value,0)/scores.length):0,belowTarget:belowTarget.length,criticalFindings,activeExceptions:await prisma.complianceException.count({where:{revokedAt:null,startsAt:{lte:new Date()},expiresAt:{gt:new Date()}}}),expiringExceptions:expiring.length},riskDevices:belowTarget.map(scan=>({id:scan.deviceId,name:scan.device.name,hostname:scan.device.hostname,score:scan.score,target:scan.device.compliancePolicy?.minimumScore||80,critical:scan.findings.filter(item=>item.status==='non_compliant'&&item.severity==='critical').length})).sort((a,b)=>a.score-b.score),expiring:expiring.map(item=>({id:item.id,device:item.device.name,ruleKey:item.ruleKey,expiresAt:item.expiresAt,approvedBy:item.approvedBy})),trend}});
+    res.json({success:true,data:{summary:{monitored:latest.length,averageScore:scores.length?Math.round(scores.reduce((sum,value)=>sum+value,0)/scores.length):0,belowTarget:belowTarget.length,criticalFindings,activeExceptions:await prisma.complianceException.count({where:{revokedAt:null,startsAt:{lte:new Date()},expiresAt:{gt:new Date()},...(req.user.tenantId&&{device:{tenantId:req.user.tenantId}})}}),expiringExceptions:expiring.length},riskDevices:belowTarget.map(scan=>({id:scan.deviceId,name:scan.device.name,hostname:scan.device.hostname,score:scan.score,target:scan.device.compliancePolicy?.minimumScore||80,critical:scan.findings.filter(item=>item.status==='non_compliant'&&item.severity==='critical').length})).sort((a,b)=>a.score-b.score),expiring:expiring.map(item=>({id:item.id,device:item.device.name,ruleKey:item.ruleKey,expiresAt:item.expiresAt,approvedBy:item.approvedBy})),trend}});
   }catch(error){next(error);}
 });
 
@@ -113,7 +117,7 @@ router.get('/profiles', async(req,res,next)=>{
   catch(error){next(error);}
 });
 
-router.post('/profiles', async(req,res,next)=>{
+router.post('/profiles', globalAdmin, async(req,res,next)=>{
   try {
     await ensureComplianceProfiles();
     const deviceType=['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux'].includes(req.body.deviceType)?req.body.deviceType:null;
@@ -126,7 +130,7 @@ router.post('/profiles', async(req,res,next)=>{
   } catch(error){next(error);}
 });
 
-router.put('/profiles/:id', async(req,res,next)=>{
+router.put('/profiles/:id', globalAdmin, async(req,res,next)=>{
   try {
     const current=await prisma.complianceProfile.findUnique({where:{id:req.params.id}});
     if(!current)return res.status(404).json({success:false,error:'Perfil não encontrado'});
@@ -142,7 +146,7 @@ router.put('/profiles/:id', async(req,res,next)=>{
   } catch(error){next(error);}
 });
 
-router.delete('/profiles/:id', async(req,res,next)=>{
+router.delete('/profiles/:id', globalAdmin, async(req,res,next)=>{
   try {
     const profile=await prisma.complianceProfile.findUnique({where:{id:req.params.id},include:{_count:{select:{policies:true}}}});
     if(!profile)return res.status(404).json({success:false,error:'Perfil não encontrado'});
@@ -156,7 +160,7 @@ router.delete('/profiles/:id', async(req,res,next)=>{
 
 router.get('/exceptions', async(req,res,next)=>{
   try {
-    const rows=await prisma.complianceException.findMany({where:req.query.deviceId?{deviceId:String(req.query.deviceId)}:undefined,include:{device:{select:{name:true,hostname:true,type:true}}},orderBy:{createdAt:'desc'},take:500});
+    const rows=await prisma.complianceException.findMany({where:{...(req.query.deviceId&&{deviceId:String(req.query.deviceId)}),...(req.user.tenantId&&{device:{tenantId:req.user.tenantId}})},include:{device:{select:{name:true,hostname:true,type:true}}},orderBy:{createdAt:'desc'},take:500});
     const now=new Date();
     res.json({success:true,data:rows.map(item=>({...item,state:item.revokedAt?'revoked':item.expiresAt<=now?'expired':item.startsAt>now?'scheduled':'active'}))});
   } catch(error){next(error);}
@@ -164,14 +168,14 @@ router.get('/exceptions', async(req,res,next)=>{
 
 router.get('/reports', async(req,res,next)=>{
   try {
-    const report=await buildComplianceReport(req.query);
+    const report=await buildComplianceReport(req.query,req.user.tenantId);
     res.json({success:true,data:{...report,scans:report.scans.map(scan=>({...scan,findings:undefined})),findings:undefined}});
   } catch(error){next(error);}
 });
 
 router.get('/reports/csv', async(req,res,next)=>{
   try {
-    const report=await buildComplianceReport(req.query);
+    const report=await buildComplianceReport(req.query,req.user.tenantId);
     const filename=`compliance-${new Date().toISOString().slice(0,10)}.csv`;
     res.setHeader('Content-Type','text/csv; charset=utf-8');
     res.setHeader('Content-Disposition',`attachment; filename="${filename}"`);
@@ -182,7 +186,7 @@ router.get('/reports/csv', async(req,res,next)=>{
 
 router.get('/reports/pdf', async(req,res,next)=>{
   try {
-    const report=await buildComplianceReport(req.query);
+    const report=await buildComplianceReport(req.query,req.user.tenantId);
     const filename=`compliance-${new Date().toISOString().slice(0,10)}.pdf`;
     res.setHeader('Content-Type','application/pdf');
     res.setHeader('Content-Disposition',`attachment; filename="${filename}"`);
@@ -192,7 +196,7 @@ router.get('/reports/pdf', async(req,res,next)=>{
   } catch(error){next(error);}
 });
 
-router.get('/reports/package', async(req,res,next)=>{
+router.get('/reports/package', globalAdmin, async(req,res,next)=>{
   try{
     const report=await buildComplianceReport(req.query);
     const integrity=await verifyAuditChain();
@@ -227,7 +231,7 @@ router.get('/reports/package', async(req,res,next)=>{
 router.post('/exceptions', async(req,res,next)=>{
   try {
     await ensureComplianceProfiles();
-    const device=await prisma.device.findUnique({where:{id:String(req.body.deviceId||'')}});
+    const device=await prisma.device.findFirst({where:tenantDeviceWhere(req,req.body.deviceId)});
     if(!device||!['mikrotik','huawei_vrp','cisco_ios','juniper_junos','fortigate_fortios','ubiquiti_edgeos','datacom_dmos','nokia_sros','linux'].includes(device.type))return res.status(404).json({success:false,error:'Equipamento compatível não encontrado'});
     const ruleKey=String(req.body.ruleKey||'').trim();
     const validRule=await prisma.complianceRule.findFirst({where:{ruleKey,profile:{deviceType:device.type}}});
@@ -247,7 +251,7 @@ router.post('/exceptions', async(req,res,next)=>{
 
 router.delete('/exceptions/:id', async(req,res,next)=>{
   try {
-    const current=await prisma.complianceException.findUnique({where:{id:req.params.id},include:{device:{select:{name:true}}}});
+    const current=await prisma.complianceException.findFirst({where:{id:req.params.id,...(req.user.tenantId&&{device:{tenantId:req.user.tenantId}})},include:{device:{select:{name:true}}}});
     if(!current)return res.status(404).json({success:false,error:'Exceção não encontrada'});
     if(current.revokedAt)return res.status(409).json({success:false,error:'Exceção já revogada'});
     const exception=await prisma.complianceException.update({where:{id:current.id},data:{revokedAt:new Date(),revokedBy:req.user.username}});
@@ -258,7 +262,7 @@ router.delete('/exceptions/:id', async(req,res,next)=>{
 
 router.post('/findings/:id/remediation-task', async(req,res,next)=>{
   try{
-    const finding=await prisma.complianceFinding.findUnique({where:{id:req.params.id},include:{scan:{include:{device:true}}}});
+    const finding=await prisma.complianceFinding.findFirst({where:{id:req.params.id,...(req.user.tenantId&&{scan:{device:{tenantId:req.user.tenantId}}})},include:{scan:{include:{device:true}}}});
     if(!finding)return res.status(404).json({success:false,error:'Controle não encontrado'});
     if(finding.status!=='non_compliant')return res.status(409).json({success:false,error:'Somente controles não conformes podem gerar correção'});
     if(!finding.remediationPreview)return res.status(400).json({success:false,error:'Este controle não possui uma correção sugerida'});
@@ -281,6 +285,8 @@ router.post('/findings/:id/remediation-task', async(req,res,next)=>{
 
 router.put('/policies/:deviceId', async(req,res,next)=>{
   try {
+    const device=await prisma.device.findFirst({where:tenantDeviceWhere(req,req.params.deviceId),select:{id:true}});
+    if(!device)return res.status(404).json({success:false,error:'Equipamento não encontrado'});
     const policy=await saveCompliancePolicy(req.params.deviceId,req.body);
     await logAudit({...requestIdentity(req),action:'update_policy',resource:'compliance',resourceId:req.params.deviceId,status:'success',details:{enabled:policy.enabled,frequency:policy.frequency,hour:policy.hour,weekday:policy.weekday,profile:policy.profile}});
     res.json({success:true,data:policy});
@@ -289,6 +295,8 @@ router.put('/policies/:deviceId', async(req,res,next)=>{
 
 router.post('/scan/:deviceId', async(req,res,next)=>{
   try {
+    const device=await prisma.device.findFirst({where:tenantDeviceWhere(req,req.params.deviceId),select:{id:true}});
+    if(!device)return res.status(404).json({success:false,error:'Equipamento não encontrado'});
     const scan=await runComplianceScan(req.params.deviceId,{type:'manual',username:req.user.username});
     res.status(201).json({success:true,data:scan,message:'Verificação de compliance concluída'});
   } catch(error){next(error);}
@@ -296,20 +304,20 @@ router.post('/scan/:deviceId', async(req,res,next)=>{
 
 router.get('/scans', async(req,res,next)=>{
   try {
-    const scans=await prisma.complianceScan.findMany({where:req.query.deviceId?{deviceId:String(req.query.deviceId)}:undefined,orderBy:{startedAt:'desc'},take:Math.min(Math.max(Number(req.query.limit)||50,1),200),include:{device:{select:{name:true,hostname:true,type:true}}}});
+    const scans=await prisma.complianceScan.findMany({where:{...(req.query.deviceId&&{deviceId:String(req.query.deviceId)}),...(req.user.tenantId&&{device:{tenantId:req.user.tenantId}})},orderBy:{startedAt:'desc'},take:Math.min(Math.max(Number(req.query.limit)||50,1),200),include:{device:{select:{name:true,hostname:true,type:true}}}});
     res.json({success:true,data:scans});
   } catch(error){next(error);}
 });
 
 router.get('/scans/:id', async(req,res,next)=>{
   try {
-    const scan=await prisma.complianceScan.findUnique({where:{id:req.params.id},include:{device:{select:{name:true,hostname:true,type:true,model:true,osVersion:true}},findings:{orderBy:[{status:'desc'},{severity:'asc'},{category:'asc'}]}}});
+    const scan=await prisma.complianceScan.findFirst({where:{id:req.params.id,...(req.user.tenantId&&{device:{tenantId:req.user.tenantId}})},include:{device:{select:{name:true,hostname:true,type:true,model:true,osVersion:true}},findings:{orderBy:[{status:'desc'},{severity:'asc'},{category:'asc'}]}}});
     if(!scan)return res.status(404).json({success:false,error:'Verificação não encontrada'});
     res.json({success:true,data:scan});
   } catch(error){next(error);}
 });
 
-router.delete('/scans/:id', async(req,res,next)=>{
+router.delete('/scans/:id', globalAdmin, async(req,res,next)=>{
   try {
     await prisma.complianceScan.delete({where:{id:req.params.id}});
     await logAudit({...requestIdentity(req),action:'delete',resource:'compliance',resourceId:req.params.id,status:'success'});

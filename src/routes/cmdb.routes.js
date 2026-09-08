@@ -14,6 +14,8 @@ import { decideIpamSuggestion, detectIpamConflicts, listIpamSuggestions, refresh
 
 const router = Router();
 const actor = req => String(req.user?.name || req.user?.username || 'Administrador').slice(0, 100);
+const tenantBlocked=/^\/(suggestions|lifecycle-alerts|relationships|business-services)(\/|$)|^\/inventory\/collect-all$|^\/ipam\/(history|conflicts|suggestions|import)(\/|$)/;
+router.use(async(req,res,next)=>{try{const tenantId=req.user.tenantId;if(!tenantId)return next();req.query.tenantId=tenantId;if(req.body&&typeof req.body==='object')req.body.tenantId=tenantId;if(tenantBlocked.test(req.path))return res.status(403).json({success:false,error:'Esta rotina global ainda não está disponível no portal da empresa'});if(req.path==='/ipam/addresses'&&req.method==='POST'&&!await prisma.ipamSubnet.findFirst({where:{id:String(req.body.subnetId||''),tenantId},select:{id:true}}))return res.status(404).json({success:false,error:'Rede não encontrada'});let scoped=true;if(/^\/ipam\/subnets\/[^/]+$/.test(req.path))scoped=Boolean(await prisma.ipamSubnet.findFirst({where:{id:req.path.split('/').at(-1),tenantId},select:{id:true}}));else if(/^\/ipam\/addresses\/[^/]+$/.test(req.path))scoped=Boolean(await prisma.ipamAddress.findFirst({where:{id:req.path.split('/').at(-1),subnet:{tenantId}},select:{id:true}}));else{const match=req.path.match(/^\/([^/]+)(?:\/|$)/),reserved=['summary','governance','ipam','sync-devices','inventory'];if(match&&!reserved.includes(match[1]))scoped=Boolean(await prisma.cmdbAsset.findFirst({where:{id:match[1],tenantId},select:{id:true}}));}return scoped?next():res.status(404).json({success:false,error:'Recurso não encontrado'});}catch(error){next(error)}});
 
 router.get('/summary', async (req,res,next) => { try { res.json({ success:true, data:await cmdbSummary(req.query.tenantId || null) }); } catch(error) { next(error); } });
 router.get('/governance', async (req,res,next) => { try { res.json({ success:true, data:await cmdbGovernance(req.query.tenantId || null) }); } catch(error) { next(error); } });
@@ -46,7 +48,7 @@ router.get('/', async (req,res,next) => { try { res.json({ success:true, data:aw
 
 router.post('/sync-devices', async (req,res,next) => {
   try {
-    const devices = await prisma.device.findMany({ where: { cmdbAsset: { is: null } }, include: { tenant:true, site:true } });
+    const devices = await prisma.device.findMany({ where: { cmdbAsset: { is: null },...(req.user.tenantId&&{tenantId:req.user.tenantId}) }, include: { tenant:true, site:true } });
     const created=[];
     for (const device of devices) {
       const data=await normalizeCmdbAsset({ name:device.name,category:'network',status:device.isActive?'active':'maintenance',criticality:'high',tenantId:device.tenantId,siteId:device.siteId,deviceId:device.id,manufacturer:device.manufacturer,model:device.model,hostname:device.hostname,tags:[device.type,device.platform,device.capabilities].filter(Boolean).join(',') },actor(req));

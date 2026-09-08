@@ -181,28 +181,28 @@ export default function App() {
           ) : (
             <Route element={<Layout branding={branding} user={user} theme={theme} onTheme={setTheme} onLogout={async () => { try { await api.logout(); } catch {} localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
               <Route index element={user?.tenantId?<Reports/>:<Dashboard showBackup={user?.role === 'admin'} />} />
-              <Route path="devices" element={<Devices canManage={user?.role === 'admin'&&!user?.tenantId} />} />
-              <Route path="tasks" element={<Tasks canOperate={['admin', 'operator'].includes(user?.role)} isAdmin={user?.role === 'admin'} />} />
-              <Route path="chat" element={['admin', 'operator'].includes(user?.role) ? <Chat /> : <Navigate to="/" replace />} />
+              <Route path="devices" element={<Devices canManage={['admin','tenant_admin'].includes(user?.role)} />} />
+              <Route path="tasks" element={<Tasks canOperate={['admin', 'operator','tenant_admin','tenant_operator'].includes(user?.role)} isAdmin={['admin','tenant_admin'].includes(user?.role)} />} />
+              <Route path="chat" element={['admin','operator','tenant_admin','tenant_operator'].includes(user?.role) ? <Chat /> : <Navigate to="/" replace />} />
               <Route path="terminal" element={<React.Suspense fallback={<div className="loading-screen"><div className="spinner" /> Carregando terminal...</div>}><Terminal user={user} /></React.Suspense>} />
               <Route path="settings" element={user?.role === 'admin' ? <Settings /> : <Navigate to="/" replace />} />
               <Route path="vpn" element={user?.role === 'admin' ? <Vpn /> : <Navigate to="/" replace />} />
-              <Route path="users" element={user?.role === 'admin' ? <Users /> : <Navigate to="/" replace />} />
+              <Route path="users" element={['admin','tenant_admin'].includes(user?.role) ? <Users user={user}/> : <Navigate to="/" replace />} />
               <Route path="audit" element={user?.role === 'admin' ? <Audit /> : <Navigate to="/" replace />} />
               <Route path="reports" element={<Reports />} />
               <Route path="ai-usage" element={user?.role === 'admin' ? <AiUsage /> : <Navigate to="/" replace />} />
-              <Route path="knowledge" element={user?.role === 'admin' ? <Knowledge /> : <Navigate to="/" replace />} />
+              <Route path="knowledge" element={['admin','tenant_admin'].includes(user?.role) ? <Knowledge /> : <Navigate to="/" replace />} />
               <Route path="backups" element={user?.role === 'admin' ? <Backups /> : <Navigate to="/" replace />} />
               <Route path="device-backups" element={user?.role === 'admin' ? <DeviceBackups /> : <Navigate to="/" replace />} />
-              <Route path="compliance" element={user?.role === 'admin' ? <Compliance /> : <Navigate to="/" replace />} />
-              <Route path="vulnerabilities" element={user?.role === 'admin' ? <Vulnerabilities /> : <Navigate to="/" replace />} />
+              <Route path="compliance" element={['admin','tenant_admin'].includes(user?.role) ? <Compliance isGlobalAdmin={user?.role==='admin'} /> : <Navigate to="/" replace />} />
+              <Route path="vulnerabilities" element={['admin','tenant_admin'].includes(user?.role) ? <Vulnerabilities /> : <Navigate to="/" replace />} />
               <Route path="lifecycle" element={user?.role === 'admin' ? <Lifecycle /> : <Navigate to="/" replace />} />
-              <Route path="changes" element={['admin','operator'].includes(user?.role) ? <Changes isAdmin={user?.role==='admin'} /> : <Navigate to="/" replace />} />
+              <Route path="changes" element={['admin','operator','tenant_admin','tenant_operator'].includes(user?.role) ? <Changes isAdmin={['admin','tenant_admin'].includes(user?.role)} /> : <Navigate to="/" replace />} />
               <Route path="discovery" element={user?.role==='admin' ? <Discovery /> : <Navigate to="/" replace />} />
               <Route path="capacity" element={<Capacity isAdmin={user?.role==='admin'} />} />
               <Route path="topology" element={<Topology isAdmin={user?.role==='admin'} />} />
               <Route path="flow-inspector" element={['admin','operator'].includes(user?.role)?<FlowInspector isAdmin={user?.role==='admin'}/>:<Navigate to="/" replace/>}/>
-              <Route path="runbooks" element={['admin','operator'].includes(user?.role) ? <Runbooks isAdmin={user?.role==='admin'} user={user} /> : <Navigate to="/" replace />} />
+              <Route path="runbooks" element={['admin','operator','tenant_admin','tenant_operator'].includes(user?.role) ? <Runbooks isAdmin={user?.role==='admin'} canExecute={['admin','tenant_admin'].includes(user?.role)} user={user} /> : <Navigate to="/" replace />} />
               <Route path="notifications" element={<Notifications isAdmin={user?.role==='admin'} />} />
               <Route path="on-call" element={user?.role==='admin' ? <OnCall /> : <Navigate to="/" replace />} />
               <Route path="clients" element={user?.role==='admin'&&!user?.tenantId ? <Clients /> : <Navigate to="/" replace />} />
@@ -214,7 +214,7 @@ export default function App() {
               <Route path="commercial-costs" element={user?.role==='admin'&&!user?.tenantId ? <CommercialCosts /> : <Navigate to="/" replace />} />
               <Route path="commercial-dashboard" element={user?.role==='admin'&&!user?.tenantId ? <CommercialDashboard /> : <Navigate to="/" replace />} />
               <Route path="commercial-reports" element={user?.role==='admin'&&!user?.tenantId ? <CommercialReports /> : <Navigate to="/" replace />} />
-              <Route path="cmdb" element={user?.role==='admin'&&!user?.tenantId ? <Cmdb /> : <Navigate to="/" replace />} />
+              <Route path="cmdb" element={['admin','tenant_admin'].includes(user?.role) ? <Cmdb /> : <Navigate to="/" replace />} />
               <Route path="on-call-scopes" element={user?.role==='admin'&&!user?.tenantId ? <OnCallScopes /> : <Navigate to="/" replace />} />
               <Route path="status-page" element={user?.role==='admin' ? <StatusPage /> : <Navigate to="/" replace />} />
               <Route path="security" element={<Security user={user} onUser={setUser} />} />

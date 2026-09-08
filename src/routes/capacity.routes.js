@@ -5,7 +5,7 @@ import { logAudit, requestIdentity } from '../services/audit.service.js';
 const router=Router();
 
 router.get('/',async(req,res,next)=>{
-  try{res.json({success:true,data:await capacityDashboard(req.query.days)});}
+  try{res.json({success:true,data:await capacityDashboard(req.query.days,req.user.tenantId)});}
   catch(error){next(error);}
 });
 
@@ -19,7 +19,7 @@ router.post('/collect',async(req,res,next)=>{
 
 router.get('/export.csv',async(req,res,next)=>{
   try{
-    const dashboard=await capacityDashboard(req.query.days);
+    const dashboard=await capacityDashboard(req.query.days,req.user.tenantId);
     const safe=value=>`"${String(value??'').replaceAll('"','""')}"`;
     const rows=[['Equipamento','Endereço','Grupo','Disponibilidade período','Disponível agora','CPU %','Memória %','Armazenamento %','Tráfego entrada','Tráfego saída','Coletado em']];
     dashboard.rows.forEach(row=>rows.push([row.name,row.hostname,row.group||'',row.availability30d,row.latest?.availability,row.latest?.cpu,row.latest?.memory,row.latest?.storage,row.latest?.trafficIn,row.latest?.trafficOut,row.latest?.collectedAt||'']));

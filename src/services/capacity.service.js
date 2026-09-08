@@ -93,10 +93,10 @@ export async function collectCapacity({username='system'}={}){
   }finally{collecting=false;}
 }
 
-export async function capacityDashboard(days=30){
+export async function capacityDashboard(days=30,tenantId=null){
   const config=await capacityConfig();
   const since=new Date(Date.now()-Math.min(Math.max(Number(days)||30,1),90)*86400000);
-  const devices=await prisma.device.findMany({where:{isActive:true,zabbixHostId:{not:null}},select:{id:true,name:true,hostname:true,type:true,group:true,zabbixHostId:true,capacitySnapshots:{where:{collectedAt:{gte:since}},orderBy:{collectedAt:'asc'}}},orderBy:{name:'asc'}});
+  const devices=await prisma.device.findMany({where:{isActive:true,zabbixHostId:{not:null},...(tenantId&&{tenantId})},select:{id:true,name:true,hostname:true,type:true,group:true,zabbixHostId:true,capacitySnapshots:{where:{collectedAt:{gte:since}},orderBy:{collectedAt:'asc'}}},orderBy:{name:'asc'}});
   const rows=devices.map(device=>{
     const history=device.capacitySnapshots,latest=history.at(-1)||null;
     const forecast=metric=>capacityForecast(history.map(item=>({at:item.collectedAt,value:item[metric]})));

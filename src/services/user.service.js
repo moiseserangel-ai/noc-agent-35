@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import prisma from '../database/client.js';
+import { validateScopedRole } from '../security/roles.js';
 
 const scrypt = promisify(crypto.scrypt);
-const ROLES = ['admin', 'operator', 'viewer'];
 
 export async function hashPassword(password, enforcePolicy = true) {
   const value = String(password || '');
@@ -37,7 +37,7 @@ export async function createUser(data) {
   const name = String(data.name || '').trim();
   if (!/^[a-z0-9._-]{3,40}$/.test(username)) throw new Error('Usuário inválido: use 3-40 letras, números, ponto, hífen ou sublinhado');
   if (!name) throw new Error('Informe o nome');
-  if (!ROLES.includes(data.role)) throw new Error('Perfil inválido');
+  validateScopedRole(data.role,data.tenantId||null);
   return prisma.user.create({ data: { username, name, role: data.role, tenantId:data.tenantId||null, passwordHash: await hashPassword(data.password), mustChangePassword: data.mustChangePassword !== false } });
 }
 

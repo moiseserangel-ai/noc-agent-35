@@ -101,33 +101,33 @@ app.use('/api/branding', brandingRoutes);
 app.use('/api/public/status', publicStatusRouter);
 
 // Protected routes
-app.use('/api/devices', authMiddleware, auditMutation, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || req.user.role === 'admin' ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);
+app.use('/api/devices', authMiddleware, auditMutation, (req, res, next) => ['GET', 'HEAD', 'OPTIONS'].includes(req.method) || ['admin','tenant_admin'].includes(req.user.role) ? next() : res.status(403).json({ success: false, error: 'Somente administradores podem alterar equipamentos' }), deviceRoutes);
 app.use('/api/settings', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, settingsRoutes);
 app.use('/api/integrations', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, integrationRoutes);
 app.use('/api/tasks', authMiddleware, readOnlyForViewer, auditMutation, taskRoutes);
-app.use('/api/chat', authMiddleware,globalOnly, requireRoles('admin', 'operator'), auditMutation, chatRoutes);
+app.use('/api/chat', authMiddleware, requireRoles('admin','operator','tenant_admin','tenant_operator'), auditMutation, chatRoutes);
 app.use('/api/vpn', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, vpnRoutes);
-app.use('/api/users', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, userRoutes);
-app.use('/api/tenants',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,tenantRoutes);
+app.use('/api/users', authMiddleware, requireRoles('admin','tenant_admin'), auditMutation, userRoutes);
+app.use('/api/tenants',authMiddleware,requireRoles('admin','tenant_admin','tenant_operator','tenant_viewer'),auditMutation,tenantRoutes);
 app.use('/api/audit', authMiddleware,globalOnly, requireRoles('admin'), auditRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
 app.use('/api/backups', authMiddleware,globalOnly, requireRoles('admin'), backupRoutes);
 app.use('/api/ai-usage', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, aiUsageRoutes);
 app.use('/api/cli', authMiddleware,globalOnly, auditMutation, cliRoutes);
-app.use('/api/knowledge', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, knowledgeRoutes);
+app.use('/api/knowledge', authMiddleware, requireRoles('admin','tenant_admin'), auditMutation, knowledgeRoutes);
 app.use('/api/device-backups', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, deviceBackupRoutes);
-app.use('/api/compliance', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, complianceRoutes);
-app.use('/api/changes', authMiddleware,globalOnly, requireRoles('admin', 'operator'), auditMutation, changeRequestRoutes);
+app.use('/api/compliance', authMiddleware, requireRoles('admin','tenant_admin'), auditMutation, complianceRoutes);
+app.use('/api/changes', authMiddleware, requireRoles('admin','operator','tenant_admin','tenant_operator'), auditMutation, changeRequestRoutes);
 app.use('/api/discovery', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, discoveryRoutes);
-app.use('/api/capacity', authMiddleware,globalOnly, auditMutation, capacityRoutes);
-app.use('/api/topology', authMiddleware,globalOnly, auditMutation, topologyRoutes);
+app.use('/api/capacity', authMiddleware, auditMutation, capacityRoutes);
+app.use('/api/topology', authMiddleware, auditMutation, topologyRoutes);
 app.use('/api/flow-inspector',authMiddleware,globalOnly,requireRoles('admin','operator'),auditMutation,flowInspectorRoutes);
-app.use('/api/runbooks', authMiddleware,globalOnly, requireRoles('admin', 'operator'), auditMutation, runbookRoutes);
+app.use('/api/runbooks', authMiddleware, requireRoles('admin','operator','tenant_admin','tenant_operator'), auditMutation, runbookRoutes);
 app.use('/api/notifications', authMiddleware,globalOnly, auditMutation, notificationRoutes);
 app.use('/api/on-call', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, onCallRoutes);
 app.use('/api/status-page', authMiddleware,globalOnly, requireRoles('admin'), auditMutation, statusAdminRoutes);
-app.use('/api/cmdb',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,cmdbRoutes);
-app.use('/api/vulnerabilities',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,vulnerabilityRoutes);
+app.use('/api/cmdb',authMiddleware,requireRoles('admin','tenant_admin'),auditMutation,cmdbRoutes);
+app.use('/api/vulnerabilities',authMiddleware,requireRoles('admin','tenant_admin'),auditMutation,vulnerabilityRoutes);
 app.use('/api/lifecycle',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,lifecycleRoutes);
 app.use('/api/suppliers',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,supplierRoutes);
 app.use('/api/commercial-contracts',authMiddleware,globalOnly,requireRoles('admin'),auditMutation,commercialContractRoutes);
@@ -211,18 +211,18 @@ io.on('connection', (socket) => {
     let responseController=null;
     let directTask=null;
     try {
-      if (socket.user.tenantId) throw new Error('Chat com agentes é restrito à equipe global do NOC');
-      if (!['admin', 'operator'].includes(socket.user.role)) throw new Error('Sem permissão para usar agentes');
+      if (!['admin','operator','tenant_admin','tenant_operator'].includes(socket.user.role)) throw new Error('Sem permissão para usar agentes');
       if (typeof sessionId !== 'string' || typeof message !== 'string' || message.length > 4000) throw new Error('Mensagem inválida');
-      const ownedSession = await prisma.chatSession.findUnique({ where: { id: sessionId } });
+      const ownedSession = await prisma.chatSession.findFirst({ where: socket.user.tenantId?{id:sessionId,ownerId:socket.user.sub,tenantId:socket.user.tenantId}:{id:sessionId,tenantId:null,OR:[{ownerId:socket.user.sub},{ownerId:null}]} });
       if (!ownedSession) throw new Error('Sessão inválida');
+      if(!ownedSession.ownerId)await prisma.chatSession.update({where:{id:ownedSession.id},data:{ownerId:socket.user.sub}});
       if(ownedSession.archivedAt)throw new Error('Esta conversa está arquivada. Restaure-a antes de enviar novas mensagens.');
       const agent = agents[agentType];
       if (!agent) {
         socket.emit('chat:error', { error: `Agent "${agentType}" not found` });
         return;
       }
-      const selectedDevice=deviceId?await prisma.device.findFirst({where:{id:String(deviceId),isActive:true},select:{id:true,type:true}}):null;
+      const selectedDevice=deviceId?await prisma.device.findFirst({where:{id:String(deviceId),isActive:true,...(socket.user.tenantId&&{tenantId:socket.user.tenantId})},select:{id:true,type:true}}):null;
       if(deviceId&&!selectedDevice)throw new Error('Equipamento fixado não encontrado ou inativo');
       const directWorkType=agentType!=='support'?inferWorkType(message,'dashboard'):null;
       if(agentType!=='support'&&directWorkType==='configuration'){
@@ -251,13 +251,14 @@ io.on('connection', (socket) => {
       if (approvalMatch) {
         const approved = Boolean(approvalMatch[1]);
         const explicitNumber = approvalMatch[3] ? Number(approvalMatch[3]) : null;
-        const pendingTask = explicitNumber
+        let pendingTask = explicitNumber
           ? await taskService.getTaskByNumber(explicitNumber)
           : await prisma.task.findFirst({
               where: { source: `dashboard:${sessionId}`, status: 'awaiting_approval' },
               include: { device: true },
               orderBy: { createdAt: 'desc' },
             });
+        if(pendingTask&&socket.user.tenantId&&pendingTask.tenantId!==socket.user.tenantId)pendingTask=null;
 
         if (!pendingTask || pendingTask.status !== 'awaiting_approval') {
           const text = 'Não há nenhuma alteração aguardando aprovação neste chat.';
@@ -348,6 +349,8 @@ io.on('connection', (socket) => {
             if (classification.action === 'route_to_specialist') {
               const { deviceId, deviceType, deviceName, originalRequest } = classification;
               const specialistAgent = agents[deviceType];
+              const routedDevice=await prisma.device.findFirst({where:{id:String(deviceId||''),isActive:true,...(socket.user.tenantId&&{tenantId:socket.user.tenantId})},select:{id:true}});
+              if(!routedDevice)throw new Error('O equipamento indicado pelo agente não pertence ao escopo desta empresa');
               
               if (specialistAgent) {
                 const dashboardTask = await taskService.createTask({

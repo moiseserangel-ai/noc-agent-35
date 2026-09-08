@@ -73,9 +73,9 @@ export default class SupportAgent extends BaseAgent {
           required: [],
         },
       },
-      async () => {
+      async (_input,{tenantId}={}) => {
         const devices = await prisma.device.findMany({
-          where: { isActive: true },
+          where: { isActive: true,...(tenantId&&{tenantId}) },
           select: { id: true, name: true, hostname: true, type: true, group: true, zabbixHostId: true },
         });
         return { devices, total: devices.length };
@@ -97,9 +97,9 @@ export default class SupportAgent extends BaseAgent {
           required: ['query'],
         },
       },
-      async ({ query }) => {
+      async ({ query },{tenantId}={}) => {
         const q = query.toLowerCase();
-        const devices = await prisma.device.findMany({ where: { isActive: true } });
+        const devices = await prisma.device.findMany({ where: { isActive: true,...(tenantId&&{tenantId}) } });
         const found = devices.filter(
           d =>
             d.name.toLowerCase().includes(q) ||

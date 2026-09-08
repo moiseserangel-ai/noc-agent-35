@@ -3,7 +3,7 @@ import logger from '../utils/logger.js';
 import prisma from '../database/client.js';
 import { decrypt } from '../utils/crypto.js';
 import { providerRunners } from '../ai/providers.js';
-import { providerAvailability, recordAiFailure, recordAiSkipped, recordAiSuccess } from '../services/ai-usage.service.js';
+import { assertTenantAiQuota, providerAvailability, recordAiFailure, recordAiSkipped, recordAiSuccess } from '../services/ai-usage.service.js';
 import { knowledgeContext } from '../services/knowledge.service.js';
 
 const CONFIGURATION_REQUEST = /\b(configur|alter|cria|adicion|remov|exclu|desativ|ativ|bloque|liber|aplic|reinici|instal|atualiz|migr)\w*/i;
@@ -66,16 +66,22 @@ export default class BaseAgent {
     }
     return rows.join('\n\n');
   }
-  async executeToolCall(name, input) {
+  async executeToolCall(name, input, context = {}) {
     const handler = this.toolHandlers[name];
     if (!handler) return JSON.stringify({ error: `Unknown tool: ${name}` });
-    try { return JSON.stringify(await handler(input)); } catch (err) { logger.error(`Tool ${name}: ${err.message}`); return JSON.stringify({ error: err.message }); }
+    try {
+      if(context.tenantId&&input?.deviceId&&!await prisma.device.findFirst({where:{id:String(input.deviceId),tenantId:context.tenantId,isActive:true},select:{id:true}}))throw new Error('Equipamento fora do escopo da empresa');
+      if(context.tenantId&&['ping_host','traceroute_host'].includes(name)&&!await prisma.device.findFirst({where:{tenantId:context.tenantId,isActive:true,hostname:String(input?.target||'')},select:{id:true}}))throw new Error('O diagnóstico de rede está limitado aos equipamentos cadastrados da empresa');
+      return JSON.stringify(await handler(input,context));
+    } catch (err) { logger.error(`Tool ${name}: ${err.message}`); return JSON.stringify({ error: err.message }); }
   }
   async run(userMessage, _context = {}, onEvent) {
     let tenantId = _context.tenantId;
     const deviceId = _context.deviceId || String(userMessage).match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i)?.[0];
     const deviceContext = deviceId ? await prisma.device.findUnique({ where: { id: deviceId }, select: { tenantId: true, type: true, manufacturer: true, model: true, platform: true, osVersion: true, capabilities: true } }) : null;
     if (tenantId === undefined) tenantId = deviceContext?.tenantId ?? null;
+    if(tenantId&&deviceContext?.tenantId!==tenantId)throw new Error('Equipamento fora do escopo da empresa');
+    await assertTenantAiQuota(tenantId);
     const preflightEvidence = deviceId && !APPROVED_EXECUTION.test(String(userMessage)) ? await this.collectPreflight(deviceId) : '';
     const preflightInstruction = preflightEvidence ? `\n\n[EVIDÊNCIAS PRÉVIAS COLETADAS AUTOMATICAMENTE — somente leitura]\n${preflightEvidence}` : '';
     const mikrotikModel = String(deviceContext?.model || '');
@@ -97,7 +103,7 @@ export default class BaseAgent {
       const availability = await providerAvailability(provider);
       if (!availability.available) {
         const reason = `Indisponível até ${availability.state.cooldownUntil.toISOString()}: ${availability.state.reason || 'limite temporário'}`;
-        await recordAiSkipped({ provider, model: cfg.providers[provider].model, agentName: this.name, reason });
+        await recordAiSkipped({ provider, model: cfg.providers[provider].model, agentName: this.name, reason, tenantId });
         logger.warn(`[${this.name}] provider=${provider} ignorado: ${reason}`);
         continue;
       }
@@ -107,13 +113,13 @@ export default class BaseAgent {
         logger.info(`[${this.name}] provider=${provider} model=${cfg.providers[provider].model}`);
         if(_context.signal?.aborted)throw Object.assign(new Error('Resposta cancelada pelo usuário'),{name:'AbortError'});
         const providerEvent = event => { if (event?.type === 'tool_start') toolStarted = true; onEvent?.(event); };
-        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: contextualMessage, history: _context.history || [], executeTool: this.executeToolCall.bind(this), onEvent:providerEvent, signal:_context.signal });
-        await recordAiSuccess({ provider, model: cfg.providers[provider].model, agentName: this.name, usage: result.usage, durationMs: Date.now() - startedAt });
+        const result = await providerRunners[provider]({ ...cfg.providers[provider], systemPrompt: this.systemPrompt, tools: this.tools, message: contextualMessage, history: _context.history || [], executeTool:(name,input)=>this.executeToolCall(name,input,{tenantId}), onEvent:providerEvent, signal:_context.signal });
+        await recordAiSuccess({ provider, model: cfg.providers[provider].model, agentName: this.name, usage: result.usage, durationMs: Date.now() - startedAt, tenantId });
         return { ...result, provider, model: cfg.providers[provider].model, knowledgeSources };
       } catch (err) {
         if(err.name==='AbortError'||_context.signal?.aborted)throw Object.assign(new Error('Resposta cancelada pelo usuário'),{name:'AbortError'});
         lastError = err;
-        const failure = await recordAiFailure({ provider, model: cfg.providers[provider].model, agentName: this.name, error: err, durationMs: Date.now() - startedAt });
+        const failure = await recordAiFailure({ provider, model: cfg.providers[provider].model, agentName: this.name, error: err, durationMs: Date.now() - startedAt, tenantId });
         logger.error(`[${this.name}] ${provider} falhou (${failure.kind}): ${err.message}`);
         if (!failure.retryable || toolStarted) throw err;
         onEvent?.({ type: 'provider_fallback', provider, reason: failure.kind });

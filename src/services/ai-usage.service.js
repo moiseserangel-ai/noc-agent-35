@@ -40,10 +40,10 @@ export async function providerAvailability(provider) {
   return { available: false, state };
 }
 
-export async function recordAiSuccess({ provider, model, agentName, usage, durationMs }) {
+export async function recordAiSuccess({ provider, model, agentName, usage, durationMs, tenantId=null }) {
   const tokens = normalizeUsage(provider, usage);
   await prisma.$transaction([
-    prisma.aiUsageLog.create({ data: { provider, model, agentName, status: 'success', durationMs, ...tokens } }),
+    prisma.aiUsageLog.create({ data: { provider, model, agentName, status: 'success', durationMs, tenantId, ...tokens } }),
     prisma.aiProviderState.upsert({
       where: { provider },
       create: { provider, status: 'available', lastSuccessAt: new Date() },
@@ -52,12 +52,12 @@ export async function recordAiSuccess({ provider, model, agentName, usage, durat
   ]);
 }
 
-export async function recordAiFailure({ provider, model, agentName, error, durationMs }) {
+export async function recordAiFailure({ provider, model, agentName, error, durationMs, tenantId=null }) {
   const { kind, retryAfterSeconds, retryable } = classifyAiError(error);
   const cooldownUntil = retryable ? new Date(Date.now() + retryAfterSeconds * 1000) : null;
   const stateStatus = kind === 'quota' ? 'quota_exhausted' : retryable ? 'cooldown' : 'available';
   await prisma.$transaction([
-    prisma.aiUsageLog.create({ data: { provider, model, agentName, status: 'error', errorKind: kind, errorMessage: compact(error?.message), durationMs } }),
+    prisma.aiUsageLog.create({ data: { provider, model, agentName, status: 'error', errorKind: kind, errorMessage: compact(error?.message), durationMs, tenantId } }),
     prisma.aiProviderState.upsert({
       where: { provider },
       create: { provider, status: stateStatus, reason: compact(error?.message), cooldownUntil, consecutiveErrors: 1, lastErrorAt: new Date() },
@@ -67,8 +67,18 @@ export async function recordAiFailure({ provider, model, agentName, error, durat
   return { kind, cooldownUntil, retryable };
 }
 
-export async function recordAiSkipped({ provider, model, agentName, reason }) {
-  await prisma.aiUsageLog.create({ data: { provider, model, agentName, status: 'skipped', errorKind: 'cooldown', errorMessage: compact(reason) } });
+export async function recordAiSkipped({ provider, model, agentName, reason, tenantId=null }) {
+  await prisma.aiUsageLog.create({ data: { provider, model, agentName, status: 'skipped', errorKind: 'cooldown', errorMessage: compact(reason), tenantId } });
+}
+
+export async function assertTenantAiQuota(tenantId){
+  if(!tenantId)return;
+  const tenant=await prisma.tenant.findUnique({where:{id:tenantId},select:{aiMonthlyRequestLimit:true,aiMonthlyTokenLimit:true}});
+  if(!tenant)return;
+  const from=new Date();from.setDate(1);from.setHours(0,0,0,0);
+  const usage=await prisma.aiUsageLog.aggregate({where:{tenantId,status:'success',createdAt:{gte:from}},_count:{_all:true},_sum:{totalTokens:true}});
+  if(tenant.aiMonthlyRequestLimit>0&&usage._count._all>=tenant.aiMonthlyRequestLimit)throw Object.assign(new Error('Limite mensal de solicitações de IA da empresa atingido'),{statusCode:429,code:'TENANT_AI_QUOTA'});
+  if(tenant.aiMonthlyTokenLimit>0&&(usage._sum.totalTokens||0)>=tenant.aiMonthlyTokenLimit)throw Object.assign(new Error('Limite mensal de tokens de IA da empresa atingido'),{statusCode:429,code:'TENANT_AI_QUOTA'});
 }
 
 const periodStart = query => {

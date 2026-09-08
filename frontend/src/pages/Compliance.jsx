@@ -21,7 +21,7 @@ function Score({ value }) {
   return <span className={`compliance-score ${tone}`}>{value}%</span>;
 }
 
-export default function Compliance() {
+export default function Compliance({isGlobalAdmin=false}) {
   const [data, setData] = useState({ devices:[], summary:{} });
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
@@ -168,8 +168,8 @@ export default function Compliance() {
   };
 
   const summary = data.summary || {};
-  return <div>
-    <div className="page-header page-header-actions"><div><h2>Compliance de configurações</h2><p>Baseline de segurança somente leitura para MikroTik e Huawei</p></div><div><button className="btn btn-secondary" onClick={openGovernance}><ShieldAlert size={15}/> Governança</button><button className="btn btn-secondary" onClick={()=>{setReportOpen(true);setTimeout(previewReport,0);}}><FileText size={15}/> Relatórios</button><button className="btn btn-secondary" onClick={()=>setExceptionsOpen(true)}><ShieldCheck size={15}/> Exceções ({data.summary?.activeExceptions||0})</button><button className="btn btn-secondary" onClick={()=>setProfilesOpen(true)}><Settings2 size={15}/> Perfis e regras</button><button className="btn btn-secondary" onClick={load}><RefreshCw size={15}/> Atualizar</button></div></div>
+  return <div className={isGlobalAdmin?'':'compliance-tenant'}>
+    <div className="page-header page-header-actions"><div><h2>Compliance de configurações</h2><p>Baseline de segurança somente leitura para MikroTik e Huawei</p></div><div>{isGlobalAdmin&&<button className="btn btn-secondary" onClick={openGovernance}><ShieldAlert size={15}/> Governança</button>}<button className="btn btn-secondary" onClick={()=>{setReportOpen(true);setTimeout(previewReport,0);}}><FileText size={15}/> Relatórios</button><button className="btn btn-secondary" onClick={()=>setExceptionsOpen(true)}><ShieldCheck size={15}/> Exceções ({data.summary?.activeExceptions||0})</button>{isGlobalAdmin&&<button className="btn btn-secondary" onClick={()=>setProfilesOpen(true)}><Settings2 size={15}/> Perfis e regras</button>}<button className="btn btn-secondary" onClick={load}><RefreshCw size={15}/> Atualizar</button></div></div>
     <div className="compliance-notice"><ShieldAlert size={20}/><div><strong>Verificação segura e sem alterações</strong><span>O sistema consulta a configuração, registra evidências e apresenta recomendações. Nenhum comando de correção é aplicado automaticamente.</span></div></div>
     <div className="stats-grid compliance-stats">
       <div className="stat-card"><ClipboardCheck/><div><span>Compatíveis</span><strong>{summary.devices || 0}</strong></div></div>

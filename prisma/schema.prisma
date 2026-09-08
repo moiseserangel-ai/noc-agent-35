@@ -30,6 +30,7 @@ model User {
   onCallMemberships   OnCallMember[]
   onCallShifts        OnCallShift[]
   onCallOverrides     OnCallOverride[]
+  chatSessions        ChatSession[]
 }
 
 model Tenant {
@@ -63,6 +64,10 @@ model Tenant {
   notificationRules NotificationRule[]
   knowledgeDocuments KnowledgeDocument[]
   knowledgeImportJobs KnowledgeImportJob[]
+  chatSessions ChatSession[]
+  aiUsageLogs AiUsageLog[]
+  aiMonthlyRequestLimit Int @default(0)
+  aiMonthlyTokenLimit Int @default(0)
   monthlyReportEnabled Boolean @default(false)
   monthlyReportDay Int @default(1)
   monthlyReportHour Int @default(8)
@@ -1724,6 +1729,10 @@ model Settings {
 
 model ChatSession {
   id        String        @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerId   String?
+  owner     User?         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title     String?
   summary   String?
   summarizedThroughAt DateTime?
@@ -1734,6 +1743,9 @@ model ChatSession {
   updatedAt DateTime      @updatedAt
   messages  ChatMessage[]
   attachments ChatAttachment[]
+
+  @@index([tenantId, updatedAt])
+  @@index([ownerId, updatedAt])
 }
 
 model ChatMessage {
@@ -1773,6 +1785,8 @@ model ChatAttachment {
 
 model AiUsageLog {
   id            String   @id @default(uuid())
+  tenantId      String?
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   provider      String
   model         String
   agentName     String?
@@ -1789,6 +1803,7 @@ model AiUsageLog {
   @@index([createdAt])
   @@index([provider, createdAt])
   @@index([status, errorKind])
+  @@index([tenantId, createdAt])
 }
 
 model AiProviderState {

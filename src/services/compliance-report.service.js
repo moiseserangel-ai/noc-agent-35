@@ -22,17 +22,17 @@ function reportRange(query = {}) {
   return { from, to };
 }
 
-export async function buildComplianceReport(query = {}) {
+export async function buildComplianceReport(query = {}, tenantId = null) {
   const range = reportRange(query);
   const deviceId = query.deviceId ? String(query.deviceId) : undefined;
   const scans = await prisma.complianceScan.findMany({
-    where:{status:'completed',startedAt:{gte:range.from,lte:range.to},...(deviceId&&{deviceId})},
+    where:{status:'completed',startedAt:{gte:range.from,lte:range.to},...(deviceId&&{deviceId}),...(tenantId&&{device:{tenantId}})},
     include:{device:{select:{id:true,name:true,hostname:true,type:true,group:true,model:true,osVersion:true}},findings:{orderBy:[{severity:'asc'},{category:'asc'}]}},
     orderBy:{startedAt:'desc'},
     take:2000,
   });
   const exceptions = await prisma.complianceException.findMany({
-    where:{...(deviceId&&{deviceId}),startsAt:{lte:range.to},expiresAt:{gte:range.from}},
+    where:{...(deviceId&&{deviceId}),startsAt:{lte:range.to},expiresAt:{gte:range.from},...(tenantId&&{device:{tenantId}})},
     include:{device:{select:{name:true,hostname:true}}},
     orderBy:{createdAt:'desc'},
   });
