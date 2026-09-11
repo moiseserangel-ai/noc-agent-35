@@ -1,0 +1,126 @@
+---
+metadata:
+  providers:
+    - type: static
+      exporters:
+        172.16.255.4:
+          name: CPE-2011MER
+          default:
+            name: unknown
+            description: Interface não catalogada do CPE-2011MER
+            speed: 0
+          ifindexes:
+            1:
+              name: sfp1
+              description: SFP
+              speed: 1000
+            2:
+              name: ether1
+              description: WAN física UZZY Telecom
+              speed: 1000
+            3:
+              name: ether2
+              description: Porta LAN 2
+              speed: 1000
+            4:
+              name: ether3
+              description: Porta LAN 3
+              speed: 1000
+            5:
+              name: ether4
+              description: Trunk VLANs 99, 100, 200, 300 e 400
+              speed: 1000
+            6:
+              name: ether5
+              description: Porta LAN 5
+              speed: 1000
+            7:
+              name: ether6
+              description: Porta LAN 6
+              speed: 100
+            8:
+              name: ether7
+              description: Porta LAN 7
+              speed: 100
+            9:
+              name: ether8
+              description: Porta LAN 8
+              speed: 100
+            10:
+              name: ether9
+              description: Porta LAN 9
+              speed: 100
+            11:
+              name: ether10
+              description: Porta LAN 10
+              speed: 100
+            12:
+              name: Link-pppoe-uzzy-telecom
+              description: WAN UZZY Telecom
+              speed: 1000
+            13:
+              name: vlan100-Rede-Local
+              description: Rede local
+              speed: 1000
+            14:
+              name: vlan999-Rede-Gerencia
+              description: Rede de gerência
+              speed: 1000
+            15728658:
+              name: l2tp-iead
+              description: Túnel L2TP NOC
+              speed: 1000
+        192.168.250.1:
+          name: CPE-IEADPM3011
+          default:
+            name: unknown
+            description: Interface não catalogada do CPE-IEADPM3011
+            speed: 0
+          ifindexes:
+            1:
+              name: ether1
+              description: WAN física UZZY Telecom
+              speed: 1000
+            2:
+              name: ether2
+              description: WAN física TECTEL
+              speed: 1000
+            6:
+              name: ether6
+              description: Membro do bonding
+              speed: 1000
+            7:
+              name: ether7
+              description: Membro do bonding
+              speed: 1000
+            8:
+              name: ether8
+              description: Enlace com o servidor NOC
+              speed: 1000
+            11:
+              name: sfp1
+              description: Interface SFP
+              speed: 1000
+routing:
+  provider:
+    type: bmp
+    # Before increasing this value, look for it in the troubleshooting section
+    # of the documentation.
+    receive-buffer: 212992
+core:
+  # RouterOS não anuncia a taxa quando packet-sampling=no; 1 significa sem amostragem.
+  default-sampling-rate:
+    172.16.255.4/32: 1
+    192.168.250.1/32: 1
+  exporter-classifiers:
+    - Exporter.Name == "CPE-2011MER" && ClassifySite("MER")
+    - Exporter.Name == "CPE-IEADPM3011" && ClassifySite("IEADPM")
+    - ClassifyRegion("Rondônia")
+    - ClassifyTenant("NOC")
+    - ClassifyRole("edge")
+  interface-classifiers:
+    - |
+      ClassifyConnectivityRegex(Interface.Description, "^(?i)(wan):? ", "$1") &&
+      ClassifyProviderRegex(Interface.Description, "^(?i)wan\\s+(.+)$", "$1") &&
+      ClassifyExternal()
+    - ClassifyInternal()

@@ -7,47 +7,1713 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Device {
+model User {
+  id                  String        @id @default(uuid())
+  username            String        @unique
+  name                String
+  passwordHash        String
+  role                String        @default("viewer") // admin|operator|viewer
+  isActive            Boolean       @default(true)
+  mustChangePassword  Boolean       @default(true)
+  passwordChangedAt   DateTime?
+  twoFactorSecret     String?
+  twoFactorEnabled    Boolean       @default(false)
+  failedLoginAttempts Int           @default(0)
+  lockedUntil         DateTime?
+  sessionVersion      Int           @default(1)
+  lastLoginAt         DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  tenantId            String?
+  tenant              Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  sessions            AuthSession[]
+  onCallMemberships   OnCallMember[]
+  onCallShifts        OnCallShift[]
+  onCallOverrides     OnCallOverride[]
+  chatSessions        ChatSession[]
+}
+
+model Tenant {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  document    String?
+  contactName String?
+  contactEmail String?
+  contactPhone String?
+  portalTitle String?
+  portalDescription String?
+  primaryColor String @default("#00d4ff")
+  slaLowAck Int?
+  slaLowResolve Int?
+  slaMediumAck Int?
+  slaMediumResolve Int?
+  slaHighAck Int?
+  slaHighResolve Int?
+  slaCriticalAck Int?
+  slaCriticalResolve Int?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  users       User[]
+  sites       TenantSite[]
+  devices     Device[]
+  tasks       Task[]
+  statusServices StatusService[]
+  onCallTeams OnCallTeam[]
+  notificationRules NotificationRule[]
+  knowledgeDocuments KnowledgeDocument[]
+  knowledgeImportJobs KnowledgeImportJob[]
+  chatSessions ChatSession[]
+  aiUsageLogs AiUsageLog[]
+  aiMonthlyRequestLimit Int @default(0)
+  aiMonthlyTokenLimit Int @default(0)
+  monthlyReportEnabled Boolean @default(false)
+  monthlyReportDay Int @default(1)
+  monthlyReportHour Int @default(8)
+  monthlyReportTimezone String @default("America/Porto_Velho")
+  monthlyReportChannels String @default("panel")
+  monthlyReportRecipients String?
+  monthlyReportTelegramRecipients String?
+  monthlyReportWhatsappRecipients String?
+  monthlyReportRuns MonthlyReportRun[]
+  cmdbAssets CmdbAsset[]
+  ipamSubnets IpamSubnet[]
+  businessServices BusinessService[]
+  suppliers Supplier[]
+  commercialContracts CommercialContract[]
+  softwareLicenses SoftwareLicense[]
+
+  @@index([isActive, name])
+}
+
+model Supplier {
+  id              String   @id @default(uuid())
+  tenantId        String?
+  tenant          Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  name            String
+  legalName       String?
+  document        String?
+  status          String   @default("active")
+  manufacturers   String?
+  website         String?
+  supportHours    String?
+  technicalName   String?
+  technicalEmail  String?
+  technicalPhone  String?
+  commercialName  String?
+  commercialEmail String?
+  commercialPhone String?
+  escalationPhone String?
+  rating          Int?
+  notes           String?
+  createdBy       String
+  updatedBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  contracts       CommercialContract[]
+  licenses        SoftwareLicense[]
+
+  @@index([tenantId, status, name])
+  @@index([status, name])
+}
+
+model CommercialContract {
+  id                String   @id @default(uuid())
+  number            String   @unique
+  title             String
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  supplierId        String
+  supplier          Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  status            String   @default("draft")
+  startDate         DateTime
+  endDate           DateTime
+  amount            Float?
+  currency          String   @default("BRL")
+  billingCycle      String   @default("annual")
+  renewalType       String   @default("manual")
+  noticeDays        Int      @default(30)
+  serviceHours      String?
+  slaCriticalMinutes Int?
+  slaHighMinutes    Int?
+  owner             String?
+  ownerEmail        String?
+  documentUrl       String?
+  notes             String?
+  createdBy         String
+  updatedBy         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  assets            CommercialContractAsset[]
+  licenses          SoftwareLicense[]
+
+  @@index([tenantId, status, endDate])
+  @@index([supplierId, status])
+}
+
+model CommercialContractAsset {
+  contractId String
+  contract   CommercialContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  assetId    String
+  asset      CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([contractId, assetId])
+  @@index([assetId])
+}
+
+model SoftwareLicense {
+  id              String   @id @default(uuid())
+  name            String
+  product         String
+  vendor          String?
+  edition         String?
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  contractId      String?
+  contract        CommercialContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  licenseType     String   @default("subscription")
+  status          String   @default("active")
+  reference       String?
+  keyLast4        String?
+  seatsPurchased  Int      @default(1)
+  seatsUsed       Int      @default(0)
+  startDate       DateTime?
+  expiresAt       DateTime?
+  renewalType     String   @default("manual")
+  noticeDays      Int      @default(30)
+  amount          Float?
+  currency        String   @default("BRL")
+  billingCycle    String   @default("annual")
+  owner           String?
+  ownerEmail      String?
+  portalUrl       String?
+  notes           String?
+  createdBy       String
+  updatedBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  assets          SoftwareLicenseAsset[]
+
+  @@index([tenantId, status, expiresAt])
+  @@index([supplierId, status])
+  @@index([contractId])
+}
+
+model SoftwareLicenseAsset {
+  licenseId String
+  license   SoftwareLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  assetId   String
+  asset     CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([licenseId, assetId])
+  @@index([assetId])
+}
+
+model TenantSite {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  city      String?
+  state     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  devices   Device[]
+  cmdbAssets CmdbAsset[]
+  ipamSubnets IpamSubnet[]
+
+  @@unique([tenantId, name])
+}
+
+model AuthSession {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress  String?
+  userAgent  String?
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model AuditLog {
   id           String   @id @default(uuid())
-  name         String
-  hostname     String
-  port         Int      @default(22)
-  type         String   // "mikrotik" | "linux"
+  userId       String?
   username     String
-  password     String   // Encrypted (AES-256-GCM)
-  group        String?
-  zabbixHostId String?
-  isActive     Boolean  @default(true)
-  notes        String?
+  displayName  String?
+  role         String?
+  action       String
+  resource     String
+  resourceId   String?
+  status       String   @default("success")
+  ipAddress    String?
+  userAgent    String?
+  details      String?
+  previousHash String?
+  recordHash   String?
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  tasks        Task[]
+
+  @@index([createdAt])
+  @@index([username, createdAt])
+  @@index([resource, action])
+}
+
+model NotificationLog {
+  id         String   @id @default(uuid())
+  taskId     String?
+  taskNumber Int?
+  event      String
+  channel    String
+  recipient  String?
+  status     String
+  error      String?
+  title      String?
+  message    String?
+  priority   String?
+  resourceType String?
+  resourceId String?
+  readAt     DateTime?
+  readBy     String?
+  dedupKey   String   @unique
+  createdAt  DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([status, channel])
+  @@index([channel, readAt, createdAt])
+  @@index([resourceType, resourceId])
+}
+
+model NotificationRule {
+  id          String   @id @default(uuid())
+  name        String
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  enabled     Boolean  @default(true)
+  sortOrder   Int      @default(100)
+  priorities  String   @default("") // comma-separated
+  events      String   @default("")
+  sources     String   @default("")
+  deviceGroups String  @default("")
+  channels    String   @default("panel")
+  recipients  String   @default("")
+  activeDays  String   @default("0,1,2,3,4,5,6")
+  startTime   String   @default("00:00")
+  endTime     String   @default("23:59")
+  timezone    String   @default("America/Porto_Velho")
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+}
+
+model OnCallTeam {
+  id          String           @id @default(uuid())
+  name        String
+  tenantId    String?
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  description String?
+  timezone    String           @default("America/Porto_Velho")
+  enabled     Boolean          @default(true)
+  createdBy   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  members     OnCallMember[]
+  shifts      OnCallShift[]
+  overrides   OnCallOverride[]
+
+  @@index([enabled, name])
+}
+
+model OnCallMember {
+  id             String     @id @default(uuid())
+  teamId         String
+  team           OnCallTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  telegramChatId String?
+  whatsappNumber String?
+  priority       Int        @default(100)
+  enabled        Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([teamId, userId])
+  @@index([teamId, enabled, priority])
+}
+
+model OnCallShift {
+  id        String     @id @default(uuid())
+  teamId    String
+  team      OnCallTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  enabled   Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([teamId, dayOfWeek, enabled])
+}
+
+model OnCallOverride {
+  id        String     @id @default(uuid())
+  teamId    String
+  team      OnCallTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startsAt  DateTime
+  endsAt    DateTime
+  reason    String?
+  createdBy String
+  createdAt DateTime   @default(now())
+
+  @@index([teamId, startsAt, endsAt])
+}
+
+model Device {
+  id                       String                 @id @default(uuid())
+  name                     String
+  hostname                 String
+  port                     Int                    @default(22)
+  type                     String // mikrotik|linux|huawei_vrp (extensível via plugins)
+  manufacturer             String?
+  platform                 String?
+  model                    String?
+  tenantId                 String?
+  tenant                   Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  siteId                   String?
+  site                     TenantSite?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  statusServices           StatusService[]
+  osVersion                String?
+  capabilities             String? // Lista separada por vírgulas: bgp,mpls,isis...
+  username                 String
+  password                 String // Encrypted (AES-256-GCM)
+  group                    String?
+  zabbixHostId             String?
+  isActive                 Boolean                @default(true)
+  notes                    String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  tasks                    Task[]
+  changes                  DeviceChange[]
+  backupPolicy             DeviceBackupPolicy?
+  configBackups            DeviceConfigBackup[]
+  configDrifts             ConfigDrift[]
+  vulnerabilityFindings    VulnerabilityFinding[]
+  vulnerabilityScans       VulnerabilityScan[]
+  compliancePolicy         CompliancePolicy?
+  complianceScans          ComplianceScan[]
+  complianceExceptions     ComplianceException[]
+  complianceScopeId        String?
+  complianceScope          ComplianceScopePolicy? @relation("DeviceScopePolicy", fields: [complianceScopeId], references: [id], onDelete: SetNull)
+  changeRequestDevices     ChangeRequestDevice[]
+  discoveryReferences      DiscoveryHost[]
+  capacitySnapshots        CapacitySnapshot[]
+  topologyNode             TopologyNode?
+  topologyLinksFrom        TopologyLink[]         @relation("TopologyLinkSource")
+  topologyLinksTo          TopologyLink[]         @relation("TopologyLinkTarget")
+  topologyNeighborsLocal   TopologyNeighbor[]     @relation("TopologyNeighborLocal")
+  topologyNeighborsMatched TopologyNeighbor[]     @relation("TopologyNeighborMatched")
+  runbookExecutions        RunbookExecution[]
+  runbookSchedules         RunbookSchedule[]
+  runbookBatchTargets      RunbookBatchTarget[]
+  cmdbAsset                 CmdbAsset?
+}
+
+model CmdbAsset {
+  id             String      @id @default(uuid())
+  assetTag       String?     @unique
+  name           String
+  category       String      @default("network")
+  status         String      @default("active")
+  criticality    String      @default("medium")
+  tenantId       String?
+  tenant         Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  siteId         String?
+  site           TenantSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  deviceId       String?     @unique
+  device         Device?     @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  manufacturer   String?
+  model          String?
+  serialNumber   String?
+  hostname       String?
+  managementIp   String?
+  location       String?
+  rack           String?
+  rackUnit       String?
+  purchaseDate   DateTime?
+  warrantyUntil  DateTime?
+  supportUntil   DateTime?
+  licenseUntil   DateTime?
+  cost           Float?
+  currency       String      @default("BRL")
+  owner          String?
+  contact        String?
+  tags           String?
+  notes          String?
+  createdBy      String
+  updatedBy      String
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  lastInventoryAt DateTime?
+  lastInventoryStatus String?
+  lastInventoryError String?
+  inventoryData  String?
+  inventoryPolicy CmdbInventoryPolicy?
+  inventorySnapshots CmdbInventorySnapshot[]
+  relationshipsFrom CmdbRelationship[] @relation("CmdbRelationshipSource")
+  relationshipsTo   CmdbRelationship[] @relation("CmdbRelationshipTarget")
+  suggestionsFrom   CmdbRelationshipSuggestion[] @relation("CmdbSuggestionSource")
+  suggestionsTo     CmdbRelationshipSuggestion[] @relation("CmdbSuggestionTarget")
+  history           CmdbHistory[]
+  lifecycleAlerts   CmdbLifecycleAlert[]
+  ipAssignments     IpamAddress[]
+  businessServices  BusinessServiceAsset[]
+  ipamSuggestions   IpamReconciliationSuggestion[]
+  commercialContracts CommercialContractAsset[]
+  softwareLicenses SoftwareLicenseAsset[]
+  interfaces     CmdbInterface[]
+  vlans          CmdbVlan[]
+
+  @@index([tenantId, status])
+  @@index([siteId, category])
+  @@index([category, status])
+  @@index([warrantyUntil])
+  @@index([supportUntil])
+}
+
+model CmdbInterface {
+  id          String   @id @default(uuid())
+  assetId     String
+  asset       CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  macAddress  String?
+  adminStatus String?
+  operStatus  String?
+  speed       String?
+  vlanId      Int?
+  source      String   @default("manual")
+  lastSeenAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([assetId, name])
+  @@index([vlanId])
+  @@index([assetId, operStatus])
+}
+
+model CmdbVlan {
+  id          String   @id @default(uuid())
+  assetId     String
+  asset       CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  vlanId      Int
+  name        String?
+  status      String   @default("active")
+  source      String   @default("manual")
+  lastSeenAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([assetId, vlanId])
+  @@index([vlanId, status])
+}
+
+model IpamSubnet {
+  id          String      @id @default(uuid())
+  name        String
+  cidr        String      @unique
+  network     String
+  prefix      Int
+  gateway     String?
+  vlanId      Int?
+  tenantId    String?
+  tenant      Tenant?     @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  siteId      String?
+  site        TenantSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  description String?
+  createdBy   String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  addresses   IpamAddress[]
+
+  @@index([tenantId, vlanId])
+  @@index([siteId, name])
+}
+
+model IpamAddress {
+  id          String     @id @default(uuid())
+  subnetId    String
+  subnet      IpamSubnet @relation(fields: [subnetId], references: [id], onDelete: Cascade)
+  address     String
+  status      String     @default("assigned")
+  assetId     String?
+  asset       CmdbAsset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  hostname    String?
+  description String?
+  createdBy   String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([subnetId, address])
+  @@index([assetId])
+  @@index([address, status])
+}
+
+model IpamReconciliationSuggestion {
+  id            String    @id @default(uuid())
+  originKey     String    @unique
+  assetId       String
+  asset         CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  address       String
+  cidr          String
+  interfaceName String?
+  vlanId        Int?
+  status        String    @default("suggested")
+  evidence      String?
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, createdAt])
+  @@index([assetId, status])
+}
+
+model BusinessService {
+  id          String    @id @default(uuid())
+  name        String
+  code        String    @unique
+  description String?
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  criticality String    @default("medium")
+  status      String    @default("active")
+  owner       String?
+  contact     String?
+  slaMinutes  Int?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  assets      BusinessServiceAsset[]
+
+  @@index([tenantId, status])
+  @@index([criticality, status])
+}
+
+model BusinessServiceAsset {
+  id        String          @id @default(uuid())
+  serviceId String
+  service   BusinessService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  assetId   String
+  asset     CmdbAsset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  role      String          @default("dependency")
+  critical  Boolean         @default(false)
+  createdAt DateTime        @default(now())
+
+  @@unique([serviceId, assetId])
+  @@index([assetId, critical])
+}
+
+model CmdbRelationship {
+  id            String    @id @default(uuid())
+  sourceAssetId String
+  sourceAsset   CmdbAsset @relation("CmdbRelationshipSource", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  targetAssetId String
+  targetAsset   CmdbAsset @relation("CmdbRelationshipTarget", fields: [targetAssetId], references: [id], onDelete: Cascade)
+  type          String
+  label         String?
+  notes         String?
+  critical      Boolean   @default(false)
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([sourceAssetId, targetAssetId, type])
+  @@index([sourceAssetId, type])
+  @@index([targetAssetId, type])
+}
+
+model CmdbRelationshipSuggestion {
+  id            String    @id @default(uuid())
+  originKey     String    @unique
+  sourceAssetId String
+  sourceAsset   CmdbAsset @relation("CmdbSuggestionSource", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  targetAssetId String
+  targetAsset   CmdbAsset @relation("CmdbSuggestionTarget", fields: [targetAssetId], references: [id], onDelete: Cascade)
+  suggestedType String    @default("connected_to")
+  evidence      String?
+  protocol      String?
+  confidence    Int       @default(80)
+  status        String    @default("suggested")
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  relationshipId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, confidence])
+  @@index([sourceAssetId, targetAssetId])
+}
+
+model CmdbHistory {
+  id        String    @id @default(uuid())
+  assetId   String
+  asset     CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  eventType String
+  source    String
+  actor     String
+  summary   String
+  changes   String?
+  metadata  String?
+  createdAt DateTime  @default(now())
+
+  @@index([assetId, createdAt])
+  @@index([eventType, createdAt])
+}
+
+model CmdbLifecycleAlert {
+  id                String    @id @default(uuid())
+  assetId           String
+  asset             CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  type              String
+  stage             String
+  severity          String
+  status            String    @default("active")
+  title             String
+  message           String
+  notificationStage String?
+  openedAt          DateTime  @default(now())
+  lastSeenAt        DateTime  @default(now())
+  resolvedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([assetId, type])
+  @@index([status, severity, updatedAt])
+}
+
+model LifecycleCatalogEntry {
+  id               String   @id @default(uuid())
+  vendor           String
+  product          String
+  lifecycleType    String   @default("software") // software|hardware|license
+  productStatus    String   @default("unknown") // active|discontinued|unknown
+  modelPattern     String   @default("*")
+  versionPattern   String   @default("*")
+  releaseDate      DateTime?
+  endOfSaleDate    DateTime?
+  endOfSupportDate DateTime?
+  sourceUrl        String
+  sourceTitle      String?
+  lastVerifiedAt   DateTime?
+  notes            String?
+  isActive         Boolean  @default(true)
+  createdBy        String
+  updatedBy        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([vendor, product, modelPattern, versionPattern])
+  @@index([vendor, isActive])
+  @@index([endOfSupportDate])
+}
+
+model CmdbInventoryPolicy {
+  id        String    @id @default(uuid())
+  assetId   String    @unique
+  asset     CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  enabled   Boolean   @default(false)
+  frequency String    @default("weekly")
+  hour      Int       @default(3)
+  weekday   Int       @default(1)
+  nextRunAt DateTime?
+  lastRunAt DateTime?
+  lastStatus String?
+  lastError String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([enabled, nextRunAt])
+}
+
+model CmdbInventorySnapshot {
+  id           String    @id @default(uuid())
+  assetId      String
+  asset        CmdbAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  deviceId     String
+  status       String
+  manufacturer String?
+  model        String?
+  serialNumber String?
+  hostname     String?
+  osVersion    String?
+  uptime       String?
+  inventoryData String?
+  error        String?
+  collectedBy  String
+  createdAt    DateTime  @default(now())
+
+  @@index([assetId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Runbook {
+  id          String             @id @default(uuid())
+  name        String
+  description String
+  category    String
+  deviceType  String             @default("any")
+  version     Int                @default(1)
+  status      String             @default("draft") // draft|published|archived
+  riskLevel   String             @default("low") // low|high|critical
+  approvalStatus String          @default("not_required") // not_required|pending|approved|rejected
+  approvalRequestedBy String?
+  approvalRequestedById String?
+  approvalRequestedAt DateTime?
+  approvedBy  String?
+  approvedById String?
+  approvedAt  DateTime?
+  rejectionReason String?
+  variables   String             @default("[]") // JSON
+  steps       String             @default("[]") // JSON
+  createdBy   String
+  updatedBy   String
+  publishedBy String?
+  publishedAt DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  executions  RunbookExecution[]
+  schedules   RunbookSchedule[]
+  batches     RunbookBatch[]
+  revisions   RunbookRevision[]
+
+  @@index([status, category])
+  @@index([deviceType, status])
+}
+
+model RunbookRevision {
+  id          String   @id @default(uuid())
+  runbookId   String
+  runbook     Runbook  @relation(fields: [runbookId], references: [id], onDelete: Cascade)
+  version     Int
+  name        String
+  description String
+  category    String
+  deviceType  String
+  riskLevel   String
+  variables   String
+  steps       String
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@unique([runbookId, version])
+  @@index([runbookId, createdAt])
+}
+
+model RunbookExecution {
+  id            String    @id @default(uuid())
+  runbookId     String
+  runbook       Runbook   @relation(fields: [runbookId], references: [id], onDelete: Restrict)
+  deviceId      String
+  device        Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  taskId        String?
+  task          Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  scheduleId    String?
+  schedule      RunbookSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  batchId       String?
+  batch         RunbookBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  mode          String // simulation|execution|rollback
+  status        String    @default("queued") // queued|running|completed|failed|blocked
+  inputHash     String
+  variables     String    @default("{}") // JSON
+  renderedSteps String    @default("[]") // JSON
+  results       String    @default("[]") // JSON
+  requestedBy   String
+  approvedBy    String?
+  beforeBackupId String?
+  beforeBackup   DeviceConfigBackup? @relation("RunbookBeforeBackup", fields: [beforeBackupId], references: [id], onDelete: SetNull)
+  afterBackupId  String?
+  afterBackup    DeviceConfigBackup? @relation("RunbookAfterBackup", fields: [afterBackupId], references: [id], onDelete: SetNull)
+  configurationChanged Boolean?
+  error         String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([runbookId, createdAt])
+  @@index([deviceId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([scheduleId, createdAt])
+  @@index([batchId, createdAt])
+  @@index([beforeBackupId])
+  @@index([afterBackupId])
+  @@index([inputHash, mode, status])
+}
+
+model RunbookBatch {
+  id               String    @id @default(uuid())
+  name             String
+  runbookId        String
+  runbook          Runbook   @relation(fields: [runbookId], references: [id], onDelete: Restrict)
+  status           String    @default("draft") // draft|simulated|running|completed|stopped|failed
+  variables        String    @default("{}") // encrypted JSON
+  concurrency      Int       @default(3)
+  failureThreshold Int       @default(20)
+  totalTargets     Int       @default(0)
+  simulatedTargets Int      @default(0)
+  succeededTargets Int      @default(0)
+  failedTargets    Int       @default(0)
+  skippedTargets   Int       @default(0)
+  createdBy        String
+  approvedBy       String?
+  simulatedAt      DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  targets          RunbookBatchTarget[]
+  executions       RunbookExecution[]
+
+  @@index([status, createdAt])
+}
+
+model RunbookBatchTarget {
+  id                    String    @id @default(uuid())
+  batchId               String
+  batch                 RunbookBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  deviceId              String
+  device                Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  status                String    @default("pending") // pending|simulated|running|completed|failed|skipped
+  error                 String?
+  simulationExecutionId String?
+  executionId           String?
+  startedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([batchId, deviceId])
+  @@index([batchId, status])
+}
+
+model RunbookSchedule {
+  id          String    @id @default(uuid())
+  name        String
+  runbookId   String
+  runbook     Runbook   @relation(fields: [runbookId], references: [id], onDelete: Cascade)
+  deviceId    String
+  device      Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  mode        String    @default("simulation") // simulation|execution
+  frequency   String    // daily|weekly
+  hour        Int
+  minute      Int
+  dayOfWeek   Int?
+  timezone    String    @default("America/Porto_Velho")
+  variables   String    @default("{}") // encrypted JSON
+  enabled     Boolean   @default(true)
+  nextRunAt   DateTime?
+  lastRunAt   DateTime?
+  lastStatus  String?
+  lastError   String?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  executions  RunbookExecution[]
+
+  @@index([enabled, nextRunAt])
+  @@index([runbookId, deviceId])
+}
+
+model DeviceChange {
+  id          String   @id @default(uuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  taskNumber  Int?
+  agentName   String
+  comment     String
+  nativeAudit String?
+  status      String   @default("applied")
+  createdAt   DateTime @default(now())
+
+  @@index([deviceId, createdAt])
+  @@index([taskNumber])
+}
+
+model DeviceBackupPolicy {
+  id         String    @id @default(uuid())
+  deviceId   String    @unique
+  device     Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  enabled    Boolean   @default(false)
+  frequency  String    @default("daily") // daily|weekly
+  hour       Int       @default(2)
+  weekday    Int       @default(0) // 0=domingo
+  retention  Int       @default(14)
+  lastRunAt  DateTime?
+  lastStatus String?
+  lastError  String?
+  nextRunAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([enabled, nextRunAt])
+}
+
+model DeviceConfigBackup {
+  id           String   @id @default(uuid())
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  type         String // manual|automatic
+  status       String // success|failed
+  content      String?
+  sha256       String?
+  size         Int      @default(0)
+  deviceName   String
+  hostname     String
+  deviceType   String
+  manufacturer String?
+  model        String?
+  osVersion    String?
+  error        String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+  runbookExecutionsBefore RunbookExecution[] @relation("RunbookBeforeBackup")
+  runbookExecutionsAfter  RunbookExecution[] @relation("RunbookAfterBackup")
+
+  @@index([deviceId, createdAt])
+  @@index([status, createdAt])
+}
+
+model ConfigDrift {
+  id             String   @id @default(uuid())
+  deviceId       String
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  beforeBackupId String
+  afterBackupId  String   @unique
+  status         String   @default("open") // open|acknowledged|resolved|ignored
+  addedCount     Int      @default(0)
+  removedCount   Int      @default(0)
+  unchangedCount Int      @default(0)
+  evidence       String
+  taskId         String?
+  detectedAt     DateTime @default(now())
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  resolution     String?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, detectedAt])
+  @@index([deviceId, detectedAt])
+  @@index([taskId])
+}
+
+model VulnerabilityScan {
+  id          String   @id @default(uuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  status      String   @default("running")
+  query       String?
+  found       Int      @default(0)
+  created     Int      @default(0)
+  updated     Int      @default(0)
+  error       String?
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([deviceId, startedAt])
+  @@index([status, startedAt])
+}
+
+model VulnerabilityFinding {
+  id             String   @id @default(uuid())
+  deviceId       String
+  device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  cveId          String
+  status         String   @default("open") // open|acknowledged|accepted|resolved
+  severity       String
+  cvssScore      Float?
+  description    String
+  knownExploited Boolean  @default(false)
+  kevDueDate     DateTime?
+  requiredAction String?
+  publishedAt    DateTime?
+  modifiedAt     DateTime?
+  sourceUrl      String
+  matchedCpe     String?
+  taskId         String?
+  firstSeenAt    DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  resolution     String?
+  updatedAt      DateTime @updatedAt
+
+  @@unique([deviceId, cveId])
+  @@index([status, severity])
+  @@index([knownExploited, status])
+  @@index([deviceId, lastSeenAt])
+}
+
+model CompliancePolicy {
+  id                String             @id @default(uuid())
+  deviceId          String             @unique
+  device            Device             @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  enabled           Boolean            @default(false)
+  frequency         String             @default("daily") // daily|weekly
+  hour              Int                @default(3)
+  weekday           Int                @default(1)
+  profile           String             @default("noc_baseline_v1")
+  profileId         String?
+  complianceProfile ComplianceProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  alertEnabled      Boolean            @default(true)
+  minimumScore      Int                @default(80)
+  lastRunAt         DateTime?
+  lastStatus        String?
+  lastScore         Int?
+  lastError         String?
+  nextRunAt         DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([enabled, nextRunAt])
+  @@index([profileId])
+}
+
+model ComplianceProfile {
+  id            String                  @id @default(uuid())
+  name          String
+  description   String?
+  deviceType    String // mikrotik|huawei_vrp
+  isSystem      Boolean                 @default(false)
+  isActive      Boolean                 @default(true)
+  minimumScore  Int                     @default(80)
+  createdBy     String
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  rules         ComplianceRule[]
+  policies      CompliancePolicy[]
+  scopePolicies ComplianceScopePolicy[]
+
+  @@unique([name, deviceType])
+  @@index([deviceType, isActive])
+}
+
+model ComplianceRule {
+  id                 String            @id @default(uuid())
+  profileId          String
+  profile            ComplianceProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  ruleKey            String
+  title              String
+  category           String
+  severity           String
+  enabled            Boolean           @default(true)
+  expectedValue      String?
+  recommendation     String
+  remediationPreview String?
+  position           Int               @default(0)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([profileId, ruleKey])
+  @@index([profileId, enabled, position])
+}
+
+model ComplianceScan {
+  id                  String              @id @default(uuid())
+  deviceId            String
+  device              Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  type                String // manual|automatic
+  profile             String              @default("noc_baseline_v1")
+  status              String              @default("running") // running|completed|failed
+  score               Int?
+  previousScore       Int?
+  passed              Int                 @default(0)
+  failed              Int                 @default(0)
+  regressions         Int                 @default(0)
+  recoveries          Int                 @default(0)
+  alertTaskId         String?
+  validationTaskId    String?
+  configurationSha256 String?
+  error               String?
+  createdBy           String
+  startedAt           DateTime            @default(now())
+  completedAt         DateTime?
+  findings            ComplianceFinding[]
+
+  @@index([deviceId, startedAt])
+  @@index([status, startedAt])
+  @@index([validationTaskId])
+}
+
+model ComplianceScopePolicy {
+  id           String            @id @default(uuid())
+  name         String
+  description  String?
+  deviceGroup  String?
+  deviceRole   String?
+  profileId    String
+  profile      ComplianceProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  minimumScore Int               @default(80)
+  priority     Int               @default(100)
+  isActive     Boolean           @default(true)
+  createdBy    String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  devices      Device[]          @relation("DeviceScopePolicy")
+
+  @@index([deviceGroup, deviceRole, isActive])
+  @@index([profileId])
+}
+
+model ComplianceAuditPackage {
+  id          String   @id @default(uuid())
+  filename    String
+  format      String   @default("json")
+  sha256      String   @unique
+  manifest    String
+  fromDate    DateTime
+  toDate      DateTime
+  deviceId    String?
+  generatedBy String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model ComplianceFinding {
+  id                 String         @id @default(uuid())
+  scanId             String
+  scan               ComplianceScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  ruleKey            String
+  title              String
+  category           String
+  severity           String
+  status             String // compliant|non_compliant
+  change             String         @default("unchanged") // unchanged|regressed|recovered|new_non_compliant
+  exceptionId        String?
+  evidence           String?
+  recommendation     String
+  remediationPreview String?
+  createdAt          DateTime       @default(now())
+
+  @@index([scanId, status])
+  @@index([ruleKey, status])
+}
+
+model ComplianceException {
+  id         String    @id @default(uuid())
+  deviceId   String
+  device     Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  ruleKey    String
+  reason     String
+  approvedBy String
+  startsAt   DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  revokedBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([deviceId, ruleKey, expiresAt])
+  @@index([revokedAt, expiresAt])
 }
 
 model Task {
+  id                   String          @id @default(uuid())
+  taskNumber           Int             @unique
+  deviceId             String?
+  device               Device?         @relation(fields: [deviceId], references: [id])
+  tenantId             String?
+  tenant               Tenant?         @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  source               String // "whatsapp" | "zabbix" | "dashboard"
+  workType             String          @default("incident") // incident|consultation|configuration
+  status               String          @default("pending") // pending|diagnosing|awaiting_approval|executing|completed|failed|cancelled
+  originalMessage      String
+  diagnosis            String?
+  proposedSolution     String?
+  adminResponse        String? // "yes" | "no" | null
+  executionResult      String?
+  agentUsed            String? // "support" | "mikrotik" | "linux"
+  priority             String          @default("medium") // low|medium|high|critical
+  zabbixEventId        String?         @unique
+  zabbixRecoveryId     String?
+  zabbixStatus         String?
+  incidentKey          String?
+  incidentOpenedAt     DateTime?
+  lastSeenAt           DateTime?
+  resolvedAt           DateTime?
+  durationSeconds      Int?
+  occurrenceCount      Int             @default(1)
+  duplicateCount       Int             @default(0)
+  assignedTo           String?
+  acknowledgedAt       DateTime?
+  dueAt                DateTime?
+  resolutionSummary    String?
+  resolutionType       String?
+  validatedAt          DateTime?
+  closedAt             DateTime?
+  slaAckDueAt          DateTime?
+  slaResolveDueAt      DateTime?
+  slaWarningSentAt     DateTime?
+  slaAckBreachedAt     DateTime?
+  slaResolveBreachedAt DateTime?
+  escalationLevel      Int             @default(0)
+  criticalEscalationLevel Int          @default(0)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  messages             TaskMessage[]
+  changeRequests       ChangeRequest[]
+  runbookExecutions    RunbookExecution[]
+  statusIncident       StatusIncident?
+  proposalRevisions    TaskProposalRevision[]
+
+  @@index([incidentKey, status])
+}
+
+model TaskProposalRevision {
+  id              String   @id @default(uuid())
+  taskId          String
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  version         Int
+  type            String   // agent_original|agent_revision|manual_edit
+  content         String
+  feedback        String?
+  createdBy       String
+  createdByRole   String
+  createdAt       DateTime @default(now())
+
+  @@unique([taskId, version])
+  @@index([taskId, createdAt])
+}
+
+model StatusService {
+  id            String               @id @default(uuid())
+  name          String
+  description   String?
+  deviceId      String?
+  device        Device?              @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  tenantId      String?
+  tenant        Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  enabled       Boolean              @default(true)
+  automatic     Boolean              @default(true)
+  manualStatus  String               @default("operational")
+  currentStatus String               @default("operational")
+  sortOrder     Int                  @default(100)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  incidents     StatusIncident[]
+  events        StatusServiceEvent[]
+
+  @@index([enabled, sortOrder])
+  @@index([deviceId])
+}
+
+model StatusIncident {
+  id          String                 @id @default(uuid())
+  serviceId   String
+  service     StatusService          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  taskId      String?                @unique
+  task        Task?                  @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  title       String
+  message     String
+  severity    String                 @default("degraded")
+  status      String                 @default("investigating")
+  scheduledAt DateTime?
+  scheduledEndAt DateTime?
+  publishedAt DateTime               @default(now())
+  resolvedAt  DateTime?
+  createdBy   String
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  updates     StatusIncidentUpdate[]
+
+  @@index([serviceId, status, publishedAt])
+  @@index([scheduledAt, scheduledEndAt])
+}
+
+model StatusIncidentUpdate {
+  id         String         @id @default(uuid())
+  incidentId String
+  incident   StatusIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  status     String
+  message    String
+  createdBy  String
+  createdAt  DateTime       @default(now())
+
+  @@index([incidentId, createdAt])
+}
+
+model StatusServiceEvent {
+  id        String        @id @default(uuid())
+  serviceId String
+  service   StatusService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  status    String
+  startedAt DateTime      @default(now())
+
+  @@index([serviceId, startedAt])
+}
+
+model ChangeRequest {
+  id                String                @id @default(uuid())
+  number            Int                   @unique
+  title             String
+  description       String
+  reason            String
+  changeType        String                @default("normal")
+  status            String                @default("draft")
+  riskLevel         String                @default("medium")
+  riskScore         Int                   @default(0)
+  impact            String
+  executionPlan     String
+  validationPlan    String
+  rollbackPlan      String
+  windowStart       DateTime?
+  windowEnd         DateTime?
+  requestedBy       String
+  assignedTo        String?
+  taskId            String?
+  task              Task?                 @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  approvedBy        String?
+  approvedAt        DateTime?
+  rejectedBy        String?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  validationSummary String?
+  rollbackTaskId    String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  devices           ChangeRequestDevice[]
+  events            ChangeRequestEvent[]
+
+  @@index([status, windowStart])
+  @@index([taskId])
+}
+
+model ChangeRequestDevice {
   id               String        @id @default(uuid())
-  taskNumber       Int           @unique
-  deviceId         String?
-  device           Device?       @relation(fields: [deviceId], references: [id])
-  source           String        // "whatsapp" | "zabbix" | "dashboard"
-  status           String        @default("pending") // pending|diagnosing|awaiting_approval|executing|completed|failed|cancelled
-  originalMessage  String
-  diagnosis        String?
-  proposedSolution String?
-  adminResponse    String?       // "yes" | "no" | null
-  executionResult  String?
-  agentUsed        String?       // "support" | "mikrotik" | "linux"
-  priority         String        @default("medium") // low|medium|high|critical
+  changeRequestId  String
+  changeRequest    ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  deviceId         String
+  device           Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  beforeBackupId   String?
+  afterBackupId    String?
+  complianceScanId String?
+  validationStatus String?
+  validationDetail String?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
-  messages         TaskMessage[]
+
+  @@unique([changeRequestId, deviceId])
+  @@index([deviceId, createdAt])
+}
+
+model ChangeRequestEvent {
+  id              String        @id @default(uuid())
+  changeRequestId String
+  changeRequest   ChangeRequest @relation(fields: [changeRequestId], references: [id], onDelete: Cascade)
+  action          String
+  actor           String
+  details         String?
+  createdAt       DateTime      @default(now())
+
+  @@index([changeRequestId, createdAt])
+}
+
+model DiscoveryJob {
+  id          String          @id @default(uuid())
+  cidr        String
+  ports       String
+  timeoutMs   Int             @default(900)
+  status      String          @default("queued") // queued|running|completed|failed|cancelled
+  totalHosts  Int
+  scanned     Int             @default(0)
+  found       Int             @default(0)
+  error       String?
+  createdBy   String
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  hosts       DiscoveryHost[]
+
+  @@index([status, createdAt])
+}
+
+model DiscoveryHost {
+  id               String       @id @default(uuid())
+  jobId            String
+  job              DiscoveryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  ipAddress        String
+  hostname         String?
+  latencyMs        Int?
+  openPorts        String
+  sshBanner        String?
+  detectedType     String?
+  manufacturer     String?
+  confidence       Int          @default(0)
+  state            String       @default("new") // new|known|imported|ignored
+  existingDeviceId String?
+  existingDevice   Device?      @relation(fields: [existingDeviceId], references: [id], onDelete: SetNull)
+  importedAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([jobId, ipAddress])
+  @@index([ipAddress, createdAt])
+  @@index([state, createdAt])
+}
+
+model CapacitySnapshot {
+  id           String   @id @default(uuid())
+  deviceId     String
+  device       Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  zabbixHostId String
+  availability Float?
+  cpu          Float?
+  memory       Float?
+  storage      Float?
+  trafficIn    Float?
+  trafficOut   Float?
+  uptime       Float?
+  metrics      String?
+  collectedAt  DateTime @default(now())
+
+  @@index([deviceId, collectedAt])
+  @@index([collectedAt])
+}
+
+model TopologyNode {
+  id        String   @id @default(uuid())
+  deviceId  String   @unique
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  x         Float
+  y         Float
+  updatedBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model TopologyLink {
+  id             String   @id @default(uuid())
+  sourceDeviceId String
+  sourceDevice   Device   @relation("TopologyLinkSource", fields: [sourceDeviceId], references: [id], onDelete: Cascade)
+  targetDeviceId String
+  targetDevice   Device   @relation("TopologyLinkTarget", fields: [targetDeviceId], references: [id], onDelete: Cascade)
+  label          String?
+  sourceInterface String?
+  targetInterface String?
+  bandwidthMbps  Int?
+  linkType       String   @default("ethernet") // ethernet|fiber|wireless|vpn|logical
+  source         String   @default("manual") // manual|lldp|cdp
+  monitoringEnabled Boolean @default(true)
+  warningUtilization Float @default(75)
+  criticalUtilization Float @default(90)
+  warningLatencyMs Float @default(100)
+  warningPacketLoss Float @default(5)
+  confirmationSamples Int @default(2)
+  recoverySamples Int @default(2)
+  degradationState String @default("normal") // normal|degraded
+  activeTaskId String?
+  degradationStartedAt DateTime?
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  telemetry      TopologyLinkTelemetry[]
+
+  @@unique([sourceDeviceId, targetDeviceId])
+  @@index([targetDeviceId])
+  @@index([source, updatedAt])
+}
+
+model TopologyLinkTelemetry {
+  id              String       @id @default(uuid())
+  linkId          String
+  link            TopologyLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  inputBps        Float?
+  outputBps       Float?
+  capacityBps     Float?
+  utilization    Float?
+  latencyMs       Float?
+  baselineLatencyMs Float?
+  latencyDeviationPct Float?
+  latencyAnomaly  Boolean      @default(false)
+  anomalyReason   String?
+  packetLoss      Float?
+  status          String       @default("unknown") // online|warning|critical|unknown
+  evidence        String?
+  collectedAt     DateTime     @default(now())
+
+  @@index([linkId, collectedAt])
+  @@index([collectedAt])
+}
+
+model FlowMetricSnapshot {
+  id              String   @id @default(uuid())
+  exporterAddress String
+  exporterName    String
+  flows           Int
+  bytes           Float
+  packets         Float
+  uniqueSources   Int
+  uniqueDestinations Int
+  topSource       String?
+  topDestination  String?
+  topPort         Int?
+  anomalyScore    Float    @default(0)
+  learning        Boolean  @default(true)
+  collectedAt     DateTime @default(now())
+
+  @@index([exporterName, collectedAt])
+  @@index([collectedAt])
+}
+
+model FlowAnomaly {
+  id              String   @id @default(uuid())
+  fingerprint     String   @unique
+  exporterAddress String
+  exporterName    String
+  type            String
+  severity        String
+  title           String
+  description     String
+  evidence        String?
+  sourceAddress   String?
+  destinationAddress String?
+  protocol        String?
+  port            Int?
+  flows           Int?
+  packets         Float?
+  bytes           Float?
+  confidence      Int      @default(50)
+  incidentKey     String?
+  consecutiveCount Int     @default(1)
+  recoveryCount   Int      @default(0)
+  taskId          String?
+  status          String   @default("observed") // observed|confirmed|resolved|suppressed
+  classification  String?  // attack|false_positive|legitimate
+  classifiedBy    String?
+  classifiedAt    DateTime?
+  resolution      String?
+  firstSeenAt     DateTime
+  lastSeenAt      DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, lastSeenAt])
+  @@index([exporterName, lastSeenAt])
+  @@index([incidentKey, status])
+}
+
+model FlowMitigation {
+  id              String   @id @default(uuid())
+  anomalyId       String
+  taskId          String?
+  deviceId        String
+  deviceName      String
+  targetIp        String
+  addressList     String   @default("NOC-ASSISTED-BLOCK")
+  durationMinutes Int      @default(30)
+  command         String
+  validationCommand String
+  rollbackCommand String
+  status          String   @default("proposed") // proposed|active|expired|rolled_back|rejected|failed
+  requestedBy     String
+  approvedBy      String?
+  approvedAt      DateTime?
+  executedAt      DateTime?
+  expiresAt       DateTime?
+  result          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([anomalyId, status])
+  @@index([status, expiresAt])
+}
+
+model TopologySnapshot {
+  id          String   @id @default(uuid())
+  source      String   @default("manual") // manual|discovery|link_change|baseline
+  content     String
+  sha256      String
+  nodeCount   Int
+  linkCount   Int
+  isBaseline  Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([isBaseline, createdAt])
+}
+
+model TopologyDiscoveryRun {
+  id          String             @id @default(uuid())
+  status      String             @default("queued") // queued|running|completed|completed_with_errors|failed
+  total       Int                @default(0)
+  scanned     Int                @default(0)
+  found       Int                @default(0)
+  matched     Int                @default(0)
+  errors      String?
+  createdBy   String
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime           @default(now())
+  neighbors   TopologyNeighbor[]
+
+  @@index([status, createdAt])
+}
+
+model TopologyNeighbor {
+  id              String               @id @default(uuid())
+  runId           String
+  run             TopologyDiscoveryRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  localDeviceId   String
+  localDevice     Device               @relation("TopologyNeighborLocal", fields: [localDeviceId], references: [id], onDelete: Cascade)
+  matchedDeviceId String?
+  matchedDevice   Device?              @relation("TopologyNeighborMatched", fields: [matchedDeviceId], references: [id], onDelete: SetNull)
+  protocol        String // mndp|lldp|cdp
+  localInterface  String?
+  remoteInterface String?
+  remoteName      String?
+  remoteIp        String?
+  remoteChassisId String?
+  remotePlatform  String?
+  confidence      Int                  @default(0)
+  status          String               @default("suggested") // suggested|confirmed|unmatched|conflict|approved|ignored|stale
+  topologyLinkId  String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  ignoredBy       String?
+  ignoredAt       DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([runId, status])
+  @@index([localDeviceId, createdAt])
+  @@index([matchedDeviceId, status])
 }
 
 model TaskMessage {
   id        String   @id @default(uuid())
   taskId    String
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  role      String   // "user" | "agent" | "system"
+  role      String // "user" | "agent" | "system"
   content   String
   agentName String?
   createdAt DateTime @default(now())
@@ -63,19 +1729,232 @@ model Settings {
 
 model ChatSession {
   id        String        @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerId   String?
+  owner     User?         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   title     String?
+  summary   String?
+  summarizedThroughAt DateTime?
+  summarizedMessageCount Int @default(0)
+  summaryUpdatedAt DateTime?
+  archivedAt DateTime?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   messages  ChatMessage[]
+  attachments ChatAttachment[]
+
+  @@index([tenantId, updatedAt])
+  @@index([ownerId, updatedAt])
 }
 
 model ChatMessage {
   id        String      @id @default(uuid())
   sessionId String
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role      String      // "user" | "assistant"
+  role      String // "user" | "assistant"
   content   String
   agentUsed String?
-  toolCalls String?     // JSON string with tools used
+  provider  String?
+  model     String?
+  knowledgeSources String?
+  feedback  String? // positive|negative
+  deviceId  String? // equipamento fixado quando a mensagem foi gerada
+  toolCalls String? // JSON string with tools used
   createdAt DateTime    @default(now())
+  attachments ChatAttachment[]
+}
+
+model ChatAttachment {
+  id              String       @id @default(uuid())
+  sessionId       String
+  session         ChatSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  messageId       String?
+  message         ChatMessage? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  filename        String
+  mimeType        String
+  size            Int
+  content         String
+  authorizedForAi Boolean      @default(false)
+  includedAt      DateTime?
+  createdAt       DateTime     @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([messageId])
+}
+
+model AiUsageLog {
+  id            String   @id @default(uuid())
+  tenantId      String?
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  provider      String
+  model         String
+  agentName     String?
+  status        String // success|error|skipped
+  errorKind     String? // rate_limit|quota|auth|model|provider|unknown
+  errorMessage  String?
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  totalTokens   Int      @default(0)
+  estimatedCost Float?
+  durationMs    Int?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([provider, createdAt])
+  @@index([status, errorKind])
+  @@index([tenantId, createdAt])
+}
+
+model AiProviderState {
+  provider          String    @id
+  status            String    @default("available") // available|cooldown|quota_exhausted|error
+  reason            String?
+  cooldownUntil     DateTime?
+  consecutiveErrors Int       @default(0)
+  lastSuccessAt     DateTime?
+  lastErrorAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+}
+
+model KnowledgeDocument {
+  id                String           @id @default(uuid())
+  tenantId          String?
+  tenant            Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title             String
+  filename          String
+  sourceType        String           @default("markdown") // markdown|text|pdf|url
+  sourceUrl         String?
+  collectionRootUrl String?
+  content           String
+  agentScope        String           @default("global") // global|support|mikrotik|linux|huawei_vrp
+  mikrotikRole      String?          // router|switch
+  routerOsMajor     String?          // 6|7
+  tags              String?
+  status            String           @default("active") // active|disabled
+  chunkCount        Int              @default(0)
+  uploadedBy        String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  chunks            KnowledgeChunk[]
+
+  @@index([agentScope, status])
+  @@index([mikrotikRole, routerOsMajor, status])
+  @@index([tenantId, status])
+  @@index([collectionRootUrl])
+  @@index([updatedAt])
+}
+
+model KnowledgeChunk {
+  id         String            @id @default(uuid())
+  documentId String
+  document   KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  position   Int
+  heading    String?
+  content    String
+  searchText String
+  createdAt  DateTime          @default(now())
+
+  @@unique([documentId, position])
+  @@index([documentId])
+}
+
+model KnowledgeRetrievalLog {
+  id          String   @id @default(uuid())
+  agentName   String
+  query       String
+  documentIds String
+  chunkIds    String
+  resultCount Int
+  tenantId    String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([agentName, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+model KnowledgeImportJob {
+  id          String    @id @default(uuid())
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  startUrl    String
+  urls        String
+  agentScope  String
+  mikrotikRole String?
+  routerOsMajor String?
+  tags        String?
+  status      String    @default("queued") // queued|running|completed|completed_with_errors|failed
+  totalPages  Int
+  processed   Int       @default(0)
+  imported    Int       @default(0)
+  failed      Int       @default(0)
+  currentUrl  String?
+  errors      String?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+model MonthlyReportRun {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  periodKey   String
+  periodFrom  DateTime
+  periodTo    DateTime
+  status      String   @default("pending") // pending|sent|partial|failed
+  reportData  String
+  channels    String
+  recipients  String?
+  deliveryLog String?
+  error       String?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@unique([tenantId, periodKey])
+  @@index([tenantId, createdAt])
+  @@index([status, createdAt])
+}
+
+model CliSession {
+  id           String       @id @default(uuid())
+  userId       String
+  username     String
+  userRole     String
+  deviceId     String
+  deviceName   String
+  deviceType   String
+  hostname     String
+  mode         String       @default("controlled") // controlled|interactive
+  status       String       @default("active") // active|closed|expired
+  ipAddress    String?
+  userAgent    String?
+  startedAt    DateTime     @default(now())
+  lastActiveAt DateTime     @default(now())
+  endedAt      DateTime?
+  commands     CliCommand[]
+
+  @@index([userId, startedAt])
+  @@index([deviceId, startedAt])
+  @@index([status, lastActiveAt])
+}
+
+model CliCommand {
+  id            String     @id @default(uuid())
+  sessionId     String
+  session       CliSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  command       String
+  commandType   String // read|change
+  justification String?
+  status        String     @default("running") // running|success|failure|blocked
+  output        String?
+  durationMs    Int?
+  createdAt     DateTime   @default(now())
+
+  @@index([sessionId, createdAt])
 }

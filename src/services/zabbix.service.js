@@ -2,6 +2,15 @@ import logger from '../utils/logger.js';
 
 export function parseZabbixAlert(body) {
   try {
+    const clean = value => {
+      if (value === undefined || value === null) return null;
+      const text = String(value).trim();
+      return !text || /^\{[^}]+\}$/.test(text) ? null : text;
+    };
+    const timestamp = value => {
+      const parsed = Number(clean(value));
+      return Number.isFinite(parsed) && parsed > 0 ? new Date(parsed * 1000) : null;
+    };
     const {
       host,
       hostname,
@@ -13,6 +22,10 @@ export function parseZabbixAlert(body) {
       eventId,
       itemName,
       itemValue,
+      eventValue,
+      eventTimestamp,
+      recoveryEventId,
+      recoveryTimestamp,
     } = body;
 
     const severityMap = {
@@ -33,18 +46,31 @@ export function parseZabbixAlert(body) {
       'disaster': 'critical',
     };
 
-    const sev = severityMap[severity] || severity || 'average';
+    const cleanSeverity = clean(severity);
+    const sev = severityMap[cleanSeverity] || cleanSeverity?.toLowerCase() || 'average';
+    const cleanStatus = clean(status);
+    const cleanEventValue = clean(eventValue);
+    const cleanRecoveryId = clean(recoveryEventId);
+    const isRecovery = cleanEventValue === '0' || /resolved|recovery|ok/i.test(cleanStatus || '') || Boolean(cleanRecoveryId);
+    const cleanHost = clean(host) || clean(hostname) || 'Unknown';
+    const cleanHostId = clean(hostId);
+    const cleanTrigger = clean(trigger) || clean(message) || 'Unknown trigger';
 
     return {
-      host: host || hostname || 'Unknown',
-      hostId: hostId || null,
-      trigger: trigger || message || 'Unknown trigger',
+      host: cleanHost,
+      hostId: cleanHostId,
+      trigger: cleanTrigger,
       severity: sev,
       priority: priorityMap[sev] || 'medium',
-      status: status || 'PROBLEM',
-      eventId: eventId || null,
-      itemName: itemName || null,
-      itemValue: itemValue || null,
+      status: cleanStatus || (isRecovery ? 'RESOLVED' : 'PROBLEM'),
+      state: isRecovery ? 'resolved' : 'problem',
+      eventId: clean(eventId),
+      recoveryEventId: cleanRecoveryId,
+      eventAt: timestamp(eventTimestamp),
+      recoveryAt: timestamp(recoveryTimestamp),
+      itemName: clean(itemName),
+      itemValue: clean(itemValue),
+      incidentKey: `${cleanHostId || cleanHost}::${cleanTrigger}`.toLowerCase(),
       raw: body,
     };
   } catch (err) {
@@ -68,5 +94,6 @@ export function formatAlertMessage(alert) {
     `📊 Severidade: ${alert.severity}`,
     alert.itemName ? `📈 Item: ${alert.itemName} = ${alert.itemValue}` : '',
     `⏰ Status: ${alert.status}`,
+    alert.eventId ? `🔗 Evento: ${alert.eventId}` : '',
   ].filter(Boolean).join('\n');
 }

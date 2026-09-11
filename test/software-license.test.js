@@ -1,0 +1,5 @@
+import test from'node:test';import assert from'node:assert/strict';import{licenseHealth,normalizeSoftwareLicense}from'../src/routes/software-license.routes.js';
+const base={name:'Microsoft 365',product:'Business Premium',tenantId:'t1',seatsPurchased:50,seatsUsed:42,startDate:'2026-01-01',expiresAt:'2026-12-31',portalUrl:'https://admin.microsoft.com',assetIds:['a1','a1']};
+test('normaliza licença, consumo e ativos',()=>{const row=normalizeSoftwareLicense(base);assert.equal(row.seatsPurchased,50);assert.equal(row.seatsUsed,42);assert.deepEqual(row.assetIds,['a1']);});
+test('rejeita consumo superior e portal inseguro',()=>{assert.throws(()=>normalizeSoftwareLicense({...base,seatsUsed:51}),/superar/);assert.throws(()=>normalizeSoftwareLicense({...base,portalUrl:'http://inseguro'}),/HTTPS/);});
+test('classifica vencimento respeitando aviso',()=>{assert.equal(licenseHealth({status:'active',expiresAt:'2026-08-20',noticeDays:30},new Date('2026-08-03')).state,'expiring');assert.equal(licenseHealth({status:'active',expiresAt:null,noticeDays:30}).state,'perpetual')});

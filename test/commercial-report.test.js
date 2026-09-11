@@ -1,0 +1,2 @@
+import test from'node:test';import assert from'node:assert/strict';import{commercialCsv}from'../src/services/commercial-report.service.js';
+test('gera CSV comercial e neutraliza fórmula',()=>{const csv=commercialCsv({items:[{kind:'license',name:'=CMD()',tenant:{name:'Cliente'},supplier:{name:'Fornecedor'},currency:'BRL',amount:1200,billingCycle:'annual',monthlyEquivalent:100,annualProjection:1200,oneTimeCost:0,expiresAt:'2026-12-31'}]}).toString('utf8');assert.match(csv,/Licença/);assert.match(csv,/"'=CMD\(\)"/);assert.match(csv,/Mensal equivalente/)});

@@ -3,20 +3,53 @@ import prisma from '../database/client.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import Anthropic from '@anthropic-ai/sdk';
 import logger from '../utils/logger.js';
+import { providerRunners } from '../ai/providers.js';
+import { getNotificationConfig, sendTelegramMessage } from '../services/notification.service.js';
+import { saveBranding } from '../services/branding.service.js';
+import { listOpenAiModels } from '../services/openai-model.service.js';
+import { listAnthropicModels } from '../services/anthropic-model.service.js';
 
 const router = Router();
 
-const SENSITIVE_KEYS = ['claude_api_key', 'evolution_api_key', 'zabbix_webhook_token', 'dashboard_password', 'encryption_key'];
+const SENSITIVE_KEYS = ['claude_api_key', 'openai_api_key', 'gemini_api_key', 'evolution_api_key', 'telegram_bot_token', 'zabbix_webhook_token', 'zabbix_api_token', 'nvd_api_key', 'abuseipdb_api_key', 'netbox_api_token', 'flow_inspector_password', 'dashboard_password', 'encryption_key'];
+const validateEscalationSettings = settings => {
+  const map = Object.fromEntries(settings.map(item => [item.key, item.value]));
+  const relevant = settings.some(item => String(item.key).startsWith('critical_escalation_'));
+  if (!relevant) return;
+  const levels = [1,2,3].map(level => Number(map[`critical_escalation_level${level}_minutes`]));
+  if (levels.every(Number.isFinite) && !(levels[0] > 0 && levels[0] < levels[1] && levels[1] < levels[2])) {
+    throw Object.assign(new Error('Os tempos de escalonamento devem ser positivos e crescentes: nível 1 < nível 2 < nível 3'), { statusCode: 400 });
+  }
+  for (const level of [1,2,3]) {
+    const channels = String(map[`critical_escalation_level${level}_channels`] || '').split(',').map(value => value.trim()).filter(Boolean);
+    if (channels.some(channel => !['telegram','whatsapp'].includes(channel))) throw Object.assign(new Error(`Canal inválido no nível ${level}`), { statusCode: 400 });
+  }
+};
+
+router.post('/test-telegram', async (req, res) => {
+  try {
+    const cfg = await getNotificationConfig();
+    const chatId = String(req.body.chatId || cfg.telegramChats[0] || '').trim();
+    let token = req.body.token;
+    if (!token || token === '••••••••') token = cfg.telegramToken;
+    await sendTelegramMessage(chatId, '✅ Teste do NOC Agent: integração com Telegram funcionando.', token);
+    res.json({ success: true });
+  } catch (error) { res.status(400).json({ success: false, error: error.message }); }
+});
 
 router.get('/', async (req, res, next) => {
   try {
-    const settings = await prisma.settings.findMany();
+    const settings = await prisma.settings.findMany({ where: { key: { notIn: ['branding_logo_data', 'branding_favicon_data'] } } });
     const safe = settings.map(s => ({
       ...s,
       value: s.encrypted ? '••••••••' : s.value,
     }));
     res.json({ success: true, data: safe });
   } catch (err) { next(err); }
+});
+
+router.post('/branding', async (req, res, next) => {
+  try { res.json({ success: true, data: await saveBranding(req.body) }); } catch (error) { next(error); }
 });
 
 router.get('/:key', async (req, res, next) => {
@@ -59,6 +92,7 @@ router.post('/bulk', async (req, res, next) => {
     if (!settings || !Array.isArray(settings)) {
       return res.status(400).json({ success: false, error: 'Settings array required' });
     }
+    validateEscalationSettings(settings);
 
     const results = [];
     for (const { key, value } of settings) {
@@ -112,6 +146,77 @@ router.post('/test-claude', async (req, res, next) => {
     logger.error(`[Claude Test] Falha na conexão: ${err.message}`);
     res.json({ success: false, error: err.message });
   }
+});
+
+router.post('/test-ai', async (req, res) => {
+  try {
+    const { provider } = req.body;
+    const defaultModels = { openai: 'gpt-5.6-sol', gemini: 'gemini-3.5-flash' };
+    const model = String(req.body.model || defaultModels[provider] || '').trim();
+    const keyName = `${provider}_api_key`;
+    if (!providerRunners[provider] || !['openai', 'gemini'].includes(provider)) return res.status(400).json({ success: false, error: 'Provedor inválido' });
+    if (!model || model === 'undefined') return res.status(400).json({ success: false, error: 'Modelo não configurado' });
+    const setting = await prisma.settings.findUnique({ where: { key: keyName } });
+    if (!setting?.value) return res.status(400).json({ success: false, error: 'Salve a API key primeiro' });
+    const apiKey = setting.encrypted ? decrypt(setting.value) : setting.value;
+    const result = await providerRunners[provider]({ apiKey, model, systemPrompt: 'Responda de forma concisa.', tools: [], message: 'Responda somente OK', executeTool: async () => '{}'});
+    res.json({ success: true, message: result.text || 'OK' });
+  } catch (err) { res.status(400).json({ success: false, error: err.message }); }
+});
+
+router.post('/gemini-models', async (req, res) => {
+  try {
+    let { apiKey } = req.body;
+    if (!apiKey || apiKey === '••••••••') {
+      const setting = await prisma.settings.findUnique({ where: { key: 'gemini_api_key' } });
+      if (!setting?.value) return res.status(400).json({ success: false, error: 'Informe ou salve a API key do Gemini primeiro' });
+      apiKey = setting.encrypted ? decrypt(setting.value) : setting.value;
+    }
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=1000`);
+    const data = await response.json();
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, error: data.error?.message || 'Não foi possível consultar os modelos do Gemini' });
+    }
+
+    const models = (data.models || [])
+      .filter(model => model.supportedGenerationMethods?.includes('generateContent'))
+      .map(model => ({
+        id: model.name.replace(/^models\//, ''),
+        name: model.displayName || model.name.replace(/^models\//, ''),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    res.json({ success: true, data: models });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/openai-models', async (req, res) => {
+  try {
+    let { apiKey } = req.body;
+    if (!apiKey || apiKey === '••••••••') {
+      const setting = await prisma.settings.findUnique({ where: { key: 'openai_api_key' } });
+      if (!setting?.value) return res.status(400).json({ success: false, error: 'Informe ou salve a API key da OpenAI primeiro' });
+      apiKey = setting.encrypted ? decrypt(setting.value) : setting.value;
+    }
+    const models = await listOpenAiModels(apiKey);
+    res.json({ success: true, data: models });
+  } catch (error) { res.status(error.statusCode || 400).json({ success: false, error: error.message }); }
+});
+
+router.post('/claude-models', async (req, res) => {
+  try {
+    let { apiKey } = req.body;
+    if (!apiKey || apiKey === '••••••••') {
+      const setting = await prisma.settings.findUnique({ where: { key: 'claude_api_key' } });
+      if (!setting?.value) return res.status(400).json({ success: false, error: 'Informe ou salve a API key do Claude primeiro' });
+      apiKey = setting.encrypted ? decrypt(setting.value) : setting.value;
+    }
+    const models = await listAnthropicModels(apiKey);
+    res.json({ success: true, data: models });
+  } catch (error) { res.status(error.statusCode || 400).json({ success: false, error: error.message }); }
 });
 
 router.post('/test-evolution', async (req, res, next) => {

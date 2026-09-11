@@ -9,19 +9,25 @@
     "start": "node src/server.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "test": "node --test test/*.test.js",
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "test:agents": "node scripts/agent-smoke-test.mjs",
+    "check:production": "node scripts/production-check.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
     "@prisma/client": "^5.22.0",
+    "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.16.0",
     "socket.io": "^4.7.5",
     "ssh2": "^1.16.0",
-    "uuid": "^9.0.1",
     "winston": "^3.14.0"
   },
   "devDependencies": {

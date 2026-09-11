@@ -1,0 +1,2 @@
+import{Router}from'express';import{commercialCostDashboard}from'../services/commercial-cost.service.js';
+const router=Router();router.get('/',async(req,res,next)=>{try{res.json({success:true,data:await commercialCostDashboard({tenantId:req.query.tenantId?String(req.query.tenantId):null,currency:req.query.currency?String(req.query.currency):null})});}catch(error){next(error);}});export default router;

@@ -1,61 +1,1195 @@
-const BASE = '/api';
+const BASE = "/api";
 
 function getToken() {
-  return localStorage.getItem('noc_token');
+  return localStorage.getItem("noc_token");
 }
 
 async function request(path, options = {}) {
   const token = getToken();
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const headers = { "Content-Type": "application/json", ...options.headers };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
-  const data = await res.json();
-
-  if (res.status === 401) {
-    localStorage.removeItem('noc_token');
-    window.location.reload();
-    throw new Error('Unauthorized');
+  const body = await res.text();
+  let data = {};
+  if (body) {
+    try {
+      data = JSON.parse(body);
+    } catch {
+      const proxyError = [502, 503, 504].includes(res.status)
+        ? "O servidor intermediário encerrou a espera, mas a operação pode continuar em segundo plano. Atualize a Task em alguns instantes."
+        : `O servidor respondeu em formato inesperado (HTTP ${res.status}).`;
+      throw new Error(proxyError);
+    }
   }
 
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  if (res.status === 401 && token) {
+    localStorage.removeItem("noc_token");
+    window.location.reload();
+    throw new Error("Unauthorized");
+  }
+
+  if (!res.ok)
+    throw new Error(
+      data.error || (res.status === 403 ? "Sem permissão" : "Request failed"),
+    );
   return data;
 }
 
 export const api = {
   // Auth
-  login: (password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
-  verify: () => request('/auth/verify'),
+  login: (username, password, otp) =>
+    request("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password, otp }),
+    }),
+  getBranding: () => request("/branding"),
+  getPublicStatus: (slug) =>
+    request(`/public/status${slug ? `/${encodeURIComponent(slug)}` : ""}`),
+  verify: () => request("/auth/verify"),
+  refreshSession: () => request("/auth/refresh", { method: "POST" }),
+  logout: () => request("/auth/logout", { method: "POST" }),
+  changePassword: (currentPassword, newPassword) =>
+    request("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  setupTwoFactor: (password) =>
+    request("/auth/2fa/setup", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  enableTwoFactor: (code) =>
+    request("/auth/2fa/enable", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  disableTwoFactor: (password, code) =>
+    request("/auth/2fa/disable", {
+      method: "POST",
+      body: JSON.stringify({ password, code }),
+    }),
+  getSessions: () => request("/auth/sessions"),
+  revokeSession: (id) => request(`/auth/sessions/${id}`, { method: "DELETE" }),
+  getUsers: () => request("/users"),
+  createUser: (data) =>
+    request("/users", { method: "POST", body: JSON.stringify(data) }),
+  updateUser: (id, data) =>
+    request(`/users/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),
+  getTenants: () => request("/tenants"),
+  getSuppliers: (params = {}) =>
+    request(`/suppliers?${new URLSearchParams(params)}`),
+  createSupplier: (data) =>
+    request("/suppliers", { method: "POST", body: JSON.stringify(data) }),
+  updateSupplier: (id, data) =>
+    request(`/suppliers/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteSupplier: (id) => request(`/suppliers/${id}`, { method: "DELETE" }),
+  getCommercialContracts: (params = {}) =>
+    request(`/commercial-contracts?${new URLSearchParams(params)}`),
+  createCommercialContract: (data) =>
+    request("/commercial-contracts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateCommercialContract: (id, data) =>
+    request(`/commercial-contracts/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  createContractRenewalTask: (id) =>
+    request(`/commercial-contracts/${id}/renewal-task`, { method: "POST" }),
+  getSoftwareLicenses: (params = {}) =>
+    request(`/software-licenses?${new URLSearchParams(params)}`),
+  getSoftwareLicenseSummary: (params = {}) =>
+    request(`/software-licenses/summary?${new URLSearchParams(params)}`),
+  createSoftwareLicense: (data) =>
+    request("/software-licenses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateSoftwareLicense: (id, data) =>
+    request(`/software-licenses/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  createLicenseRenewalTask: (id) =>
+    request(`/software-licenses/${id}/renewal-task`, { method: "POST" }),
+  getCommercialExpiryAutomation: () => request("/software-licenses/automation"),
+  setCommercialExpiryAutomation: (autoTasks) =>
+    request("/software-licenses/automation", {
+      method: "PUT",
+      body: JSON.stringify({ autoTasks }),
+    }),
+  runCommercialExpiryMonitor: () =>
+    request("/software-licenses/monitor", { method: "POST" }),
+  getCommercialCosts: (params = {}) =>
+    request(`/commercial-costs?${new URLSearchParams(params)}`),
+  getCommercialDashboard: (params = {}) =>
+    request(`/commercial-dashboard?${new URLSearchParams(params)}`),
+  downloadCommercialReport: async (format, params = {}) => {
+    const res = await fetch(
+      `${BASE}/commercial-dashboard/export.${format}?${new URLSearchParams(params)}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao exportar relatório comercial");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || `relatorio-comercial.${format}`,
+    };
+  },
+  createTenant: (data) =>
+    request("/tenants", { method: "POST", body: JSON.stringify(data) }),
+  updateTenant: (id, data) =>
+    request(`/tenants/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  createTenantSite: (id, data) =>
+    request(`/tenants/${id}/sites`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteTenantSite: (id) =>
+    request(`/tenants/sites/${id}`, { method: "DELETE" }),
+  getCmdbAssets: (params = {}) =>
+    request(`/cmdb?${new URLSearchParams(params)}`),
+  getCmdbSummary: (params = {}) =>
+    request(`/cmdb/summary?${new URLSearchParams(params)}`),
+  getCmdbGovernance: (params = {}) =>
+    request(`/cmdb/governance?${new URLSearchParams(params)}`),
+  getCmdbAsset: (id) => request(`/cmdb/${id}`),
+  createCmdbAsset: (data) =>
+    request("/cmdb", { method: "POST", body: JSON.stringify(data) }),
+  updateCmdbAsset: (id, data) =>
+    request(`/cmdb/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteCmdbAsset: (id) => request(`/cmdb/${id}`, { method: "DELETE" }),
+  syncCmdbDevices: () => request("/cmdb/sync-devices", { method: "POST" }),
+  collectCmdbInventory: (id) =>
+    request(`/cmdb/${id}/inventory/collect`, { method: "POST" }),
+  collectAllCmdbInventory: () =>
+    request("/cmdb/inventory/collect-all", { method: "POST" }),
+  getCmdbInventory: (id, limit = 50) =>
+    request(`/cmdb/${id}/inventory?limit=${limit}`),
+  getCmdbHistory: (id, limit = 100) =>
+    request(`/cmdb/${id}/history?limit=${limit}`),
+  getCmdbInterfaces: (id) => request(`/cmdb/${id}/interfaces`),
+  createCmdbInterface: (id, data) =>
+    request(`/cmdb/${id}/interfaces`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteCmdbInterface: (id, interfaceId) =>
+    request(`/cmdb/${id}/interfaces/${interfaceId}`, { method: "DELETE" }),
+  getCmdbVlans: (id) => request(`/cmdb/${id}/vlans`),
+  createCmdbVlan: (id, data) =>
+    request(`/cmdb/${id}/vlans`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteCmdbVlan: (id, vlanId) =>
+    request(`/cmdb/${id}/vlans/${vlanId}`, { method: "DELETE" }),
+  saveCmdbInventoryPolicy: (id, data) =>
+    request(`/cmdb/${id}/inventory/policy`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getCmdbImpact: (id) => request(`/cmdb/${id}/impact`),
+  createCmdbRelationship: (data) =>
+    request("/cmdb/relationships", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteCmdbRelationship: (id) =>
+    request(`/cmdb/relationships/${id}`, { method: "DELETE" }),
+  getCmdbSuggestions: () => request("/cmdb/suggestions"),
+  refreshCmdbSuggestions: () =>
+    request("/cmdb/suggestions/refresh", { method: "POST" }),
+  approveCmdbSuggestion: (id, data) =>
+    request(`/cmdb/suggestions/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  ignoreCmdbSuggestion: (id) =>
+    request(`/cmdb/suggestions/${id}/ignore`, { method: "POST" }),
+  getCmdbLifecycleAlerts: (status = "active") =>
+    request(`/cmdb/lifecycle-alerts?status=${status}`),
+  scanCmdbLifecycle: () =>
+    request("/cmdb/lifecycle-alerts/scan", { method: "POST" }),
+  getIpam: (params = {}) =>
+    request(`/cmdb/ipam?${new URLSearchParams(params)}`),
+  getIpamHistory: (limit = 100) => request(`/cmdb/ipam/history?limit=${limit}`),
+  getIpamConflicts: () => request("/cmdb/ipam/conflicts"),
+  createIpamSubnet: (data) =>
+    request("/cmdb/ipam/subnets", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  importIpam: (rows) =>
+    request("/cmdb/ipam/import", {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    }),
+  deleteIpamSubnet: (id) =>
+    request(`/cmdb/ipam/subnets/${id}`, { method: "DELETE" }),
+  createIpamAddress: (data) =>
+    request("/cmdb/ipam/addresses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteIpamAddress: (id) =>
+    request(`/cmdb/ipam/addresses/${id}`, { method: "DELETE" }),
+  getIpamSuggestions: () => request("/cmdb/ipam/suggestions"),
+  refreshIpamSuggestions: () =>
+    request("/cmdb/ipam/suggestions/refresh", { method: "POST" }),
+  approveIpamSuggestion: (id) =>
+    request(`/cmdb/ipam/suggestions/${id}/approve`, { method: "POST" }),
+  ignoreIpamSuggestion: (id) =>
+    request(`/cmdb/ipam/suggestions/${id}/ignore`, { method: "POST" }),
+  getBusinessServices: () => request("/cmdb/business-services"),
+  createBusinessService: (data) =>
+    request("/cmdb/business-services", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateBusinessService: (id, data) =>
+    request(`/cmdb/business-services/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteBusinessService: (id) =>
+    request(`/cmdb/business-services/${id}`, { method: "DELETE" }),
+  linkBusinessServiceAsset: (id, data) =>
+    request(`/cmdb/business-services/${id}/assets`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  unlinkBusinessServiceAsset: (id, assetId) =>
+    request(`/cmdb/business-services/${id}/assets/${assetId}`, {
+      method: "DELETE",
+    }),
+  getBusinessServiceImpact: (id) =>
+    request(`/cmdb/business-services/${id}/impact`),
+  getAuditLogs: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/audit${qs ? `?${qs}` : ""}`);
+  },
+  getAuditOptions: () => request("/audit/options"),
+  getIncidentReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/incidents${qs ? `?${qs}` : ""}`);
+  },
+  getMonthlyReports: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/reports/monthly${qs ? `?${qs}` : ""}`);
+  },
+  saveMonthlyReportConfig: (tenantId, data) =>
+    request(`/reports/monthly/tenants/${tenantId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  runMonthlyReport: (tenantId) =>
+    request(`/reports/monthly/tenants/${tenantId}/run`, { method: "POST" }),
+  downloadMonthlyReport: async (id) => {
+    const res = await fetch(
+      `${BASE}/reports/monthly/${encodeURIComponent(id)}/pdf`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao baixar relatório mensal");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || "relatorio-mensal.pdf",
+    };
+  },
+  getAiUsage: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/ai-usage${qs ? `?${qs}` : ""}`);
+  },
+  unblockAiProvider: (provider) =>
+    request(`/ai-usage/${provider}/unblock`, { method: "POST" }),
+  getBackups: () => request("/backups"),
+  getBackupStatus: () => request("/backups/status"),
+  createBackup: () => request("/backups", { method: "POST" }),
+  updateBackupConfig: (data) =>
+    request("/backups/config", { method: "PUT", body: JSON.stringify(data) }),
+  restoreBackup: (filename, password) =>
+    request(`/backups/${encodeURIComponent(filename)}/restore`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  downloadBackup: async (filename) => {
+    const res = await fetch(
+      `${BASE}/backups/${encodeURIComponent(filename)}/download`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao baixar backup");
+    }
+    return res.blob();
+  },
+  getDeviceBackups: () => request("/device-backups"),
+  getDeviceBackupSnapshots: (deviceId, limit = 100) =>
+    request(
+      `/device-backups/snapshots?deviceId=${encodeURIComponent(deviceId)}&limit=${limit}`,
+    ),
+  saveDeviceBackupPolicy: (deviceId, data) =>
+    request(`/device-backups/policies/${deviceId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  runDeviceBackup: (deviceId) =>
+    request(`/device-backups/run/${deviceId}`, { method: "POST" }),
+  compareDeviceBackups: (before, after) =>
+    request(
+      `/device-backups/compare?before=${encodeURIComponent(before)}&after=${encodeURIComponent(after)}`,
+    ),
+  getConfigurationDrifts: (status = "all") =>
+    request(`/device-backups/drifts?status=${encodeURIComponent(status)}`),
+  decideConfigurationDrift: (id, action, resolution = "") =>
+    request(`/device-backups/drifts/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ action, resolution }),
+    }),
+  getVulnerabilities: (params = {}) =>
+    request(`/vulnerabilities?${new URLSearchParams(params)}`),
+  downloadVulnerabilityReport: async (format, params = {}) => {
+    const res = await fetch(
+      `${BASE}/vulnerabilities/export.${format}?${new URLSearchParams(params)}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao exportar vulnerabilidades");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || `vulnerabilidades.${format}`,
+    };
+  },
+  scanDeviceVulnerabilities: (id) =>
+    request(`/vulnerabilities/scan/${id}`, { method: "POST" }),
+  scanAllVulnerabilities: () =>
+    request("/vulnerabilities/scan-all", { method: "POST" }),
+  getVulnerabilityScanAllStatus: () =>
+    request("/vulnerabilities/scan-all/status"),
+  decideVulnerability: (id, action, resolution = "") =>
+    request(`/vulnerabilities/${id}/decision`, {
+      method: "POST",
+      body: JSON.stringify({ action, resolution }),
+    }),
+  getLifecycle: (params = {}) =>
+    request(`/lifecycle?${new URLSearchParams(params)}`),
+  scanLifecycle: () => request("/lifecycle/scan", { method: "POST" }),
+  createLifecycleTask: (assetId, reason = "") =>
+    request(`/lifecycle/${assetId}/task`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  getLifecycleCatalog: (params = {}) =>
+    request(`/lifecycle/catalog?${new URLSearchParams(params)}`),
+  getLifecycleCatalogSources: () => request("/lifecycle/catalog-sources"),
+  createLifecycleCatalog: (data) =>
+    request("/lifecycle/catalog", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateLifecycleCatalog: (id, data) =>
+    request(`/lifecycle/catalog/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  verifyLifecycleCatalog: (id) =>
+    request(`/lifecycle/catalog/${id}/verify`, { method: "POST" }),
+  deleteLifecycleCatalog: (id) =>
+    request(`/lifecycle/catalog/${id}`, { method: "DELETE" }),
+  downloadLifecycleReport: async (format, params = {}) => {
+    const res = await fetch(
+      `${BASE}/lifecycle/export.${format}?${new URLSearchParams(params)}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao exportar ciclo de vida");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || `ciclo-de-vida.${format}`,
+    };
+  },
+  deleteDeviceBackup: (id) =>
+    request(`/device-backups/snapshots/${id}`, { method: "DELETE" }),
+  downloadDeviceBackup: async (id) => {
+    const res = await fetch(
+      `${BASE}/device-backups/snapshots/${encodeURIComponent(id)}/download`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao baixar configuração");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || "configuracao.txt",
+    };
+  },
+  getCompliance: () => request("/compliance"),
+  getComplianceProfiles: (deviceType) =>
+    request(
+      `/compliance/profiles${deviceType ? `?deviceType=${encodeURIComponent(deviceType)}` : ""}`,
+    ),
+  createComplianceProfile: (data) =>
+    request("/compliance/profiles", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateComplianceProfile: (id, data) =>
+    request(`/compliance/profiles/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteComplianceProfile: (id) =>
+    request(`/compliance/profiles/${id}`, { method: "DELETE" }),
+  getComplianceExceptions: (deviceId) =>
+    request(
+      `/compliance/exceptions${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ""}`,
+    ),
+  createComplianceException: (data) =>
+    request("/compliance/exceptions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  revokeComplianceException: (id) =>
+    request(`/compliance/exceptions/${id}`, { method: "DELETE" }),
+  getComplianceReport: (params) =>
+    request(`/compliance/reports?${new URLSearchParams(params)}`),
+  getComplianceDashboard: () => request("/compliance/dashboard"),
+  getComplianceGovernance: () => request("/compliance/governance"),
+  saveComplianceEscalation: (data) =>
+    request("/compliance/governance/escalation", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  createComplianceScope: (data) =>
+    request("/compliance/scopes", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateComplianceScope: (id, data) =>
+    request(`/compliance/scopes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteComplianceScope: (id) =>
+    request(`/compliance/scopes/${id}`, { method: "DELETE" }),
+  createComplianceRemediationTask: (findingId) =>
+    request(`/compliance/findings/${findingId}/remediation-task`, {
+      method: "POST",
+    }),
+  downloadComplianceReport: async (format, params = {}) => {
+    const res = await fetch(
+      `${BASE}/compliance/reports/${format}?${new URLSearchParams(params)}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao gerar relatório");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || `compliance.${format}`,
+    };
+  },
+  saveCompliancePolicy: (deviceId, data) =>
+    request(`/compliance/policies/${deviceId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  runComplianceScan: (deviceId) =>
+    request(`/compliance/scan/${deviceId}`, { method: "POST" }),
+  getComplianceScans: (deviceId, limit = 100) =>
+    request(
+      `/compliance/scans?${new URLSearchParams({ ...(deviceId && { deviceId }), limit })}`,
+    ),
+  getComplianceScan: (id) => request(`/compliance/scans/${id}`),
+  deleteComplianceScan: (id) =>
+    request(`/compliance/scans/${id}`, { method: "DELETE" }),
+  getChanges: (params = {}) =>
+    request(`/changes?${new URLSearchParams(params)}`),
+  getChange: (id) => request(`/changes/${id}`),
+  getChangeCmdbImpact: (id) => request(`/changes/${id}/cmdb-impact`),
+  createChange: (data) =>
+    request("/changes", { method: "POST", body: JSON.stringify(data) }),
+  updateChange: (id, data) =>
+    request(`/changes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  submitChange: (id) => request(`/changes/${id}/submit`, { method: "POST" }),
+  approveChange: (id, approved, reason = "") =>
+    request(`/changes/${id}/approval`, {
+      method: "POST",
+      body: JSON.stringify({ approved, reason }),
+    }),
+  startChange: (id) => request(`/changes/${id}/start`, { method: "POST" }),
+  validateChange: (id) =>
+    request(`/changes/${id}/validate`, { method: "POST" }),
+  rollbackChange: (id) =>
+    request(`/changes/${id}/rollback`, { method: "POST" }),
+  cancelChange: (id, reason = "") =>
+    request(`/changes/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+  getDiscovery: () => request("/discovery"),
+  startDiscovery: (data) =>
+    request("/discovery", { method: "POST", body: JSON.stringify(data) }),
+  cancelDiscovery: (id) =>
+    request(`/discovery/${id}/cancel`, { method: "POST" }),
+  deleteDiscovery: (id) => request(`/discovery/${id}`, { method: "DELETE" }),
+  importDiscoveredHost: (id, data) =>
+    request(`/discovery/hosts/${id}/import`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  ignoreDiscoveredHost: (id) =>
+    request(`/discovery/hosts/${id}/ignore`, { method: "POST" }),
+  getCapacity: (days = 30) =>
+    request(`/capacity?days=${encodeURIComponent(days)}`),
+  collectCapacity: () => request("/capacity/collect", { method: "POST" }),
+  downloadCapacityCsv: async (days = 30) => {
+    const res = await fetch(
+      `${BASE}/capacity/export.csv?days=${encodeURIComponent(days)}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao exportar capacidade");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || "capacidade.csv",
+    };
+  },
+  getTopology: () => request("/topology"),
+  getFlowInspector: () => request("/flow-inspector"),
+  getFlowIntegration: () => request("/flow-inspector/integration"),
+  testFlowIntegration: (data) =>
+    request("/flow-inspector/integration/test", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  saveFlowIntegration: (data) =>
+    request("/flow-inspector/integration", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  rotateFlowPassword: (password) =>
+    request("/flow-inspector/integration/rotate-password", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+  searchFlowTraffic: (params) =>
+    request(
+      `/flow-inspector/search?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== "" && value !== null && value !== undefined))}`,
+    ),
+  getFlowSecurityProfiles: () => request("/flow-inspector/profiles"),
+  saveFlowSecurityProfile: (exporter, data) =>
+    request(`/flow-inspector/profiles/${encodeURIComponent(exporter)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getFlowCustomRules: () => request("/flow-inspector/rules"),
+  saveFlowCustomRule: (data) =>
+    request("/flow-inspector/rules", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  testFlowCustomRule: (data) =>
+    request("/flow-inspector/rules/test", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getFlowSilences: () => request("/flow-inspector/silences"),
+  saveFlowSilence: (data) =>
+    request("/flow-inspector/silences", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteFlowSilence: (id) =>
+    request(`/flow-inspector/silences/${id}`, { method: "DELETE" }),
+  getFlowNotifications: () => request("/flow-inspector/notifications"),
+  retryFlowNotification: (id) =>
+    request(`/flow-inspector/notifications/${id}/retry`, { method: "POST" }),
+  getFlowRecurrence: () => request("/flow-inspector/recurrence"),
+  saveFlowRecurrence: (data) =>
+    request("/flow-inspector/recurrence", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getFlowExporterHealth: () => request("/flow-inspector/exporter-health"),
+  saveFlowExporterHealth: (data) =>
+    request("/flow-inspector/exporter-health", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getFlowRetention: () => request("/flow-inspector/retention"),
+  saveFlowRetention: (data) =>
+    request("/flow-inspector/retention", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  executeFlowRetention: () =>
+    request("/flow-inspector/retention/execute", { method: "POST" }),
+  deleteFlowCustomRule: (id) =>
+    request(`/flow-inspector/rules/${id}`, { method: "DELETE" }),
+  getFlowSecurityReport: (params) =>
+    request(
+      `/flow-inspector/reports/security?${new URLSearchParams(Object.entries(params).filter(([, value]) => value))}`,
+    ),
+  downloadFlowSecurityCsv: async (params) => {
+    const res = await fetch(
+      `${BASE}/flow-inspector/reports/security.csv?${new URLSearchParams(Object.entries(params).filter(([, value]) => value))}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
+    );
+    if (!res.ok) throw new Error("Falha ao exportar relatório NetFlow");
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || "netflow-seguranca.csv",
+    };
+  },
+  collectFlowInspector: () =>
+    request("/flow-inspector/collect", { method: "POST" }),
+  classifyFlowAnomaly: (id, classification, resolution = "") =>
+    request(`/flow-inspector/anomalies/${id}/classify`, {
+      method: "POST",
+      body: JSON.stringify({ classification, resolution }),
+    }),
+  checkFlowIpReputation: (ip) =>
+    request(`/flow-inspector/reputation/${encodeURIComponent(ip)}`, { method: "POST" }),
+  getFlowMitigations: () => request("/flow-inspector/mitigations"),
+  prepareFlowMitigation: (id, durationMinutes = 30) =>
+    request(`/flow-inspector/anomalies/${id}/mitigation`, {
+      method: "POST",
+      body: JSON.stringify({ durationMinutes }),
+    }),
+  approveFlowMitigation: (id) =>
+    request(`/flow-inspector/mitigations/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ confirmed: true }),
+    }),
+  prepareFlowMitigationBatch: (anomalyIds,durationMinutes=30) => request("/flow-inspector/mitigations/batch/prepare",{method:"POST",body:JSON.stringify({anomalyIds,durationMinutes})}),
+  approveFlowMitigationBatch: (mitigationIds) => request("/flow-inspector/mitigations/batch/approve",{method:"POST",body:JSON.stringify({mitigationIds,confirmed:true})}),
+  getTopologyImpact: (deviceId) => request(`/topology/impact/${deviceId}`),
+  getTopologyHistory: () => request("/topology/history"),
+  createTopologySnapshot: (baseline) =>
+    request("/topology/history", {
+      method: "POST",
+      body: JSON.stringify({ baseline }),
+    }),
+  setTopologyBaseline: (id) =>
+    request(`/topology/history/${id}/baseline`, { method: "POST" }),
+  compareTopologyHistory: (from, to) =>
+    request(
+      `/topology/history/compare?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    ),
+  createTopologyChangeTask: (from, to) =>
+    request("/topology/history/change-task", {
+      method: "POST",
+      body: JSON.stringify({ from, to }),
+    }),
+  exportTopologyPdf: async (data) => {
+    const res = await fetch(`${BASE}/topology/export.pdf`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      let body = {};
+      try {
+        body = await res.json();
+      } catch {}
+      throw new Error(body.error || "Falha ao exportar PDF do mapa");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || "mapa-rede.pdf",
+    };
+  },
+  collectTopologyTelemetry: () =>
+    request("/topology/telemetry/collect", { method: "POST" }),
+  getTopologyLinkTelemetry: (id, hours = 24) =>
+    request(
+      `/topology/links/${id}/telemetry?hours=${encodeURIComponent(hours)}`,
+    ),
+  updateTopologyLinkPolicy: (id, data) =>
+    request(`/topology/links/${id}/policy`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  saveTopologyPositions: (positions) =>
+    request("/topology/positions", {
+      method: "PUT",
+      body: JSON.stringify({ positions }),
+    }),
+  createTopologyLink: (data) =>
+    request("/topology/links", { method: "POST", body: JSON.stringify(data) }),
+  deleteTopologyLink: (id) =>
+    request(`/topology/links/${id}`, { method: "DELETE" }),
+  getTopologyDiscovery: () => request("/topology/discovery"),
+  startTopologyDiscovery: () =>
+    request("/topology/discovery", { method: "POST" }),
+  approveTopologyNeighbor: (id) =>
+    request(`/topology/discovery/${id}/approve`, { method: "POST" }),
+  ignoreTopologyNeighbor: (id) =>
+    request(`/topology/discovery/${id}/ignore`, { method: "POST" }),
+  getRunbooks: (params = {}) =>
+    request(`/runbooks?${new URLSearchParams(params)}`),
+  getRunbookTemplates: () => request("/runbooks/templates"),
+  importRunbookTemplate: (key) =>
+    request(`/runbooks/templates/${encodeURIComponent(key)}/import`, {
+      method: "POST",
+    }),
+  getRunbook: (id) => request(`/runbooks/${id}`),
+  createRunbook: (data) =>
+    request("/runbooks", { method: "POST", body: JSON.stringify(data) }),
+  updateRunbook: (id, data) =>
+    request(`/runbooks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  publishRunbook: (id) =>
+    request(`/runbooks/${id}/publish`, { method: "POST" }),
+  requestRunbookApproval: (id) =>
+    request(`/runbooks/${id}/request-approval`, { method: "POST" }),
+  reviewRunbook: (id, approved, reason = "") =>
+    request(`/runbooks/${id}/approval`, {
+      method: "POST",
+      body: JSON.stringify({ approved, reason }),
+    }),
+  archiveRunbook: (id) =>
+    request(`/runbooks/${id}/archive`, { method: "POST" }),
+  simulateRunbook: (id, data) =>
+    request(`/runbooks/${id}/simulate`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  executeRunbook: (id, data) =>
+    request(`/runbooks/${id}/execute`, {
+      method: "POST",
+      body: JSON.stringify({ ...data, confirmed: true }),
+    }),
+  getRunbookExecutions: (params = {}) =>
+    request(`/runbooks/executions?${new URLSearchParams(params)}`),
+  compareRunbookExecution: (id) =>
+    request(`/runbooks/executions/${id}/config-diff`),
+  prepareRunbookRollback: (id) =>
+    request(`/runbooks/executions/${id}/rollback/prepare`, { method: "POST" }),
+  rollbackRunbook: (id, preparationId) =>
+    request(`/runbooks/executions/${id}/rollback`, {
+      method: "POST",
+      body: JSON.stringify({ confirmed: true, preparationId }),
+    }),
+  getRunbookSchedules: () => request("/runbooks/schedules"),
+  createRunbookSchedule: (data) =>
+    request("/runbooks/schedules", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  setRunbookScheduleEnabled: (id, enabled) =>
+    request(`/runbooks/schedules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    }),
+  deleteRunbookSchedule: (id) =>
+    request(`/runbooks/schedules/${id}`, { method: "DELETE" }),
+  getRunbookBatches: () => request("/runbooks/batches"),
+  getRunbookBatch: (id) => request(`/runbooks/batches/${id}`),
+  createRunbookBatch: (data) =>
+    request("/runbooks/batches", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  simulateRunbookBatch: (id) =>
+    request(`/runbooks/batches/${id}/simulate`, { method: "POST" }),
+  executeRunbookBatch: (id) =>
+    request(`/runbooks/batches/${id}/execute`, {
+      method: "POST",
+      body: JSON.stringify({ confirmed: true }),
+    }),
+  getRunbookMetrics: () => request("/runbooks/metrics"),
+  getRunbookRevisions: (id) => request(`/runbooks/${id}/revisions`),
+  compareRunbookVersions: (id, from, to) =>
+    request(`/runbooks/${id}/compare?from=${from}&to=${to}`),
 
   // Devices
-  getDevices: () => request('/devices'),
+  getDevices: () => request("/devices"),
+  getDeviceTypes: () => request("/devices/catalog/types"),
   getDevice: (id) => request(`/devices/${id}`),
-  createDevice: (data) => request('/devices', { method: 'POST', body: JSON.stringify(data) }),
-  updateDevice: (id, data) => request(`/devices/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteDevice: (id) => request(`/devices/${id}`, { method: 'DELETE' }),
-  testDevice: (id) => request(`/devices/${id}/test`, { method: 'POST' }),
+  getDeviceChanges: (id) => request(`/devices/${id}/changes`),
+  createDevice: (data) =>
+    request("/devices", { method: "POST", body: JSON.stringify(data) }),
+  updateDevice: (id, data) =>
+    request(`/devices/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteDevice: (id) => request(`/devices/${id}`, { method: "DELETE" }),
+  testDevice: (id) => request(`/devices/${id}/test`, { method: "POST" }),
 
   // Tasks
   getTasks: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
-    return request(`/tasks${qs ? `?${qs}` : ''}`);
+    return request(`/tasks${qs ? `?${qs}` : ""}`);
   },
-  getTaskStats: () => request('/tasks/stats'),
+  getTaskStats: () => request("/tasks/stats"),
   getTask: (id) => request(`/tasks/${id}`),
+  getTaskCmdbImpact: (id) => request(`/tasks/${id}/cmdb-impact`),
+  reprocessTask: (id, deviceId) =>
+    request(`/tasks/${id}/reprocess`, {
+      method: "POST",
+      body: JSON.stringify({ deviceId }),
+    }),
+  completeTask: (id, note) =>
+    request(`/tasks/${id}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ note }),
+    }),
+  updateTaskWorkflow: (id, data) =>
+    request(`/tasks/${id}/workflow`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  approveTask: (id, approved) =>
+    request(`/tasks/${id}/approval`, {
+      method: "POST",
+      body: JSON.stringify({ approved }),
+    }),
+  rollbackAssist: (id) =>
+    request(`/tasks/${id}/rollback-assist`, { method: "POST" }),
+  reviseTaskProposal: (id, data) =>
+    request(`/tasks/${id}/proposal-revisions`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  compareTaskProposal: (id) =>
+    request(`/tasks/${id}/proposal-comparison`, { method: "POST" }),
+  getTaskRunbooks: (id) => request(`/tasks/${id}/runbooks`),
+  simulateTaskRunbook: (taskId, runbookId, variables) =>
+    request(`/tasks/${taskId}/runbooks/${runbookId}/simulate`, {
+      method: "POST",
+      body: JSON.stringify({ variables }),
+    }),
+  executeTaskRunbook: (taskId, runbookId, variables) =>
+    request(`/tasks/${taskId}/runbooks/${runbookId}/execute`, {
+      method: "POST",
+      body: JSON.stringify({ variables, confirmed: true }),
+    }),
 
   // Settings
-  getSettings: () => request('/settings'),
-  updateSetting: (key, value) => request(`/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
-  updateSettingsBulk: (settings) => request('/settings/bulk', { method: 'POST', body: JSON.stringify({ settings }) }),
-  testClaudeAPI: (apiKey, model) => request('/settings/test-claude', { method: 'POST', body: JSON.stringify({ apiKey, model }) }),
-  testEvolutionAPI: (data) => request('/settings/test-evolution', { method: 'POST', body: JSON.stringify(data) }),
+  getSettings: () => request("/settings"),
+  updateSetting: (key, value) =>
+    request(`/settings/${key}`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    }),
+  updateSettingsBulk: (settings) =>
+    request("/settings/bulk", {
+      method: "POST",
+      body: JSON.stringify({ settings }),
+    }),
+  getAnsibleInventory: () => request("/integrations/ansible/inventory"),
+  testNetboxIntegration: () =>
+    request("/integrations/netbox/test", { method: "POST" }),
+  updateBranding: (data) =>
+    request("/settings/branding", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  testClaudeAPI: (apiKey, model) =>
+    request("/settings/test-claude", {
+      method: "POST",
+      body: JSON.stringify({ apiKey, model }),
+    }),
+  testAIProvider: (provider, model) =>
+    request("/settings/test-ai", {
+      method: "POST",
+      body: JSON.stringify({ provider, model }),
+    }),
+  getGeminiModels: (apiKey) =>
+    request("/settings/gemini-models", {
+      method: "POST",
+      body: JSON.stringify({ apiKey }),
+    }),
+  getOpenAIModels: (apiKey) =>
+    request("/settings/openai-models", {
+      method: "POST",
+      body: JSON.stringify({ apiKey }),
+    }),
+  getClaudeModels: (apiKey) =>
+    request("/settings/claude-models", {
+      method: "POST",
+      body: JSON.stringify({ apiKey }),
+    }),
+  testEvolutionAPI: (data) =>
+    request("/settings/test-evolution", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  testTelegram: (token, chatId) =>
+    request("/settings/test-telegram", {
+      method: "POST",
+      body: JSON.stringify({ token, chatId }),
+    }),
+  getVpn: () => request("/vpn"),
+  saveVpn: (data) =>
+    request("/vpn", { method: "PUT", body: JSON.stringify(data) }),
+  connectVpn: () => request("/vpn/connect", { method: "POST" }),
+  disconnectVpn: () => request("/vpn/disconnect", { method: "POST" }),
 
   // Chat
-  getChatSessions: () => request('/chat/sessions'),
-  createChatSession: (title) => request('/chat/sessions', { method: 'POST', body: JSON.stringify({ title }) }),
-  getChatMessages: (sessionId) => request(`/chat/sessions/${sessionId}/messages`),
-  deleteChatSession: (id) => request(`/chat/sessions/${id}`, { method: 'DELETE' }),
+  getChatSessions: () => request("/chat/sessions"),
+  createChatSession: (title) =>
+    request("/chat/sessions", {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    }),
+  updateChatSession: (id, data) =>
+    request(`/chat/sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  uploadChatAttachment: (id, data) =>
+    request(`/chat/sessions/${id}/attachments`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteChatAttachment: (id) =>
+    request(`/chat/attachments/${id}`, { method: "DELETE" }),
+  exportChatSession: async (id, format) => {
+    const res = await fetch(`${BASE}/chat/sessions/${id}/export.${format}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) {
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {}
+      throw new Error(data.error || "Falha ao exportar conversa");
+    }
+    return {
+      blob: await res.blob(),
+      filename:
+        res.headers
+          .get("content-disposition")
+          ?.match(/filename="([^"]+)"/)?.[1] || `chat-ai.${format}`,
+    };
+  },
+  getChatMessages: (sessionId) =>
+    request(`/chat/sessions/${sessionId}/messages`),
+  deleteChatSession: (id) =>
+    request(`/chat/sessions/${id}`, { method: "DELETE" }),
+  rateChatMessage: (id, feedback) =>
+    request(`/chat/messages/${id}/feedback`, {
+      method: "PATCH",
+      body: JSON.stringify({ feedback }),
+    }),
+  createTaskFromChatMessage: (id, deviceId) =>
+    request(`/chat/messages/${id}/task`, {
+      method: "POST",
+      body: JSON.stringify({ deviceId }),
+    }),
+
+  // Base de conhecimento
+  getKnowledgeDocuments: () => request("/knowledge"),
+  getKnowledgeDocument: (id) => request(`/knowledge/${id}`),
+  createKnowledgeDocument: (data) =>
+    request("/knowledge", { method: "POST", body: JSON.stringify(data) }),
+  updateKnowledgeDocument: (id, data) =>
+    request(`/knowledge/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  setKnowledgeDocumentStatus: (id, status) =>
+    request(`/knowledge/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  deleteKnowledgeDocument: (id) =>
+    request(`/knowledge/${id}`, { method: "DELETE" }),
+  testKnowledgeSearch: (query, agentScope, tenantId = "all") =>
+    request("/knowledge/test/search", {
+      method: "POST",
+      body: JSON.stringify({ query, agentScope, tenantId }),
+    }),
+  discoverKnowledgePages: (data) =>
+    request("/knowledge/crawl/discover", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  importKnowledgePages: (data) =>
+    request("/knowledge/crawl/import", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getKnowledgeImportJob: (id) => request(`/knowledge/crawl/jobs/${id}`),
+  bulkClassifyKnowledge: (data) =>
+    request("/knowledge/bulk/classify", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  suggestKnowledgeClassification: (ids) =>
+    request("/knowledge/bulk/suggest", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
+  applyKnowledgeSuggestions: (rows) =>
+    request("/knowledge/bulk/apply-suggestions", {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    }),
+
+  // Terminal CLI
+  getCliDevices: () => request("/cli/devices"),
+  getCliSessions: (all = false) =>
+    request(`/cli/sessions${all ? "?all=true" : ""}`),
+  createCliSession: (deviceId) =>
+    request("/cli/sessions", {
+      method: "POST",
+      body: JSON.stringify({ deviceId }),
+    }),
+  getCliCommands: (id) => request(`/cli/sessions/${id}/commands`),
+  executeCliCommand: (id, data) =>
+    request(`/cli/sessions/${id}/commands`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  closeCliSession: (id) =>
+    request(`/cli/sessions/${id}/close`, { method: "POST" }),
 
   // Health
-  getHealth: () => fetch(`${BASE}/health`).then(r => r.json()),
+  getHealth: () => fetch(`${BASE}/health`).then((r) => r.json()),
+  getNotifications: (params = {}) =>
+    request(`/notifications?${new URLSearchParams(params)}`),
+  readNotification: (id) =>
+    request(`/notifications/${id}/read`, { method: "POST" }),
+  readAllNotifications: () =>
+    request("/notifications/read-all", { method: "POST" }),
+  getNotificationRules: () => request("/notifications/rules/list"),
+  createNotificationRule: (data) =>
+    request("/notifications/rules", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateNotificationRule: (id, data) =>
+    request(`/notifications/rules/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteNotificationRule: (id) =>
+    request(`/notifications/rules/${id}`, { method: "DELETE" }),
+  getOnCall: () => request("/on-call"),
+  createOnCallTeam: (data) =>
+    request("/on-call/teams", { method: "POST", body: JSON.stringify(data) }),
+  updateOnCallTeam: (id, data) =>
+    request(`/on-call/teams/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteOnCallTeam: (id) =>
+    request(`/on-call/teams/${id}`, { method: "DELETE" }),
+  saveOnCallMember: (teamId, data) =>
+    request(`/on-call/teams/${teamId}/members`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteOnCallMember: (id) =>
+    request(`/on-call/members/${id}`, { method: "DELETE" }),
+  createOnCallShift: (teamId, data) =>
+    request(`/on-call/teams/${teamId}/shifts`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteOnCallShift: (id) =>
+    request(`/on-call/shifts/${id}`, { method: "DELETE" }),
+  createOnCallOverride: (teamId, data) =>
+    request(`/on-call/teams/${teamId}/overrides`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteOnCallOverride: (id) =>
+    request(`/on-call/overrides/${id}`, { method: "DELETE" }),
+  getStatusPageAdmin: () => request("/status-page"),
+  saveStatusPageConfig: (data) =>
+    request("/status-page/config", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  createStatusService: (data) =>
+    request("/status-page/services", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateStatusService: (id, data) =>
+    request(`/status-page/services/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteStatusService: (id) =>
+    request(`/status-page/services/${id}`, { method: "DELETE" }),
+  publishStatusIncident: (data) =>
+    request("/status-page/incidents", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateStatusIncident: (id, data) =>
+    request(`/status-page/incidents/${id}/updates`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

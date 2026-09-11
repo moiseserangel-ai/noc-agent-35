@@ -1,27 +1,31 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Wifi, Edit2, Server } from 'lucide-react';
+import { Plus, Trash2, Wifi, Edit2, Server, History } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { useToast } from '../App.jsx';
+import { useToast } from '../contexts/ToastContext.jsx';
 import { TypeBadge } from '../components/StatusBadge.jsx';
 import Modal from '../components/Modal.jsx';
 
-const EMPTY_DEVICE = { name: '', hostname: '', port: 22, type: 'mikrotik', username: '', password: '', group: '', zabbixHostId: '', notes: '' };
+const EMPTY_DEVICE = { name: '', hostname: '', port: 22, type: 'mikrotik', username: '', password: '', group: '', zabbixHostId: '', notes: '', manufacturer: 'MikroTik', platform: 'RouterOS', model: '', osVersion: '', capabilities: '' };
+const TYPE_DEFAULTS = { mikrotik: { manufacturer:'MikroTik',platform:'RouterOS',port:22 }, linux:{manufacturer:'Comunidade',platform:'Linux',port:22}, huawei_vrp:{manufacturer:'Huawei',platform:'VRP',port:22}, cisco_ios:{manufacturer:'Cisco',platform:'IOS-XE',port:22}, juniper_junos:{manufacturer:'Juniper',platform:'Junos',port:22}, fortigate_fortios:{manufacturer:'Fortinet',platform:'FortiOS',port:22}, ubiquiti_edgeos:{manufacturer:'Ubiquiti',platform:'EdgeOS',port:22}, unifi_controller:{manufacturer:'Ubiquiti',platform:'UniFi OS',port:443}, datacom_dmos:{manufacturer:'Datacom',platform:'DMOS',port:22}, nokia_sros:{manufacturer:'Nokia',platform:'SR OS',port:22} };
 
-export default function Devices() {
+export default function Devices({ canManage = false }) {
   const [devices, setDevices] = useState([]);
+  const [deviceTypes, setDeviceTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editDevice, setEditDevice] = useState(null);
   const [form, setForm] = useState({ ...EMPTY_DEVICE });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(null);
+  const [historyDevice, setHistoryDevice] = useState(null);
+  const [changes, setChanges] = useState([]);
   const toast = useToast();
 
   const load = () => {
     api.getDevices().then(r => setDevices(r.data)).catch(() => {}).finally(() => setLoading(false));
   };
 
-  useEffect(load, []);
+  useEffect(() => { load(); api.getDeviceTypes().then(r=>setDeviceTypes(r.data)).catch(()=>{}); }, []);
 
   const openNew = () => { setEditDevice(null); setForm({ ...EMPTY_DEVICE }); setModalOpen(true); };
   const openEdit = (d) => { setEditDevice(d); setForm({ ...d, password: '' }); setModalOpen(true); };
@@ -62,12 +66,13 @@ export default function Devices() {
     setTesting(id);
     try {
       const r = await api.testDevice(id);
-      toast(r.success ? '✅ Conexão SSH OK!' : `❌ ${r.error}`, r.success ? 'success' : 'error');
+      toast(r.success ? `✅ ${r.message || 'Conexão OK!'}` : `❌ ${r.error}`, r.success ? 'success' : 'error');
     } catch (err) { toast(`❌ ${err.message}`, 'error'); }
     finally { setTesting(null); }
   };
 
   const updateField = (field, value) => setForm(f => ({ ...f, [field]: value }));
+  const openHistory = async device => { setHistoryDevice(device); setChanges([]); try { setChanges((await api.getDeviceChanges(device.id)).data); } catch(error) { toast(error.message,'error'); } };
 
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
@@ -78,7 +83,7 @@ export default function Devices() {
           <h2>Equipamentos</h2>
           <p>Gerencie seus dispositivos de rede</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew}><Plus size={16} /> Adicionar</button>
+        {canManage && <button className="btn btn-primary" onClick={openNew}><Plus size={16} /> Adicionar</button>}
       </div>
 
       {devices.length === 0 ? (
@@ -96,7 +101,7 @@ export default function Devices() {
                 <th>Tipo</th>
                 <th>Porta</th>
                 <th>Grupo</th>
-                <th>Ações</th>
+                {canManage && <th>Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -107,17 +112,18 @@ export default function Devices() {
                   <td><TypeBadge type={d.type} /></td>
                   <td>{d.port}</td>
                   <td>{d.group || '—'}</td>
-                  <td>
+                  {canManage && <td>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-ghost btn-sm" onClick={() => handleTest(d.id)} disabled={testing === d.id}>
                         {testing === d.id ? <div className="spinner" /> : <Wifi size={14} />}
                       </button>
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(d)}><Edit2 size={14} /></button>
+                      <button className="btn btn-ghost btn-sm" title="Histórico de alterações" onClick={() => openHistory(d)}><History size={14} /></button>
                       <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(d.id, d.name)} style={{ color: 'var(--danger)' }}>
                         <Trash2 size={14} />
                       </button>
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>
@@ -125,7 +131,7 @@ export default function Devices() {
         </div>
       )}
 
-      <Modal
+      {canManage && <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editDevice ? 'Editar Dispositivo' : 'Novo Dispositivo'}
@@ -146,17 +152,25 @@ export default function Devices() {
             <input className="form-input" value={form.hostname} onChange={e => updateField('hostname', e.target.value)} placeholder="192.168.1.1" />
           </div>
           <div className="form-group">
-            <label className="form-label">Porta SSH</label>
+            <label className="form-label">{form.type==='unifi_controller'?'Porta HTTPS':'Porta SSH'}</label>
             <input className="form-input" type="number" value={form.port} onChange={e => updateField('port', parseInt(e.target.value) || 22)} />
           </div>
         </div>
         <div className="form-group">
           <label className="form-label">Tipo *</label>
-          <select className="form-select" value={form.type} onChange={e => updateField('type', e.target.value)}>
-            <option value="mikrotik">MikroTik</option>
-            <option value="linux">Linux</option>
+          <select className="form-select" value={form.type} onChange={e => { const type=e.target.value; setForm(f=>({...f,type,...TYPE_DEFAULTS[type]})); }}>
+            {(deviceTypes.length ? deviceTypes : [{type:'mikrotik',label:'MikroTik RouterOS'},{type:'linux',label:'Linux'},{type:'huawei_vrp',label:'Huawei VRP / NetEngine'},{type:'cisco_ios',label:'Cisco IOS / IOS-XE'},{type:'juniper_junos',label:'Juniper Junos'},{type:'fortigate_fortios',label:'Fortinet FortiGate / FortiOS'}]).map(item=><option key={item.type} value={item.type}>{item.label}</option>)}
           </select>
         </div>
+        <div className="form-row">
+          <div className="form-group"><label className="form-label">Fabricante</label><input className="form-input" value={form.manufacturer || ''} onChange={e=>updateField('manufacturer',e.target.value)} placeholder="Huawei" /></div>
+          <div className="form-group"><label className="form-label">Plataforma</label><input className="form-input" value={form.platform || ''} onChange={e=>updateField('platform',e.target.value)} placeholder="VRP" /></div>
+        </div>
+        <div className="form-row">
+          <div className="form-group"><label className="form-label">Modelo</label><input className="form-input" value={form.model || ''} onChange={e=>updateField('model',e.target.value)} placeholder="NE8000 M8" /></div>
+          <div className="form-group"><label className="form-label">Versão do sistema</label><input className="form-input" value={form.osVersion || ''} onChange={e=>updateField('osVersion',e.target.value)} placeholder="V800R023..." /></div>
+        </div>
+        <div className="form-group"><label className="form-label">Capacidades</label><input className="form-input" value={form.capabilities || ''} onChange={e=>updateField('capabilities',e.target.value)} placeholder="bgp,isis,mpls,l2vpn,evpn" /><small style={{color:'var(--text-muted)'}}>Separe as tecnologias por vírgula.</small></div>
         <div className="form-row">
           <div className="form-group">
             <label className="form-label">Usuário SSH *</label>
@@ -182,6 +196,9 @@ export default function Devices() {
           <label className="form-label">Notas</label>
           <textarea className="form-textarea" value={form.notes} onChange={e => updateField('notes', e.target.value)} placeholder="Observações sobre o equipamento..." />
         </div>
+      </Modal>}
+      <Modal isOpen={Boolean(historyDevice)} onClose={()=>setHistoryDevice(null)} title={`Alterações — ${historyDevice?.name || ''}`} footer={<button className="btn btn-secondary" onClick={()=>setHistoryDevice(null)}>Fechar</button>}>
+        <div style={{display:'flex',flexDirection:'column',gap:10,maxHeight:'55vh',overflowY:'auto'}}>{changes.map(change=><div key={change.id} style={{padding:12,border:'1px solid var(--border-primary)',borderRadius:8}}><strong>{change.taskNumber?`#TASK-${change.taskNumber}`:'Alteração'}</strong><div style={{margin:'4px 0'}}>{change.comment}</div><small style={{color:'var(--text-muted)'}}>{new Date(change.createdAt).toLocaleString('pt-BR')} · {change.agentName} · {change.nativeAudit || 'histórico NOC'}</small></div>)}{!changes.length&&<span style={{color:'var(--text-muted)'}}>Nenhuma alteração comentada registrada.</span>}</div>
       </Modal>
     </div>
   );

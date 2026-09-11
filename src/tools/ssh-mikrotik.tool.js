@@ -1,6 +1,8 @@
 import { Client } from 'ssh2';
 import { getDeviceDecrypted } from '../services/device.service.js';
 import logger from '../utils/logger.js';
+import { getExecutionContext, isRemediationApproved } from '../security/execution-context.js';
+import { formatChangeMarker, normalizeChangeComment, recordDeviceChange } from '../services/device-change.service.js';
 
 const BLOCKED_COMMANDS_MIKROTIK = [
   '/system reset',
@@ -10,12 +12,50 @@ const BLOCKED_COMMANDS_MIKROTIK = [
   'format',
 ];
 
+export const MIKROTIK_KEX_ALGORITHMS = [
+  'curve25519-sha256',
+  'curve25519-sha256@libssh.org',
+  'ecdh-sha2-nistp256',
+  'ecdh-sha2-nistp384',
+  'ecdh-sha2-nistp521',
+  // RouterOS 6 com strong-crypto=yes anuncia somente este KEX.
+  'diffie-hellman-group-exchange-sha256',
+  'diffie-hellman-group16-sha512',
+  'diffie-hellman-group14-sha256',
+  'diffie-hellman-group14-sha1',
+  'diffie-hellman-group1-sha1',
+];
+
 function isBlockedCommand(command) {
   const cmd = command.toLowerCase().trim();
   return BLOCKED_COMMANDS_MIKROTIK.some(blocked => cmd.includes(blocked));
 }
 
-export async function sshMikrotikExec({ deviceId, command }) {
+const COMMENTABLE_MENUS = /^\/(?:ip\s+(?:address|route|firewall\b)|ipv6\s+(?:address|route|firewall\b)|interface\b|queue\b|routing\s+filter\s+rule\b|ppp\s+(?:secret|profile)\b|system\s+(?:scheduler|script)\b)/i;
+
+const routerOsQuote = value => String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+
+export function ensureMikrotikObjectComments(command, objectComment) {
+  const comment = normalizeChangeComment(objectComment);
+  return String(command).split(/\r?\n/).map(line => {
+    const trimmed = line.trim();
+    if (!trimmed || !COMMENTABLE_MENUS.test(trimmed) || !/\b(add|set)\b/i.test(trimmed) || /\bcomment\s*=/i.test(trimmed)) return line;
+    return `${line} comment="${routerOsQuote(comment)}"`;
+  }).join('\n');
+}
+
+export async function sshMikrotikExec({ deviceId, command, changeComment }) {
+  const normalized = String(command).toLowerCase().trim();
+  const readOnly = normalized.startsWith('/ping ') || normalized.startsWith('/tool traceroute ') || /\b(print|monitor|export)\b/.test(normalized);
+  if (!isRemediationApproved() && !readOnly) {
+    return { success: false, output: 'Comando de alteração bloqueado: diagnóstico permite somente leitura.' };
+  }
+  let normalizedComment = null;
+  let executedCommand = command;
+  if (!readOnly) {
+    try { normalizedComment = normalizeChangeComment(changeComment); } catch (error) { return { success: false, output: `Alteração bloqueada: ${error.message}` }; }
+    try { executedCommand = ensureMikrotikObjectComments(command, normalizedComment); } catch (error) { return { success: false, output: `Alteração bloqueada: ${error.message}` }; }
+  }
   if (isBlockedCommand(command)) {
     return {
       success: false,
@@ -31,7 +71,7 @@ export async function sshMikrotikExec({ deviceId, command }) {
     return { success: false, output: 'Dispositivo não é MikroTik' };
   }
 
-  logger.info(`SSH MikroTik: ${device.hostname} → ${command}`);
+  logger.info(`SSH MikroTik: ${device.hostname} → ${executedCommand}`);
 
   return new Promise((resolve) => {
     const conn = new Client();
@@ -47,7 +87,7 @@ export async function sshMikrotikExec({ deviceId, command }) {
     }, 30000);
 
     conn.on('ready', () => {
-      conn.exec(command, (err, stream) => {
+      conn.exec(executedCommand, (err, stream) => {
         if (err) {
           clearTimeout(timeout);
           conn.end();
@@ -58,13 +98,26 @@ export async function sshMikrotikExec({ deviceId, command }) {
         stream.on('data', (data) => { output += data.toString(); });
         stream.stderr.on('data', (data) => { errorOutput += data.toString(); });
 
-        stream.on('close', () => {
+        stream.on('close', async () => {
           clearTimeout(timeout);
-          conn.end();
           const result = (output + errorOutput).trim();
+          const commandOk = !/(failure:|bad command|syntax error|expected end|no such item)/i.test(result);
+          let auditNote = '';
+          if (normalizedComment && commandOk) {
+            const context = getExecutionContext();
+            const marker = formatChangeMarker(normalizedComment, context.taskNumber);
+            const escaped = marker.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+            try {
+              const nativeOk = await new Promise(done => conn.exec(`:log info message="${escaped}"`, (auditError, auditStream) => { if (auditError || !auditStream) return done(false); auditStream.on('close', () => done(true)); auditStream.resume(); }));
+              if (nativeOk) auditNote = 'RouterOS log';
+            } catch {}
+            try { await recordDeviceChange({ deviceId, taskNumber: context.taskNumber, agentName: context.agentName || 'mikrotik', comment: normalizedComment, nativeAudit: auditNote || 'histórico NOC' }); }
+            catch (error) { logger.error(`Falha ao registrar comentário de mudança MikroTik: ${error.message}`); }
+          }
+          conn.end();
           resolve({
-            success: true,
-            output: result || '(sem saída)',
+            success: commandOk,
+            output: `${result || '(sem saída)'}${normalizedComment && commandOk ? `\n📝 ${formatChangeMarker(normalizedComment, getExecutionContext().taskNumber)}\n🏷️ comment nativo aplicado aos objetos RouterOS compatíveis.` : ''}`,
             device: { name: device.name, hostname: device.hostname },
           });
         });
@@ -83,11 +136,7 @@ export async function sshMikrotikExec({ deviceId, command }) {
       password: device.password,
       readyTimeout: 10000,
       algorithms: {
-        kex: [
-          'diffie-hellman-group14-sha256',
-          'diffie-hellman-group14-sha1',
-          'diffie-hellman-group1-sha1',
-        ],
+        kex: MIKROTIK_KEX_ALGORITHMS,
       },
     });
   });
@@ -107,6 +156,7 @@ export const sshMikrotikToolDefinition = {
         type: 'string',
         description: 'Comando RouterOS a ser executado (ex: /ip address print, /interface print)',
       },
+      changeComment: { type: 'string', description: 'Obrigatório em alterações. Use um comentário curto e claro, como "IP do servidor" ou "Drop geral". Ele será aplicado como comment= nos objetos RouterOS compatíveis e registrado na Task.' },
     },
     required: ['deviceId', 'command'],
   },

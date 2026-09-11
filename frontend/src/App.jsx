@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { api } from './lib/api.js';
 import Layout from './components/Layout.jsx';
@@ -9,9 +9,59 @@ import Tasks from './pages/Tasks.jsx';
 import Chat from './pages/Chat.jsx';
 import Settings from './pages/Settings.jsx';
 import Docs from './pages/Docs.jsx';
+import Vpn from './pages/Vpn.jsx';
+import Users from './pages/Users.jsx';
+import Audit from './pages/Audit.jsx';
+import Reports from './pages/Reports.jsx';
+import Backups from './pages/Backups.jsx';
+import Security from './pages/Security.jsx';
+import AiUsage from './pages/AiUsage.jsx';
+import Knowledge from './pages/Knowledge.jsx';
+import DeviceBackups from './pages/DeviceBackups.jsx';
+import Compliance from './pages/Compliance.jsx';
+import Changes from './pages/Changes.jsx';
+import Discovery from './pages/Discovery.jsx';
+import Capacity from './pages/Capacity.jsx';
+import Topology from './pages/Topology.jsx';
+import FlowInspector from './pages/FlowInspector.jsx';
+import Runbooks from './pages/Runbooks.jsx';
+import Notifications from './pages/Notifications.jsx';
+import OnCall from './pages/OnCall.jsx';
+import StatusPage from './pages/StatusPage.jsx';
+import PublicStatus from './pages/PublicStatus.jsx';
+import Clients from './pages/Clients.jsx';
+import TenantContracts from './pages/TenantContracts.jsx';
+import Suppliers from './pages/Suppliers.jsx';
+import CommercialContracts from './pages/CommercialContracts.jsx';
+import SoftwareLicenses from './pages/SoftwareLicenses.jsx';
+import CommercialExpiries from './pages/CommercialExpiries.jsx';
+import CommercialCosts from './pages/CommercialCosts.jsx';
+import CommercialDashboard from './pages/CommercialDashboard.jsx';
+import CommercialReports from './pages/CommercialReports.jsx';
+import OnCallScopes from './pages/OnCallScopes.jsx';
+import Cmdb from './pages/Cmdb.jsx';
+import Vulnerabilities from './pages/Vulnerabilities.jsx';
+import Lifecycle from './pages/Lifecycle.jsx';
+import { ToastContext } from './contexts/ToastContext.jsx';
 
-const ToastContext = createContext();
-export const useToast = () => useContext(ToastContext);
+const Terminal = React.lazy(() => import('./pages/Terminal.jsx'));
+
+const themePrimary = (color, light) => {
+  const match = String(color || '').match(/^#([0-9a-f]{6})$/i);
+  if (!light || !match) return color || '#00d4ff';
+  const rgb = [0, 2, 4].map(index => parseInt(match[1].slice(index, index + 2), 16));
+  const luminance = (rgb[0] * .299 + rgb[1] * .587 + rgb[2] * .114) / 255;
+  if (luminance < .48) return color;
+  return `#${rgb.map(value => Math.round(value * .58).toString(16).padStart(2, '0')).join('')}`;
+};
+
+const applyPrimary = (color, light = document.documentElement.dataset.theme === 'light') => {
+  const primary = themePrimary(color, light);
+  document.documentElement.style.setProperty('--primary', primary);
+  document.documentElement.style.setProperty('--primary-glow', `${primary}1c`);
+  document.documentElement.style.setProperty('--primary-strong', `${primary}33`);
+  document.documentElement.style.setProperty('--border-accent', `${primary}38`);
+};
 
 function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
@@ -36,18 +86,87 @@ function ToastProvider({ children }) {
 
 export default function App() {
   const [authed, setAuthed] = useState(null);
+  const [user, setUser] = useState(null);
+  const [branding, setBranding] = useState({ name:'NOC Agent 35', subtitle:'AI Monitoring', loginSubtitle:'Sistema de Monitoramento NOC com IA', primaryColor:'#00d4ff', logo:null, favicon:null });
+  const [theme, setTheme] = useState(() => localStorage.getItem('noc_theme') || 'dark');
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    const applyTheme = () => {
+      const resolved = theme === 'auto' ? (media.matches ? 'light' : 'dark') : theme;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.style.colorScheme = resolved;
+      applyPrimary(branding.primaryColor || '#00d4ff', resolved === 'light');
+    };
+    localStorage.setItem('noc_theme', theme);
+    applyTheme();
+    media.addEventListener?.('change', applyTheme);
+    return () => media.removeEventListener?.('change', applyTheme);
+  }, [theme, branding.primaryColor]);
+
+  useEffect(() => {
+    const apply = next => {
+      setBranding(next);
+      const color = next.primaryColor || '#00d4ff';
+      applyPrimary(color);
+      document.title = `${next.name || 'NOC Agent 35'} - Dashboard`;
+      const favicon = document.querySelector("link[rel='icon']");
+      if (favicon) favicon.href = next.favicon || '/favicon.svg';
+    };
+    api.getBranding().then(result => apply(result.data)).catch(() => {});
+    const changed = event => apply(event.detail);
+    window.addEventListener('noc:branding-updated', changed);
+    return () => window.removeEventListener('noc:branding-updated', changed);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('noc_token');
     if (!token) { setAuthed(false); return; }
-    api.verify().then(() => setAuthed(true)).catch(() => {
+    api.verify().then(result => { setUser(result.user); setAuthed(true); }).catch(() => {
       localStorage.removeItem('noc_token');
       setAuthed(false);
     });
   }, []);
 
+  useEffect(() => {
+    if (!authed) return;
+    let refreshing = false;
+    const refresh = async () => {
+      if (refreshing || !localStorage.getItem('noc_token')) return;
+      refreshing = true;
+      try {
+        const result = await api.refreshSession();
+        if (result.token) {
+          localStorage.setItem('noc_token', result.token);
+          if (result.user) setUser(result.user);
+          window.dispatchEvent(new Event('noc:token-refreshed'));
+        }
+      } catch {
+        localStorage.removeItem('noc_token');
+        setAuthed(false);
+      } finally { refreshing = false; }
+    };
+    const interval = setInterval(refresh, 30 * 60 * 1000);
+    const resume = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('focus', refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [authed]);
+
+  if (window.location.pathname.startsWith('/status')) {
+    return <ToastProvider><BrowserRouter><Routes><Route path="/status/:slug?" element={<PublicStatus branding={branding}/>} /></Routes></BrowserRouter></ToastProvider>;
+  }
+
   if (authed === null) {
     return <div className="loading-screen"><div className="spinner" /> Carregando...</div>;
+  }
+
+  if (authed && user?.mustChangePassword) {
+    return <ToastProvider><BrowserRouter><Routes><Route path="*" element={<Security forcePasswordChange user={user} onUser={setUser} />} /></Routes></BrowserRouter></ToastProvider>;
   }
 
   return (
@@ -56,16 +175,49 @@ export default function App() {
         <Routes>
           {!authed ? (
             <>
-              <Route path="/login" element={<Login onLogin={() => setAuthed(true)} />} />
+              <Route path="/login" element={<Login branding={branding} theme={theme} onTheme={setTheme} onLogin={loggedUser => { setUser(loggedUser); setAuthed(true); }} />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </>
           ) : (
-            <Route element={<Layout onLogout={() => { localStorage.removeItem('noc_token'); setAuthed(false); }} />}>
-              <Route index element={<Dashboard />} />
-              <Route path="devices" element={<Devices />} />
-              <Route path="tasks" element={<Tasks />} />
-              <Route path="chat" element={<Chat />} />
-              <Route path="settings" element={<Settings />} />
+            <Route element={<Layout branding={branding} user={user} theme={theme} onTheme={setTheme} onLogout={async () => { try { await api.logout(); } catch {} localStorage.removeItem('noc_token'); setUser(null); setAuthed(false); }} />}>
+              <Route index element={user?.tenantId?<Reports/>:<Dashboard showBackup={user?.role === 'admin'} />} />
+              <Route path="devices" element={<Devices canManage={['admin','tenant_admin'].includes(user?.role)} />} />
+              <Route path="tasks" element={<Tasks canOperate={['admin', 'operator','tenant_admin','tenant_operator'].includes(user?.role)} isAdmin={['admin','tenant_admin'].includes(user?.role)} />} />
+              <Route path="chat" element={['admin','operator','tenant_admin','tenant_operator'].includes(user?.role) ? <Chat /> : <Navigate to="/" replace />} />
+              <Route path="terminal" element={<React.Suspense fallback={<div className="loading-screen"><div className="spinner" /> Carregando terminal...</div>}><Terminal user={user} /></React.Suspense>} />
+              <Route path="settings" element={user?.role === 'admin' ? <Settings /> : <Navigate to="/" replace />} />
+              <Route path="vpn" element={user?.role === 'admin' ? <Vpn /> : <Navigate to="/" replace />} />
+              <Route path="users" element={['admin','tenant_admin'].includes(user?.role) ? <Users user={user}/> : <Navigate to="/" replace />} />
+              <Route path="audit" element={user?.role === 'admin' ? <Audit /> : <Navigate to="/" replace />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="ai-usage" element={user?.role === 'admin' ? <AiUsage /> : <Navigate to="/" replace />} />
+              <Route path="knowledge" element={['admin','tenant_admin'].includes(user?.role) ? <Knowledge /> : <Navigate to="/" replace />} />
+              <Route path="backups" element={user?.role === 'admin' ? <Backups /> : <Navigate to="/" replace />} />
+              <Route path="device-backups" element={user?.role === 'admin' ? <DeviceBackups /> : <Navigate to="/" replace />} />
+              <Route path="compliance" element={['admin','tenant_admin'].includes(user?.role) ? <Compliance isGlobalAdmin={user?.role==='admin'} /> : <Navigate to="/" replace />} />
+              <Route path="vulnerabilities" element={['admin','tenant_admin'].includes(user?.role) ? <Vulnerabilities /> : <Navigate to="/" replace />} />
+              <Route path="lifecycle" element={user?.role === 'admin' ? <Lifecycle /> : <Navigate to="/" replace />} />
+              <Route path="changes" element={['admin','operator','tenant_admin','tenant_operator'].includes(user?.role) ? <Changes isAdmin={['admin','tenant_admin'].includes(user?.role)} /> : <Navigate to="/" replace />} />
+              <Route path="discovery" element={user?.role==='admin' ? <Discovery /> : <Navigate to="/" replace />} />
+              <Route path="capacity" element={<Capacity isAdmin={user?.role==='admin'} />} />
+              <Route path="topology" element={<Topology isAdmin={user?.role==='admin'} />} />
+              <Route path="flow-inspector" element={['admin','operator'].includes(user?.role)?<FlowInspector isAdmin={user?.role==='admin'}/>:<Navigate to="/" replace/>}/>
+              <Route path="runbooks" element={['admin','operator','tenant_admin','tenant_operator'].includes(user?.role) ? <Runbooks isAdmin={user?.role==='admin'} canExecute={['admin','tenant_admin'].includes(user?.role)} user={user} /> : <Navigate to="/" replace />} />
+              <Route path="notifications" element={<Notifications isAdmin={user?.role==='admin'} />} />
+              <Route path="on-call" element={user?.role==='admin' ? <OnCall /> : <Navigate to="/" replace />} />
+              <Route path="clients" element={user?.role==='admin'&&!user?.tenantId ? <Clients /> : <Navigate to="/" replace />} />
+              <Route path="tenant-contracts" element={user?.role==='admin'&&!user?.tenantId ? <TenantContracts /> : <Navigate to="/" replace />} />
+              <Route path="suppliers" element={user?.role==='admin'&&!user?.tenantId ? <Suppliers /> : <Navigate to="/" replace />} />
+              <Route path="commercial-contracts" element={user?.role==='admin'&&!user?.tenantId ? <CommercialContracts /> : <Navigate to="/" replace />} />
+              <Route path="software-licenses" element={user?.role==='admin'&&!user?.tenantId ? <SoftwareLicenses /> : <Navigate to="/" replace />} />
+              <Route path="commercial-expiries" element={user?.role==='admin'&&!user?.tenantId ? <CommercialExpiries /> : <Navigate to="/" replace />} />
+              <Route path="commercial-costs" element={user?.role==='admin'&&!user?.tenantId ? <CommercialCosts /> : <Navigate to="/" replace />} />
+              <Route path="commercial-dashboard" element={user?.role==='admin'&&!user?.tenantId ? <CommercialDashboard /> : <Navigate to="/" replace />} />
+              <Route path="commercial-reports" element={user?.role==='admin'&&!user?.tenantId ? <CommercialReports /> : <Navigate to="/" replace />} />
+              <Route path="cmdb" element={['admin','tenant_admin'].includes(user?.role) ? <Cmdb /> : <Navigate to="/" replace />} />
+              <Route path="on-call-scopes" element={user?.role==='admin'&&!user?.tenantId ? <OnCallScopes /> : <Navigate to="/" replace />} />
+              <Route path="status-page" element={user?.role==='admin' ? <StatusPage /> : <Navigate to="/" replace />} />
+              <Route path="security" element={<Security user={user} onUser={setUser} />} />
               <Route path="docs" element={<Docs />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

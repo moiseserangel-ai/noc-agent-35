@@ -1,17 +1,31 @@
 import prisma from '../database/client.js';
 import logger from '../utils/logger.js';
+import { buildSlaFields } from './sla.service.js';
+import { inferWorkType } from './work-type.service.js';
+import { businessServiceSlaMinutes, cmdbOperationalContext, elevatedPriority } from './cmdb-operational-context.service.js';
 
-export async function createTask({ source, originalMessage, deviceId, priority }) {
+async function buildBusinessSlaFields(priority,openedAt,tenantId,services=[]){const sla=await buildSlaFields(priority,openedAt,tenantId),minutes=businessServiceSlaMinutes(services);if(minutes){const serviceDueAt=new Date(openedAt.getTime()+minutes*60_000);if(!sla.slaResolveDueAt||serviceDueAt<sla.slaResolveDueAt)sla.slaResolveDueAt=serviceDueAt;}return sla;}
+
+export async function createTask({ source, originalMessage, deviceId, tenantId=null, priority, workType, incident = {} }) {
   const lastTask = await prisma.task.findFirst({ orderBy: { taskNumber: 'desc' } });
   const taskNumber = (lastTask?.taskNumber || 0) + 1;
 
+  const openedAt = incident.incidentOpenedAt || new Date();
+  const scopedDevice=deviceId?await prisma.device.findUnique({where:{id:deviceId},select:{tenantId:true}}):null;
+  const businessContext=deviceId?await cmdbOperationalContext([deviceId]):null;
+  const effectivePriority=elevatedPriority(priority||'medium',businessContext?.services||[]);
+  const sla = await buildBusinessSlaFields(effectivePriority,openedAt,scopedDevice?.tenantId,businessContext?.services);
   const task = await prisma.task.create({
     data: {
       taskNumber,
       source,
+      workType: inferWorkType(originalMessage, source, workType),
       originalMessage,
       deviceId: deviceId || null,
-      priority: priority || 'medium',
+      tenantId:scopedDevice?.tenantId||tenantId||null,
+      priority: effectivePriority,
+      ...sla,
+      ...incident,
     },
     include: { device: true },
   });
@@ -21,59 +35,81 @@ export async function createTask({ source, originalMessage, deviceId, priority }
   return task;
 }
 
+export async function attachTaskDeviceWithBusinessImpact(task,deviceId){const device=await prisma.device.findUnique({where:{id:deviceId},select:{id:true,tenantId:true,type:true}});if(!device)throw Object.assign(new Error('Equipamento não encontrado'),{statusCode:404});const context=await cmdbOperationalContext([device.id]),priority=elevatedPriority(task.priority,context.services),openedAt=task.incidentOpenedAt||task.createdAt||new Date(),sla=await buildBusinessSlaFields(priority,openedAt,device.tenantId,context.services);const updated=await prisma.task.update({where:{id:task.id},data:{deviceId:device.id,tenantId:device.tenantId,agentUsed:device.type,priority,...sla},include:{device:true}});return{task:updated,context};}
+
 export async function updateTask(id, data) {
   return prisma.task.update({
     where: { id },
     data,
-    include: { device: true, messages: { orderBy: { createdAt: 'asc' } } },
+    include: { device: true, messages: { orderBy: { createdAt: 'asc' } },proposalRevisions:{orderBy:{version:'asc'}} },
   });
 }
 
 export async function getTaskById(id) {
   return prisma.task.findUnique({
     where: { id },
-    include: { device: true, messages: { orderBy: { createdAt: 'asc' } } },
+    include: { device: true, messages: { orderBy: { createdAt: 'asc' } },proposalRevisions:{orderBy:{version:'asc'}} },
   });
 }
 
 export async function getTaskByNumber(taskNumber) {
   return prisma.task.findUnique({
     where: { taskNumber },
-    include: { device: true, messages: { orderBy: { createdAt: 'asc' } } },
+    include: { device: true, messages: { orderBy: { createdAt: 'asc' } },proposalRevisions:{orderBy:{version:'asc'}} },
   });
 }
 
-export async function getAllTasks({ status, source, priority, limit = 50 }) {
+export async function getAllTasks({ status, source, priority, sla, limit = 50,tenantId=null }) {
   const where = {};
   if (status) where.status = status;
   if (source) where.source = source;
   if (priority) where.priority = priority;
+  if (sla === 'breached') where.slaResolveBreachedAt = { not: null };
+  if(tenantId)where.tenantId=tenantId;
 
-  return prisma.task.findMany({
-    where,
-    include: { device: true },
-    orderBy: { createdAt: 'desc' },
+  const include = { device: true };
+  if (status) return prisma.task.findMany({ where, include, orderBy: { createdAt: 'desc' }, take: limit });
+
+  // Uma task ativa nunca deve desaparecer atrás do limite do histórico.
+  const terminal = ['resolved', 'completed', 'validated', 'closed', 'cancelled'];
+  const active = await prisma.task.findMany({
+    where: { ...where, status: { notIn: terminal } },
+    include,
+    orderBy: { updatedAt: 'desc' },
     take: limit,
   });
+  if (active.length >= limit) return active;
+  const history = await prisma.task.findMany({
+    where: { ...where, status: { in: terminal }, id: { notIn: active.map(task => task.id) } },
+    include,
+    orderBy: { createdAt: 'desc' },
+    take: limit - active.length,
+  });
+  return [...active, ...history];
 }
 
-export async function getTaskStats() {
-  const [total, pending, diagnosing, awaiting, completed, failed] = await Promise.all([
-    prisma.task.count(),
-    prisma.task.count({ where: { status: 'pending' } }),
-    prisma.task.count({ where: { status: 'diagnosing' } }),
-    prisma.task.count({ where: { status: 'awaiting_approval' } }),
-    prisma.task.count({ where: { status: 'completed' } }),
-    prisma.task.count({ where: { status: 'failed' } }),
+export async function getTaskStats(tenantId=null) {
+  const scope=tenantId?{tenantId}:{};
+  const [total, pending, inProgress, diagnosing, awaiting, resolved, validated, closed, failed, slaBreached] = await Promise.all([
+    prisma.task.count({where:scope}),
+    prisma.task.count({ where: { ...scope,status: 'pending' } }),
+    prisma.task.count({ where: { ...scope,status: 'in_progress' } }),
+    prisma.task.count({ where: { ...scope,status: 'diagnosing' } }),
+    prisma.task.count({ where: { ...scope,status: 'awaiting_approval' } }),
+    prisma.task.count({ where: { ...scope,status: { in: ['resolved', 'completed'] } } }),
+    prisma.task.count({ where: { ...scope,status: 'validated' } }),
+    prisma.task.count({ where: { ...scope,status: 'closed' } }),
+    prisma.task.count({ where: { ...scope,status: 'failed' } }),
+    prisma.task.count({ where: { ...scope,status: { notIn: ['resolved', 'completed', 'validated', 'closed', 'cancelled'] }, slaResolveBreachedAt: { not: null } } }),
   ]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const completedToday = await prisma.task.count({
-    where: { status: 'completed', updatedAt: { gte: today } },
+    where: { ...scope,status: { in: ['resolved', 'completed', 'validated', 'closed'] }, resolvedAt: { gte: today } },
   });
 
-  return { total, pending, diagnosing, awaiting, completed, failed, completedToday };
+  return { total, pending, inProgress, diagnosing, awaiting, completed: resolved, resolved, validated, closed, failed, slaBreached, completedToday };
 }
 
 export async function addTaskMessage(taskId, role, content, agentName = null) {
