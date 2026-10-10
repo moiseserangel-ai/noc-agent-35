@@ -81,7 +81,7 @@ export async function saveFlowIntegration(input) {
   ]);
   return getFlowIntegration();
 }
-function remoteRotate(password) {
+function remoteRotate(password, collectorHost) {
   return new Promise((resolve, reject) => {
     const child = spawn(
         "/usr/bin/ssh",
@@ -94,7 +94,7 @@ function remoteRotate(password) {
           "BatchMode=yes",
           "-o",
           "StrictHostKeyChecking=yes",
-          "root@192.168.250.66",
+          `root@${collectorHost}`,
         ],
         { stdio: ["pipe", "pipe", "pipe"] },
       ),
@@ -123,7 +123,8 @@ export async function rotateFlowPassword(password) {
       new Error("A nova senha deve possuir entre 16 e 128 caracteres"),
       { statusCode: 400 },
     );
-  await remoteRotate(value);
+  const current = await connection();
+  await remoteRotate(value, new URL(current.url).hostname);
   const cfg = await connection({ password: value });
   try {
     await testFlowIntegration(cfg);

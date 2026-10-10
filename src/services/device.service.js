@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 
 export async function getAllDevices(tenantId=null) {
   const devices = await prisma.device.findMany({
-    where:tenantId?{tenantId}:{},
+    where: { isActive: true, ...(tenantId && { tenantId }) },
     orderBy: { createdAt: 'desc' },
   });
   return devices.map(d => ({ ...d, password: '••••••••' }));
@@ -67,8 +67,20 @@ export async function updateDevice(id, data) {
 }
 
 export async function deleteDevice(id) {
-  const device = await prisma.device.delete({ where: { id } });
-  logger.info(`Device deleted: ${device.name}`);
+  const current = await prisma.device.findUnique({ where: { id }, select: { id: true, name: true, isActive: true } });
+  if (!current) {
+    const error = new Error('Equipamento não encontrado');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const [device] = await prisma.$transaction([
+    prisma.device.update({ where: { id }, data: { isActive: false } }),
+    prisma.deviceBackupPolicy.updateMany({ where: { deviceId: id }, data: { enabled: false, nextRunAt: null } }),
+    prisma.runbookSchedule.updateMany({ where: { deviceId: id }, data: { enabled: false, nextRunAt: null } }),
+    prisma.statusService.updateMany({ where: { deviceId: id }, data: { enabled: false } }),
+  ]);
+  logger.info(`Device archived: ${device.name}`);
   return device;
 }
 

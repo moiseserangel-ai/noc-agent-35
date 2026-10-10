@@ -13,7 +13,7 @@ function HealthCard({ icon:Icon, label, value, detail, tone='neutral', to }) {
 }
 
 function Section({ id, title, subtitle, icon:Icon, collapsed, onToggle, action, children }) {
-  return <section className={`dashboard-section ${collapsed?'collapsed':''}`}><header><div className="dashboard-section-heading"><div className="dashboard-section-icon"><Icon size={18}/></div><div><h3>{title}</h3><p>{subtitle}</p></div></div><div className="dashboard-section-actions">{action}<button className="btn btn-ghost btn-sm" aria-label={collapsed?'Expandir':'Recolher'} onClick={()=>onToggle(id)}><ChevronDown size={17}/></button></div></header>{!collapsed&&<div className="dashboard-section-body">{children}</div>}</section>;
+  return <section className={`dashboard-section ${collapsed?'collapsed':''}`}><header><div className="dashboard-section-heading"><div className="dashboard-section-icon"><Icon size={18}/></div><div><h3>{title}</h3><p>{subtitle}</p></div></div><div className="dashboard-section-actions">{action}<button className="btn btn-ghost btn-sm" aria-expanded={!collapsed} aria-label={`${collapsed?'Expandir':'Recolher'} ${title}`} onClick={()=>onToggle(id)}><ChevronDown size={17}/></button></div></header>{!collapsed&&<div className="dashboard-section-body">{children}</div>}</section>;
 }
 
 function Empty({ children }) { return <div className="dashboard-empty"><CheckCircle2 size={22}/><span>{children}</span></div>; }
@@ -27,6 +27,8 @@ export default function Dashboard({ showBackup=false }) {
   const [loading,setLoading]=useState(true);
   const [refreshing,setRefreshing]=useState(false);
   const [updatedAt,setUpdatedAt]=useState(null);
+  const [error,setError]=useState('');
+  const [unavailable,setUnavailable]=useState([]);
   const [collapsed,setCollapsed]=useState(()=>{try{return new Set(JSON.parse(localStorage.getItem('noc_dashboard_collapsed')||'[]'));}catch{return new Set();}});
 
   const load=useCallback(async(initial=false)=>{
@@ -39,11 +41,13 @@ export default function Dashboard({ showBackup=false }) {
         showBackup?api.getLifecycle().catch(()=>null):Promise.resolve(null),
       ]);
       setStats(statsRes.data);setTasks(tasksRes.data);
-      if(backupRes)setBackupStatus(backupRes.data);
-      if(complianceRes)setCompliance(complianceRes.data);
-      if(lifecycleRes)setLifecycle(lifecycleRes.data);
+      setBackupStatus(backupRes?.data || null);
+      setCompliance(complianceRes?.data || null);
+      setLifecycle(lifecycleRes?.data || null);
+      setUnavailable(showBackup ? [[backupRes,'Backup'],[complianceRes,'Compliance'],[lifecycleRes,'Ciclo de vida']].filter(([result])=>!result).map(([,label])=>label) : []);
+      setError('');
       setUpdatedAt(new Date());
-    }catch{}finally{setLoading(false);setRefreshing(false);}
+    }catch{setError('Não foi possível atualizar o painel. Os dados exibidos podem estar desatualizados.');}finally{setLoading(false);setRefreshing(false);}
   },[showBackup]);
 
   useEffect(()=>{
@@ -63,10 +67,11 @@ export default function Dashboard({ showBackup=false }) {
   const slaBreached=stats?.slaBreached||0;
   const criticalFindings=compliance?.summary.criticalFindings||0;
   const lifecycleRisk=lifecycle?.summary.highRisk||0;
-  const systemTone=slaBreached>0||criticalFindings>0||lifecycleRisk>0?'danger':openTasks>0?'warning':'success';
-  const systemDetail=slaBreached>0?`${slaBreached} SLA(s) violado(s)`:criticalFindings>0?`${criticalFindings} desvio(s) crítico(s) de compliance`:lifecycleRisk>0?`${lifecycleRisk} ativo(s) com alto risco de ciclo de vida`:openTasks>0?`${openTasks} Task(s) em aberto`:'Serviço do NOC online';
+  const incomplete=Boolean(error)||unavailable.length>0;
+  const systemTone=incomplete?'warning':slaBreached>0||criticalFindings>0||lifecycleRisk>0?'danger':openTasks>0?'warning':'success';
+  const systemDetail=incomplete?'Verifique a atualização das fontes abaixo':slaBreached>0?`${slaBreached} SLA(s) violado(s)`:criticalFindings>0?`${criticalFindings} desvio(s) crítico(s) de compliance`:lifecycleRisk>0?`${lifecycleRisk} ativo(s) com alto risco de ciclo de vida`:openTasks>0?`${openTasks} tarefa(s) em aberto`:'Sem pendências nos indicadores consultados';
   const quickLinks=useMemo(()=>[
-    {to:'/tasks',label:'Tasks',icon:ListTodo,detail:'Gerenciar atividades'},
+    {to:'/tasks',label:'Tarefas',icon:ListTodo,detail:'Gerenciar atividades'},
     {to:'/devices',label:'Equipamentos',icon:Server,detail:'Inventário e acesso'},
     {to:'/terminal',label:'Terminal CLI',icon:TerminalSquare,detail:'Sessões interativas'},
     ...(showBackup?[{to:'/compliance',label:'Compliance',icon:ShieldCheck,detail:'Riscos e políticas'},{to:'/device-backups',label:'Backups',icon:ArchiveRestore,detail:'Configurações salvas'}]:[]),
@@ -77,23 +82,27 @@ export default function Dashboard({ showBackup=false }) {
   const trendMax=Math.max(...(compliance?.trend||[]).map(item=>item.score),100);
 
   return <div className="executive-dashboard">
-    <div className="page-header dashboard-titlebar"><div><div className="dashboard-eyebrow"><span className={`dashboard-health-dot ${systemTone}`}/> Central de operações</div><h2>Dashboard executivo</h2><p>Saúde do NOC, riscos e atividades em uma única visão</p></div><div className="dashboard-refresh"><span>Atualizado em<br/><strong>{updatedAt?updatedAt.toLocaleTimeString('pt-BR'):'—'}</strong></span><button className="btn btn-secondary" onClick={()=>load(false)} disabled={refreshing}><RefreshCw size={15} className={refreshing?'dashboard-spinning':''}/> Atualizar</button></div></div>
+    <div className="page-header dashboard-titlebar"><div><div className="dashboard-eyebrow"><span className={`dashboard-health-dot ${systemTone}`}/> Central de operações</div><h2>Visão geral do NOC</h2><p>Saúde do NOC, riscos e atividades em uma única visão</p></div><div className="dashboard-refresh"><span>Atualizado em<br/><strong>{updatedAt?updatedAt.toLocaleTimeString('pt-BR'):'—'}</strong></span><button className="btn btn-secondary" onClick={()=>load(false)} disabled={refreshing}><RefreshCw size={15} className={refreshing?'dashboard-spinning':''}/> Atualizar</button></div></div>
 
+    {error&&<div className="dashboard-notice" role="alert"><AlertTriangle size={20}/><div><strong>Atualização interrompida</strong><p>{error} Última atualização: {time(updatedAt)}.</p></div><button className="btn btn-secondary" disabled={refreshing} onClick={()=>load(false)}>Tentar novamente</button></div>}
+    {unavailable.length>0&&<div className="dashboard-notice" role="status"><AlertTriangle size={20}/><div><strong>Visão parcial</strong><p>Fontes indisponíveis: {unavailable.join(', ')}. Os demais indicadores foram atualizados.</p></div></div>}
+    {!stats ? <div className="dashboard-empty">Indicadores indisponíveis. Tente atualizar o painel.</div> : <>
     <div className="executive-health-grid">
-      <HealthCard icon={Activity} label="Saúde geral" value={systemTone==='success'?'Normal':systemTone==='warning'?'Atenção':'Crítica'} detail={systemDetail} tone={systemTone}/>
-      <HealthCard icon={ListTodo} label="Tasks abertas" value={openTasks} detail={`${stats?.awaiting||0} aguardando aprovação`} tone={openTasks?'warning':'success'} to="/tasks"/>
+      <HealthCard icon={Activity} label="Resumo operacional" value={incomplete?'Dados incompletos':systemTone==='success'?'Normal':systemTone==='warning'?'Atenção':'Crítica'} detail={systemDetail} tone={systemTone}/>
+      <HealthCard icon={ListTodo} label="Tarefas abertas" value={openTasks} detail={`${stats?.awaiting||0} aguardando aprovação`} tone={openTasks?'warning':'success'} to="/tasks"/>
       <HealthCard icon={AlertTriangle} label="SLA violado" value={stats?.slaBreached||0} detail={`${stats?.completedToday||0} resolvidas hoje`} tone={stats?.slaBreached?'danger':'success'} to="/reports"/>
-      {showBackup&&<HealthCard icon={ShieldCheck} label="Compliance" value={`${compliance?.summary.averageScore||0}%`} detail={`${compliance?.summary.belowTarget||0} abaixo da meta`} tone={(compliance?.summary.criticalFindings||0)?'danger':(compliance?.summary.belowTarget||0)?'warning':'success'} to="/compliance"/>}
-      {showBackup&&<HealthCard icon={DatabaseBackup} label="Último backup" value={backupStatus?.lastBackup?new Date(backupStatus.lastBackup.createdAt).toLocaleDateString('pt-BR'):'Pendente'} detail={backupStatus?.lastBackup?'Backup do sistema disponível':'Execute o primeiro backup'} tone={backupStatus?.lastBackup?'success':'warning'} to="/backups"/>}
-      {showBackup&&<HealthCard icon={CalendarClock} label="Ciclo de vida" value={lifecycleRisk?`${lifecycleRisk} em risco`:'Controlado'} detail={`${lifecycle?.summary.expired||0} vencido(s) · ${lifecycle?.summary.unknown||0} incompleto(s)`} tone={lifecycleRisk?'danger':(lifecycle?.summary.unknown||0)?'warning':'success'} to="/lifecycle"/>}
+      {showBackup&&<HealthCard icon={ShieldCheck} label="Compliance" value={compliance?`${compliance.summary.averageScore||0}%`:'Indisponível'} detail={compliance?`${compliance.summary.belowTarget||0} abaixo da meta`:'Não foi possível consultar'} tone={!compliance?'neutral':(compliance?.summary.criticalFindings||0)?'danger':(compliance?.summary.belowTarget||0)?'warning':'success'} to="/compliance"/>}
+      {showBackup&&<HealthCard icon={DatabaseBackup} label="Último backup" value={!backupStatus?'Indisponível':backupStatus?.lastBackup?new Date(backupStatus.lastBackup.createdAt).toLocaleDateString('pt-BR'):'Pendente'} detail={!backupStatus?'Não foi possível consultar':backupStatus?.lastBackup?'Backup do sistema disponível':'Execute o primeiro backup'} tone={!backupStatus?'neutral':backupStatus?.lastBackup?'success':'warning'} to="/backups"/>}
+      {showBackup&&<HealthCard icon={CalendarClock} label="Ciclo de vida" value={!lifecycle?'Indisponível':lifecycleRisk?`${lifecycleRisk} em risco`:'Controlado'} detail={lifecycle?`${lifecycle.summary.expired||0} vencido(s) · ${lifecycle.summary.unknown||0} incompleto(s)`:'Não foi possível consultar'} tone={!lifecycle?'neutral':lifecycleRisk?'danger':(lifecycle?.summary.unknown||0)?'warning':'success'} to="/lifecycle"/>}
     </div>
 
+    {(stats.awaiting>0||slaBreached>0)&&<div className="dashboard-notice" role="status"><AlertTriangle size={20}/><div><strong>Prioridades da operação</strong><p>{stats.awaiting||0} tarefa(s) aguardando aprovação · {slaBreached} SLA(s) violado(s).</p></div><Link className="btn btn-secondary" to="/tasks">Revisar tarefas</Link></div>}
     <div className="dashboard-main-grid">
       <Section id="operation" title="Operação do NOC" subtitle="Fila atual e desempenho operacional" icon={Gauge} collapsed={collapsed.has('operation')} onToggle={toggle}>
         <div className="operation-metrics">
           {[['Novas',stats?.pending||0,'primary'],['Em atendimento',(stats?.inProgress||0)+(stats?.diagnosing||0),'warning'],['Aguardando aprovação',stats?.awaiting||0,'danger'],['Resolvidas hoje',stats?.completedToday||0,'success']].map(([label,value,tone])=><div key={label}><span className={tone}>{value}</span><small>{label}</small></div>)}
         </div>
-        <div className="operation-progress"><div><span>Resolvidas</span><strong>{stats?.resolved||stats?.completed||0}</strong></div><div className="operation-progress-track"><i style={{width:`${stats?.total?Math.min(((stats.resolved||stats.completed||0)/stats.total)*100,100):0}%`}}/></div><small>de {stats?.total||0} Tasks registradas</small></div>
+        <div className="operation-progress"><div><span>Resolvidas</span><strong>{stats?.resolved||stats?.completed||0}</strong></div><div className="operation-progress-track"><i style={{width:`${stats?.total?Math.min(((stats.resolved||stats.completed||0)/stats.total)*100,100):0}%`}}/></div><small>de {stats?.total||0} Tarefas registradas</small></div>
       </Section>
 
       <Section id="shortcuts" title="Atalhos rápidos" subtitle="Acesso direto às principais ferramentas" icon={Zap} collapsed={collapsed.has('shortcuts')} onToggle={toggle}>
@@ -113,8 +122,9 @@ export default function Dashboard({ showBackup=false }) {
       <div className="dashboard-expiring-list">{compliance.expiring.map(item=><div key={item.id}><CalendarClock size={18}/><div><strong>{item.device}</strong><span>{item.ruleKey} · aprovado por {item.approvedBy}</span></div><time>{time(item.expiresAt)}</time></div>)}</div>
     </Section>}
 
-    <Section id="recent" title="Atividades recentes" subtitle="Últimas Tasks registradas no sistema" icon={Clock3} collapsed={collapsed.has('recent')} onToggle={toggle} action={<Link className="btn btn-secondary btn-sm" to="/tasks">Ver todas</Link>}>
-      {!tasks.length?<Empty>Nenhuma Task registrada.</Empty>:<div className="dashboard-recent-table"><table><thead><tr><th>Task</th><th>Origem</th><th>Equipamento</th><th>Status</th><th>Prioridade</th><th>Atualização</th></tr></thead><tbody>{tasks.map(task=><tr key={task.id}><td><Link to="/tasks">#{task.taskNumber}</Link></td><td><span className={`badge ${task.source==='zabbix'?'badge-warning':task.source==='compliance'?'badge-info':'badge-success'}`}>{sourceLabel(task.source)}</span></td><td>{task.device?.name||'—'}</td><td><StatusBadge status={task.status}/></td><td><PriorityBadge priority={task.priority}/></td><td>{time(task.updatedAt||task.createdAt)}</td></tr>)}</tbody></table></div>}
+    <Section id="recent" title="Atividades recentes" subtitle="Últimas Tarefas registradas no sistema" icon={Clock3} collapsed={collapsed.has('recent')} onToggle={toggle} action={<Link className="btn btn-secondary btn-sm" to="/tasks">Ver todas</Link>}>
+      {!tasks.length?<Empty>Nenhuma tarefa registrada.</Empty>:<div className="dashboard-recent-table"><table><thead><tr><th>Tarefa</th><th>Origem</th><th>Equipamento</th><th>Status</th><th>Prioridade</th><th>Atualização</th></tr></thead><tbody>{tasks.map(task=><tr key={task.id}><td><Link to="/tasks">#{task.taskNumber}</Link></td><td><span className={`badge ${task.source==='zabbix'?'badge-warning':task.source==='compliance'?'badge-info':'badge-success'}`}>{sourceLabel(task.source)}</span></td><td>{task.device?.name||'—'}</td><td><StatusBadge status={task.status}/></td><td><PriorityBadge priority={task.priority}/></td><td>{time(task.updatedAt||task.createdAt)}</td></tr>)}</tbody></table></div>}
     </Section>
+    </>}
   </div>;
 }

@@ -24,12 +24,12 @@ test('valida agenda, canais e destinatários mensais', () => {
   assert.equal(config.monthlyReportWhatsappRecipients, '5569999999999');
 });
 
-test('proteções de Task bloqueiam referências cruzadas por número e equipamento', () => {
+test('proteções de Task bloqueiam referências cruzadas e chat exige função operacional', () => {
   const routes = fs.readFileSync(new URL('../src/routes/task.routes.js', import.meta.url), 'utf8');
   const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
   assert.match(routes, /taskNumber: parseInt\(req\.params\.taskNumber\), tenantId: req\.user\.tenantId/);
   assert.match(routes, /id: deviceId, \.\.\.\(req\.user\.tenantId && \{ tenantId: req\.user\.tenantId \}\)/);
-  assert.match(server, /Chat com agentes é restrito à equipe global do NOC/);
+  assert.match(server, /app\.use\('\/api\/chat', authMiddleware, requireRoles\('admin','operator','tenant_admin','tenant_operator'\)/);
 });
 
 test('gera PDF mensal válido a partir do snapshot isolado', async () => {

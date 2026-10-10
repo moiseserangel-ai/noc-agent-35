@@ -4,10 +4,10 @@ metadata:
     - type: static
       exporters:
         172.16.255.4:
-          name: CPE-2011MER
+          name: CPE-3011MER
           default:
             name: unknown
-            description: Interface não catalogada do CPE-2011MER
+            description: Interface não catalogada do CPE-3011MER
             speed: 0
           ifindexes:
             1:
@@ -113,7 +113,7 @@ core:
     172.16.255.4/32: 1
     192.168.250.1/32: 1
   exporter-classifiers:
-    - Exporter.Name == "CPE-2011MER" && ClassifySite("MER")
+    - Exporter.Name == "CPE-3011MER" && ClassifySite("MER")
     - Exporter.Name == "CPE-IEADPM3011" && ClassifySite("IEADPM")
     - ClassifyRegion("Rondônia")
     - ClassifyTenant("NOC")

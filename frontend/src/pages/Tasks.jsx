@@ -146,7 +146,7 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
 
   return (
     <div>
-      <div className="page-header"><h2>Tasks</h2><p>Histórico de diagnósticos e ações</p></div>
+      <div className="page-header"><h2>Tarefas</h2><p>Acompanhe diagnósticos, aprovações e ações da operação</p></div>
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <select className="form-select" style={{ width: 150 }} value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}>

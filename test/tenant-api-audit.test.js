@@ -10,10 +10,14 @@ const reports = fs.readFileSync(new URL('../src/routes/report.routes.js', import
 test('somente APIs explicitamente isoladas ficam abertas a usuários de cliente', () => {
   const protectedMounts = [...server.matchAll(/app\.use\('\/api\/([^']+)',\s*authMiddleware,([^;\n]+)\);/g)];
   const tenantAccessible = protectedMounts.filter(match => !match[2].includes('globalOnly')).map(match => match[1]).sort();
-  assert.deepEqual(tenantAccessible, ['devices', 'reports', 'tasks']);
+  assert.deepEqual(tenantAccessible, [
+    'capacity', 'changes', 'chat', 'cmdb', 'compliance', 'devices',
+    'knowledge', 'reports', 'runbooks', 'tasks', 'tenants', 'topology',
+    'users', 'vulnerabilities',
+  ]);
 });
 
-test('as três APIs de cliente aplicam tenantId nas coleções e recursos individuais', () => {
+test('as APIs principais de cliente aplicam tenantId nas coleções e recursos individuais', () => {
   assert.match(devices, /getAllDevices\(req\.user\.tenantId\)/);
   assert.match(devices, /getDeviceById\(id,req\.user\.tenantId\)/);
   assert.match(tasks, /tenantId:req\.user\.tenantId/);

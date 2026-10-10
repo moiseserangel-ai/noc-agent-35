@@ -169,7 +169,7 @@ async function config() {
     );
   return {
     url: String(
-      data.flow_inspector_url || "http://192.168.250.66:8123",
+      data.flow_inspector_url || "http://192.168.250.67:8123",
     ).replace(/\/$/, ""),
     user: data.flow_inspector_user || "noc_agent",
     password: data.flow_inspector_password || "",

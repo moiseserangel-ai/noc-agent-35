@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './styles/index.css';
+import './styles/workspace.css';
 
 class StartupErrorBoundary extends React.Component {
   constructor(props) {

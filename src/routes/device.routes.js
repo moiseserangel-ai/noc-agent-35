@@ -63,7 +63,7 @@ router.put('/:id', async (req, res, next) => {
 router.delete('/:id', async (req, res, next) => {
   try {
     await deviceService.deleteDevice(req.params.id);
-    res.json({ success: true, message: 'Device deleted' });
+    res.json({ success: true, message: 'Equipamento removido da operação; o histórico foi preservado.' });
   } catch (err) { next(err); }
 });
 

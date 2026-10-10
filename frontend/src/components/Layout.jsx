@@ -4,19 +4,28 @@ import {
   LayoutDashboard, Server, ListTodo, MessageSquare, Settings, LogOut, Menu, X, Activity, BookOpen, Shield, Users, ScrollText, BarChart3, DatabaseBackup, Gauge, TerminalSquare, Library, ArchiveRestore, ClipboardCheck, ClipboardList, Radar, Network, PanelLeftClose, PanelLeftOpen, Workflow, Bell, CalendarClock, RadioTower, Building2, Boxes, KeyRound
 } from 'lucide-react';
 import ThemeSelector from './ThemeSelector.jsx';
+import ConnectionStatus from './ConnectionStatus.jsx';
+
+const NAV_GROUPS = [
+  { label: 'Operação', paths: ['/', '/tasks', '/notifications', '/on-call', '/status-page', '/reports'] },
+  { label: 'Infraestrutura', paths: ['/devices', '/cmdb', '/discovery', '/capacity', '/topology', '/flow-inspector', '/device-backups', '/vpn'] },
+  { label: 'Automação e segurança', paths: ['/chat', '/runbooks', '/terminal', '/knowledge', '/changes', '/compliance', '/vulnerabilities', '/lifecycle'] },
+  { label: 'Gestão', paths: ['/clients', '/tenant-contracts', '/suppliers', '/commercial-dashboard', '/commercial-contracts', '/software-licenses', '/commercial-expiries', '/commercial-costs', '/commercial-reports'] },
+  { label: 'Administração', paths: ['/settings', '/users', '/on-call-scopes', '/audit', '/ai-usage', '/backups', '/docs', '/security'] },
+];
 
 const NAV_ITEMS = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/', label: 'Visão geral', icon: LayoutDashboard },
   { path: '/devices', label: 'Equipamentos', icon: Server },
   { path: '/cmdb', label: 'CMDB e Inventário', icon: Boxes, roles: ['admin','tenant_admin'] },
   { path: '/discovery', label: 'Descoberta de rede', icon: Radar, roles: ['admin'] },
   { path: '/capacity', label: 'Capacidade', icon: Gauge },
   { path: '/topology', label: 'Mapa de rede', icon: Network },
   { path: '/flow-inspector', label: 'Inspeção de tráfego', icon: Activity, roles: ['admin','operator'] },
-  { path: '/tasks', label: 'Tasks', icon: ListTodo },
+  { path: '/tasks', label: 'Tarefas', icon: ListTodo },
   { path: '/notifications', label: 'Notificações', icon: Bell },
   { path: '/on-call', label: 'Plantão NOC', icon: CalendarClock, roles: ['admin'] },
-  { path: '/status-page', label: 'Status Page', icon: RadioTower, roles: ['admin'] },
+  { path: '/status-page', label: 'Página de status', icon: RadioTower, roles: ['admin'] },
   { path: '/clients', label: 'Clientes', icon: Building2, roles: ['admin'] },
   { path: '/tenant-contracts', label: 'Contratos e Portais', icon: ClipboardList, roles: ['admin'] },
   { path: '/suppliers', label: 'Fornecedores', icon: Building2, roles: ['admin'] },
@@ -51,8 +60,11 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('noc_sidebar_collapsed') === 'true');
   const location = useLocation();
+  const [menuSearch, setMenuSearch] = useState('');
   const tenantPaths=['/','/devices','/tasks','/reports','/security','/docs','/users','/vulnerabilities','/cmdb','/capacity','/topology','/compliance','/changes','/runbooks','/chat','/knowledge'];
   const visibleItems = NAV_ITEMS.filter(item => (!user?.tenantId||tenantPaths.includes(item.path))&&(!item.roles || item.roles.includes(user?.role)));
+  const normalize = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const groups = NAV_GROUPS.map(group => ({ ...group, items: group.paths.map(path => visibleItems.find(item => item.path === path)).filter(item => item && normalize(item.label).includes(normalize(menuSearch))) })).filter(group => group.items.length);
   const currentItem = visibleItems.find(item => item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path));
   const initials = String(user?.name || user?.username || 'U').split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 
@@ -63,6 +75,7 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
   }, [location.pathname]);
 
   const toggleSidebar = () => {
+    setMenuSearch('');
     setSidebarCollapsed(value => {
       const next = !value;
       localStorage.setItem('noc_sidebar_collapsed', String(next));
@@ -83,26 +96,31 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
             <h1>{branding?.name || 'NOC Agent 35'}</h1>
             <span>{branding?.subtitle || 'AI Monitoring'}</span>
           </div>
-          <button className="btn-ghost" onClick={() => setSidebarOpen(false)}
+          <button className="btn-ghost" aria-label="Fechar menu" onClick={() => setSidebarOpen(false)}
             style={{ display: sidebarOpen ? 'block' : 'none', marginLeft: 'auto' }}>
             <X size={18} />
           </button>
         </div>
 
-        <nav className="sidebar-nav">
-          {visibleItems.map(item => (
+        <div className="sidebar-search"><input type="search" aria-label="Buscar no menu" placeholder="Buscar módulo…" value={menuSearch} onChange={event => setMenuSearch(event.target.value)} /></div>
+        <nav className="sidebar-nav" aria-label="Navegação principal">
+          {groups.map(group => <section className="nav-group" key={group.label} aria-label={group.label}>
+          <h2 className="nav-group-title">{group.label}</h2>
+          {group.items.map(item => (
             <NavLink
               key={item.path}
               to={item.path}
               end={item.path === '/'}
               className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-              onClick={() => setSidebarOpen(false)}
+              onClick={() => { setSidebarOpen(false); setMenuSearch(''); }}
+              aria-label={item.label}
               title={sidebarCollapsed ? item.label : undefined}
             >
               <item.icon size={20} />
               <span className="sidebar-link-label">{item.label}</span>
             </NavLink>
-          ))}
+          ))}</section>)}
+          {!groups.length && <p className="nav-empty">Nenhum módulo encontrado.</p>}
         </nav>
 
         <div className="sidebar-footer">
@@ -125,7 +143,7 @@ export default function Layout({ onLogout, user, branding, theme, onTheme }) {
           </button>
           <div className="topbar-title"><span>Área atual</span><strong>{currentItem?.label || 'NOC Agent'}</strong></div>
           <ThemeSelector value={theme} onChange={onTheme}/>
-          <div className="topbar-status"><span className="status-pulse" /> Sistema online</div>
+          <ConnectionStatus />
           <div className="topbar-user" title={`${user?.name} · ${user?.role}`}><div className="user-avatar">{initials}</div><div><strong>{user?.name}</strong><span>{{admin:'Administrador global',operator:'Operador NOC',viewer:'Visualização',tenant_admin:'Administrador da empresa',tenant_operator:'Operador da empresa',tenant_viewer:'Visualização da empresa'}[user?.role]||user?.role}</span></div></div>
         </header>
         <main className="main-content"><div className="page-container"><Outlet /></div></main>

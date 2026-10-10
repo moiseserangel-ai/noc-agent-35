@@ -215,7 +215,7 @@ services:
       - ./clickhouse/server.xml:/etc/clickhouse-server/config.d/akvorado.xml
       - ./clickhouse/noc-agent-readonly.xml:/etc/clickhouse-server/users.d/noc-agent-readonly.xml:ro
     ports:
-      - 192.168.250.66:8123:8123/tcp
+      - 192.168.250.67:8123:8123/tcp
     environment:
       CLICKHOUSE_INIT_TIMEOUT: 60
       CLICKHOUSE_SKIP_USER_SETUP: 1

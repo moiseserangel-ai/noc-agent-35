@@ -31,10 +31,10 @@ test('rejeita datas e valores patrimoniais inválidos', async () => {
   await assert.rejects(() => normalizeCmdbAsset({ name:'Ativo', purchaseDate:'invalida' }, 'Admin'), /Data inválida/);
 });
 
-test('API CMDB permanece administrativa e auditada nesta fase', () => {
+test('API CMDB permanece administrativa, isolada por empresa e auditada', () => {
   const server=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
   const routes=fs.readFileSync(new URL('../src/routes/cmdb.routes.js',import.meta.url),'utf8');
-  assert.match(server,/app\.use\('\/api\/cmdb',authMiddleware,globalOnly,requireRoles\('admin'\)/);
+  assert.match(server,/app\.use\('\/api\/cmdb',authMiddleware,requireRoles\('admin','tenant_admin'\),auditMutation,cmdbRoutes\)/);
   assert.match(routes,/resource:'cmdb_asset'/);
   assert.match(routes,/cmdbAsset: \{ is: null \}/);
 });

@@ -54,10 +54,10 @@ export default function Devices({ canManage = false }) {
   };
 
   const handleDelete = async (id, name) => {
-    if (!confirm(`Excluir "${name}"?`)) return;
+    if (!confirm(`Remover "${name}" da operação? Tasks, backups e auditoria serão preservados.`)) return;
     try {
       await api.deleteDevice(id);
-      toast('Dispositivo excluído', 'success');
+      toast('Equipamento removido da operação; histórico preservado', 'success');
       load();
     } catch (err) { toast(err.message, 'error'); }
   };

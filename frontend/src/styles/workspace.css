@@ -1,0 +1,54 @@
+/* Shared workspace refinements; all colors follow the selected theme. */
+.sidebar-search { padding: 0 16px 12px; }
+.sidebar-search input { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border-primary); border-radius: 8px; background: var(--bg-input); color: var(--text-primary); font: inherit; font-size: 13px; }
+.sidebar-search input::placeholder { color: var(--text-secondary); }
+.nav-group + .nav-group { margin-top: 18px; }
+.nav-group-title { margin: 0 12px 7px; font-size: 11px; line-height: 1.5; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-secondary); }
+.nav-empty { padding: 12px; font-size: 13px; color: var(--text-secondary); }
+.sidebar-link { min-height: 40px; font-size: 13px; }
+.sidebar-link svg { flex-shrink: 0; }
+.sidebar-link.active { box-shadow: inset 3px 0 0 var(--primary); }
+.topbar-status { white-space: nowrap; font-size: 12px; }
+.connection-offline { color: var(--danger); }
+.connection-checking { color: var(--text-secondary); }
+.topbar-status .status-pulse { background: currentColor; box-shadow: none; animation: none; }
+.page-header h2 { letter-spacing: -.025em; }
+.page-header p { font-size: 14px; line-height: 1.6; color: var(--text-secondary); }
+.page-container :is(input, select, textarea) { font-size: 14px; }
+.page-container .btn { min-height: 36px; }
+.page-container :is(th, td) { line-height: 1.5; }
+.page-container th { font-size: 12px; }
+.page-container td { font-size: 13px; }
+.executive-health-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.executive-health-card { min-width: 0; padding: 18px; box-shadow: none; }
+.executive-health-card strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.executive-health-card :is(small, span), .operation-metrics small, .dashboard-shortcuts span { font-size: 12px; line-height: 1.5; }
+.dashboard-section { margin-bottom: 20px; }
+.dashboard-section-heading p { font-size: 13px; line-height: 1.5; }
+.dashboard-refresh span { font-size: 12px; }
+.dashboard-notice { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; padding: 16px 18px; border: 1px solid var(--warning); border-radius: 10px; background: var(--bg-secondary); color: var(--text-primary); }
+.dashboard-notice > svg { flex-shrink: 0; color: var(--warning); }
+.dashboard-notice > div { flex: 1; }
+.dashboard-notice p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.dashboard-recent-table { overflow-x: auto; }
+.dashboard-recent-table th { white-space: nowrap; }
+:is(a, button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (min-width: 769px) {
+  .sidebar-collapsed .sidebar-search, .sidebar-collapsed .nav-group-title { display: none; }
+  .sidebar-collapsed .nav-group + .nav-group { border-top: 1px solid var(--border-primary); padding-top: 10px; margin-top: 10px; }
+}
+@media (max-width: 768px) {
+  .topbar .topbar-status { display: flex; font-size: 11px; white-space: normal; }
+  .dashboard-titlebar { flex-wrap: wrap; gap: 16px; }
+  .dashboard-notice { flex-wrap: wrap; }
+  .dashboard-notice .btn { width: 100%; }
+  .executive-health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .executive-health-card { padding: 12px; }
+}
+@media (max-width: 480px) {
+  .executive-health-grid { grid-template-columns: 1fr; }
+  .topbar-title > span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

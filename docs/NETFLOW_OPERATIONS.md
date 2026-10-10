@@ -1,5 +1,13 @@
 # Operação do Inspetor de Tráfego NetFlow/IPFIX
 
+## Endereço do coletor e conflito corrigido em 08/09/2026
+
+O CT 109 utiliza **192.168.250.67/24**, gateway 192.168.250.1 e MAC BC:24:11:F0:41:A1. Há reserva estática no servidor DHCP `dhcp5` para esse MAC. Interface Akvorado: http://192.168.250.67:8081. Integração ClickHouse: http://192.168.250.67:8123. NetFlow: UDP 2055.
+
+O antigo endereço 192.168.250.66 estava simultaneamente configurado no CT 108 (wacrm). A captura Ethernet comprovou que os fluxos eram enviados ao MAC BC:24:11:46:64:8D do CRM, enquanto os contadores do coletor permaneciam parados. A migração do CT 109 remove essa duplicidade; o CRM continua em .66. Ambos os exportadores CPE-3011MER e CPE-IEADPM3011 foram atualizados.
+
+Antes de reiniciar exportadores por falta de coleta, compare o MAC de destino no pacote UDP, a tabela ARP do gateway e o MAC do CT. O estado "Sem comunicação" indica ausência de fluxos recebidos, não comprova que o roteador esteja desligado. Se o problema voltar, valide essa cadeia antes de alterar os equipamentos. Uma rotina executada apenas no startup não corrige um endereço IP duplicado.
+
 ## Objetivo e arquitetura
 
 O módulo recebe NetFlow/IPFIX no Akvorado/ClickHouse, consolida amostras a cada cinco minutos e apresenta os resultados no NOC Agent. A detecção é assistida: observar tráfego ou classificar uma anomalia não altera o equipamento. Uma mitigação somente é executada após classificação como ataque, revisão e aprovação explícita de um administrador.
