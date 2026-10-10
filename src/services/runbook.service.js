@@ -3,6 +3,7 @@ import prisma from '../database/client.js';
 import { classifyCliCommand, executeManagedDeviceCommand } from './cli.service.js';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import { compareConfigurations, decryptSnapshot, runDeviceBackup } from './device-backup.service.js';
+import { promoteConfigurationBaseline } from './config-drift.service.js';
 
 const safeJson=(value,fallback)=>{try{return JSON.parse(value);}catch{return fallback;}};
 const protectedJson=(value,fallback)=>safeJson(decrypt(value),fallback);
@@ -111,7 +112,7 @@ export async function executeRunbook({runbook,device,rendered,requestedBy,approv
     if(!passed){failed=true;if(!step.continueOnError)break;}
   }
   let afterBackup;let snapshotError=null;
-  try{afterBackup=await runDeviceBackup(device.id,{type:'post_runbook',username:requestedBy});}catch(error){snapshotError=error.message;}
+  try{afterBackup=await runDeviceBackup(device.id,{type:'post_runbook',username:requestedBy});if(!failed)await promoteConfigurationBaseline(afterBackup.id,approvedBy||requestedBy);}catch(error){snapshotError=error.message;}
   return prisma.runbookExecution.update({where:{id:execution.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?await snapshotsDiffer(beforeBackup.id,afterBackup.id):null,completedAt:new Date(),error:failed?'Uma ou mais etapas falharam':snapshotError?`Configuração aplicada, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
 }
 
@@ -128,6 +129,6 @@ export async function rollbackRunbook({execution,preparation,device,requestedBy}
     if(!result.success){failed=true;break;}
   }
   let afterBackup;let snapshotError=null;
-  try{afterBackup=await runDeviceBackup(device.id,{type:'post_rollback',username:requestedBy});}catch(error){snapshotError=error.message;}
+  try{afterBackup=await runDeviceBackup(device.id,{type:'post_rollback',username:requestedBy});if(!failed)await promoteConfigurationBaseline(afterBackup.id,requestedBy);}catch(error){snapshotError=error.message;}
   return prisma.runbookExecution.update({where:{id:rollback.id},data:{status:failed||snapshotError?'failed':'completed',results:encrypt(JSON.stringify(results)),afterBackupId:afterBackup?.id||null,configurationChanged:afterBackup?await snapshotsDiffer(beforeBackup.id,afterBackup.id):null,completedAt:new Date(),error:failed?'Rollback falhou':snapshotError?`Rollback aplicado, mas o backup posterior falhou — ${snapshotError}`.slice(0,2000):null}});
 }

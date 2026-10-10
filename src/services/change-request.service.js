@@ -1,5 +1,6 @@
 import prisma from '../database/client.js';
 import { runDeviceBackup } from './device-backup.service.js';
+import { promoteConfigurationBaseline } from './config-drift.service.js';
 import { runComplianceScan } from './compliance.service.js';
 import { addTaskMessage, createTask, updateTask } from './task.service.js';
 import { remediationNeedsPlanning } from './compliance.service.js';
@@ -73,6 +74,7 @@ export async function validateExecutedChange(change, actor) {
       const minimum = (await prisma.compliancePolicy.findUnique({where:{deviceId:item.deviceId}}))?.minimumScore || 80;
       status = (scan.score || 0) >= minimum && scan.regressions === 0 ? 'passed' : 'failed';
       detail = `Compliance ${scan.score}% (meta ${minimum}%), ${scan.regressions} regressão(ões).`;
+      if(status==='passed')await promoteConfigurationBaseline(afterBackup.id,actor);
     } catch (error) {
       status = 'failed';
       detail = error.message;

@@ -9,6 +9,7 @@ const snapshotSelect = {
   id: true, deviceId: true, type: true, status: true, sha256: true, size: true,
   deviceName: true, hostname: true, deviceType: true, manufacturer: true, model: true,
   osVersion: true, error: true, createdBy: true, createdAt: true,
+  isBaseline: true, baselineAt: true, baselineBy: true,
 };
 
 router.get('/', async (_req, res, next) => {
@@ -43,7 +44,7 @@ router.get('/snapshots', async (req, res, next) => {
 
 router.get('/drifts',async(req,res,next)=>{try{const where=req.query.status&&req.query.status!=='all'?{status:String(req.query.status)}:{};const rows=await prisma.configDrift.findMany({where,include:{device:{select:{id:true,name:true,hostname:true,type:true}},},orderBy:{detectedAt:'desc'},take:300});const summary=await prisma.configDrift.groupBy({by:['status'],_count:{_all:true}});res.json({success:true,data:{rows:rows.map(publicDrift),summary:Object.fromEntries(summary.map(item=>[item.status,item._count._all]))}});}catch(error){next(error);}});
 
-router.post('/drifts/:id/decision',async(req,res,next)=>{try{if(!['acknowledge','resolve','ignore'].includes(req.body.action))return res.status(400).json({success:false,error:'Decisão inválida'});const row=await decideConfigurationDrift(req.params.id,{action:req.body.action,actor:req.user.username,resolution:req.body.resolution});res.json({success:true,data:publicDrift(row),message:req.body.action==='acknowledge'?'Drift reconhecido':'Drift concluído'});}catch(error){next(error);}});
+router.post('/drifts/:id/decision',async(req,res,next)=>{try{if(!['acknowledge','resolve','ignore'].includes(req.body.action))return res.status(400).json({success:false,error:'Decisão inválida'});let row=await decideConfigurationDrift(req.params.id,{action:req.body.action,actor:req.user.username,resolution:req.body.resolution});if(req.body.action==='resolve'){await runDeviceBackup(row.deviceId,{type:'manual',username:req.user.username});row=await prisma.configDrift.findUnique({where:{id:row.id}});}res.json({success:true,data:publicDrift(row),message:req.body.action==='acknowledge'?'Drift reconhecido':req.body.action==='resolve'?(row.status==='resolved'?'Resolução confirmada por nova coleta':'A divergência ainda existe; a Task permanece aberta'):'Novo baseline aceito'});}catch(error){next(error);}});
 
 router.put('/policies/:deviceId', async (req, res, next) => {
   try {
@@ -89,7 +90,12 @@ router.get('/compare', async (req, res, next) => {
 
 router.delete('/snapshots/:id', async (req, res, next) => {
   try {
-    const snapshot = await prisma.deviceConfigBackup.delete({ where: { id: req.params.id } });
+    const snapshot = await prisma.deviceConfigBackup.findUnique({where:{id:req.params.id}});
+    if(!snapshot)return res.status(404).json({success:false,error:'Backup não encontrado'});
+    if(snapshot.isBaseline)return res.status(409).json({success:false,error:'O baseline ativo não pode ser removido. Aceite outro baseline primeiro.'});
+    const referenced=await prisma.configDrift.count({where:{OR:[{beforeBackupId:snapshot.id},{afterBackupId:snapshot.id}]}});
+    if(referenced)return res.status(409).json({success:false,error:'Este backup faz parte da evidência de um drift e não pode ser removido.'});
+    await prisma.deviceConfigBackup.delete({ where: { id: snapshot.id } });
     await logAudit({ ...requestIdentity(req), action: 'delete', resource: 'device_backup', resourceId: snapshot.id, status: 'success', details: { deviceId: snapshot.deviceId, sha256: snapshot.sha256 } });
     res.json({ success: true, message: 'Backup removido' });
   } catch (error) { next(error); }

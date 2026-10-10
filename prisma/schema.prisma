@@ -989,10 +989,14 @@ model DeviceConfigBackup {
   error        String?
   createdBy    String
   createdAt    DateTime @default(now())
+  isBaseline   Boolean  @default(false)
+  baselineAt   DateTime?
+  baselineBy   String?
   runbookExecutionsBefore RunbookExecution[] @relation("RunbookBeforeBackup")
   runbookExecutionsAfter  RunbookExecution[] @relation("RunbookAfterBackup")
 
   @@index([deviceId, createdAt])
+  @@index([deviceId, isBaseline])
   @@index([status, createdAt])
 }
 
@@ -1002,7 +1006,7 @@ model ConfigDrift {
   device         Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   beforeBackupId String
   afterBackupId  String   @unique
-  status         String   @default("open") // open|acknowledged|resolved|ignored
+  status         String   @default("open") // open|acknowledged|verifying|resolved|ignored
   addedCount     Int      @default(0)
   removedCount   Int      @default(0)
   unchangedCount Int      @default(0)

@@ -30,10 +30,26 @@ test('ignora o cabeçalho dinâmico de data do export RouterOS',()=>{
   assert.equal(diff.removedCount,0);
 });
 
+test('ignora o cabeçalho ISO dos exports RouterOS 7',()=>{
+  const before='# 2026-09-12 02:00:12 by RouterOS 7.18.2\n/ip dns set servers=1.1.1.1';
+  const after='# 2026-09-19 02:00:59 by RouterOS 7.18.2\n/ip dns set servers=1.1.1.1';
+  const diff=compareConfigurations(before,after);
+  assert.equal(diff.addedCount,0);
+  assert.equal(diff.removedCount,0);
+});
+
 test('schema registra drift com snapshots, evidência e Task',()=>{
   const schema=fs.readFileSync(new URL('../prisma/schema.prisma',import.meta.url),'utf8');
+  const service=fs.readFileSync(new URL('../src/services/config-drift.service.js',import.meta.url),'utf8');
+  const routes=fs.readFileSync(new URL('../src/routes/device-backup.routes.js',import.meta.url),'utf8');
   assert.match(schema,/model ConfigDrift/);
   assert.match(schema,/afterBackupId\s+String\s+@unique/);
   assert.match(schema,/evidence\s+String/);
   assert.match(schema,/taskId\s+String\?/);
+  assert.match(schema,/isBaseline\s+Boolean\s+@default\(false\)/);
+  assert.match(schema,/status\s+String\s+@default\("open"\).*verifying/);
+  assert.match(service,/status:\{in:\['open','acknowledged','verifying'\]\}/);
+  assert.match(service,/Configuração aceita como novo baseline/);
+  assert.match(routes,/runDeviceBackup\(row\.deviceId,\{type:'manual'/);
+  assert.match(routes,/baseline ativo não pode ser removido/);
 });

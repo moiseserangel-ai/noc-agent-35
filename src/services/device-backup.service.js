@@ -64,7 +64,7 @@ export async function captureDeviceConfiguration(device) {
 
 async function enforceDeviceRetention(deviceId, retention) {
   const old = await prisma.deviceConfigBackup.findMany({
-    where: { deviceId, status: 'success' },
+    where: { deviceId, status: 'success', isBaseline: false },
     orderBy: { createdAt: 'desc' },
     skip: clamp(retention, 1, 365, 14),
     select: { id: true },
