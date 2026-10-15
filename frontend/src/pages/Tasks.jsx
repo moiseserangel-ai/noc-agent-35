@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle, Workflow, Eye, GitBranch, Pencil, Sparkles, FileDiff } from 'lucide-react';
+import { ListTodo, ChevronDown, ChevronUp, RefreshCw, CheckCircle, UserCheck, ShieldCheck, Archive, RotateCcw, MessageSquare, XCircle, Workflow, Eye, GitBranch, Pencil, Sparkles, FileDiff, LayoutGrid, List, Search, AlertTriangle, UserX, Clock3, X } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { StatusBadge, PriorityBadge } from '../components/StatusBadge.jsx';
 import AgentResponse from '../components/AgentResponse.jsx';
@@ -20,6 +20,15 @@ const slaState = task => {
 };
 const sourceLabel = source => String(source).startsWith('dashboard:') ? 'dashboard' : source;
 const workTypeLabel = value => ({ incident: 'Incidente', consultation: 'Consulta', configuration: 'Configuração' }[value] || value);
+const closedStatuses = new Set(['resolved','completed','validated','closed','cancelled']);
+const kanbanColumns = [
+  { id:'new', label:'Novas', statuses:['pending'], tone:'primary' },
+  { id:'working', label:'Em atendimento', statuses:['in_progress','diagnosing','failed'], tone:'warning' },
+  { id:'approval', label:'Aguardando aprovação', statuses:['awaiting_approval'], tone:'danger' },
+  { id:'execution', label:'Em execução', statuses:['executing'], tone:'info' },
+  { id:'done', label:'Concluídas', statuses:['resolved','completed','validated','closed','cancelled'], tone:'success' },
+];
+const taskTitle = task => task.device?.name || String(task.originalMessage || 'Tarefa sem descrição').split('\n')[0];
 
 export default function Tasks({ canOperate = false, isAdmin = false }) {
   const [tasks, setTasks] = useState([]);
@@ -34,9 +43,20 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
   const [cmdbContexts,setCmdbContexts]=useState({});
   const [proposalForms,setProposalForms]=useState({});
   const [proposalComparisons,setProposalComparisons]=useState({});
+  const [view,setView]=useState(()=>localStorage.getItem('noc_tasks_view')||'board');
+  const [search,setSearch]=useState('');
+  const [onlyUnassigned,setOnlyUnassigned]=useState(false);
+  const [onlyOpen,setOnlyOpen]=useState(false);
+  const [refreshNonce,setRefreshNonce]=useState(0);
   const toast = useToast();
 
   useEffect(() => { api.getDevices().then(r => setDevices(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    if (view !== 'board' || !expanded) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [view, expanded]);
 
   const reprocess = async (task) => {
     const deviceId = selectedDevices[task.id] || task.deviceId;
@@ -142,35 +162,77 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
     const resume = () => { if (document.visibilityState === 'visible') load(false); };
     document.addEventListener('visibilitychange', resume);
     return () => { active = false; clearInterval(interval); document.removeEventListener('visibilitychange', resume); };
-  }, [filter]);
+  }, [filter,refreshNonce]);
+
+  const changeView=value=>{setView(value);localStorage.setItem('noc_tasks_view',value);if(value==='list')setExpanded(null);};
+  const normalizedSearch=search.trim().toLocaleLowerCase('pt-BR');
+  const visibleTasks=tasks.filter(task=>{
+    if(onlyOpen&&closedStatuses.has(task.status))return false;
+    if(onlyUnassigned&&task.assignedTo)return false;
+    if(!normalizedSearch)return true;
+    return [`${task.taskNumber}`,task.originalMessage,task.device?.name,task.device?.hostname,task.assignedTo,sourceLabel(task.source)]
+      .some(value=>String(value||'').toLocaleLowerCase('pt-BR').includes(normalizedSearch));
+  });
+  const summary={
+    open:tasks.filter(task=>!closedStatuses.has(task.status)).length,
+    critical:tasks.filter(task=>task.priority==='critical'&&!closedStatuses.has(task.status)).length,
+    approval:tasks.filter(task=>task.status==='awaiting_approval').length,
+    breached:tasks.filter(task=>Boolean(task.slaResolveBreachedAt||task.slaAckBreachedAt)).length,
+    unassigned:tasks.filter(task=>!task.assignedTo&&!closedStatuses.has(task.status)).length,
+    resolvedToday:tasks.filter(task=>task.resolvedAt&&new Date(task.resolvedAt).toDateString()===new Date().toDateString()).length,
+  };
+  const applyQuickFilter=kind=>{
+    if(kind==='critical')setFilter(value=>({...value,priority:'critical'}));
+    else if(kind==='approval')setFilter(value=>({...value,status:'awaiting_approval'}));
+    else if(kind==='breached')setFilter(value=>({...value,sla:'breached'}));
+    else if(kind==='unassigned')setOnlyUnassigned(true);
+    else if(kind==='open'){setFilter(value=>({...value,status:''}));setOnlyOpen(true);}
+  };
+  const clearFilters=()=>{setFilter({status:'',source:'',priority:'',sla:''});setSearch('');setOnlyUnassigned(false);setOnlyOpen(false);};
+  const listTasks=view==='board'?(expanded?visibleTasks.filter(task=>task.id===expanded):[]):visibleTasks;
 
   return (
-    <div>
-      <div className="page-header"><h2>Tarefas</h2><p>Acompanhe diagnósticos, aprovações e ações da operação</p></div>
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <select className="form-select" style={{ width: 150 }} value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}>
+    <div className={`tasks-workspace tasks-view-${view}`}>
+      <div className="page-header page-header-actions tasks-titlebar"><div><h2>Tarefas</h2><p>Acompanhe diagnósticos, aprovações e ações da operação</p></div><div className="tasks-title-actions"><button className="btn btn-secondary" onClick={()=>setRefreshNonce(value=>value+1)}><RefreshCw size={15}/> Atualizar</button><div className="tasks-view-toggle" aria-label="Modo de visualização"><button className={view==='board'?'active':''} aria-label="Visualização em quadro" onClick={()=>changeView('board')}><LayoutGrid size={16}/> Quadro</button><button className={view==='list'?'active':''} aria-label="Visualização em lista" onClick={()=>changeView('list')}><List size={16}/> Lista</button></div></div></div>
+      <div className="tasks-summary-grid">
+        <button onClick={()=>applyQuickFilter('open')}><ListTodo/><span><strong>{summary.open}</strong>Em aberto</span></button>
+        <button onClick={()=>applyQuickFilter('critical')}><AlertTriangle/><span><strong>{summary.critical}</strong>Críticas</span></button>
+        <button onClick={()=>applyQuickFilter('approval')}><ShieldCheck/><span><strong>{summary.approval}</strong>Aguardando aprovação</span></button>
+        <button onClick={()=>applyQuickFilter('breached')}><Clock3/><span><strong>{summary.breached}</strong>SLA vencido</span></button>
+        <button onClick={()=>applyQuickFilter('unassigned')}><UserX/><span><strong>{summary.unassigned}</strong>Sem responsável</span></button>
+        <button><CheckCircle/><span><strong>{summary.resolvedToday}</strong>Resolvidas hoje</span></button>
+      </div>
+      <div className="card tasks-filter-card">
+        <div className="tasks-filter-grid">
+          <label className="tasks-search"><Search size={16}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar número, equipamento, mensagem ou responsável…"/></label>
+          <select className="form-select" value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}>
             <option value="">Todos Status</option>
             <option value="pending">Novo</option><option value="in_progress">Em atendimento</option><option value="diagnosing">Em análise</option>
             <option value="awaiting_approval">Aguardando aprovação</option><option value="resolved">Resolvido</option>
             <option value="validated">Validado</option><option value="closed">Encerrado</option>
             <option value="failed">Falhou</option><option value="cancelled">Cancelado</option>
           </select>
-          <select className="form-select" style={{ width: 130 }} value={filter.source} onChange={e => setFilter(f => ({ ...f, source: e.target.value }))}>
+          <select className="form-select" value={filter.source} onChange={e => setFilter(f => ({ ...f, source: e.target.value }))}>
             <option value="">Todas Fontes</option><option value="whatsapp">WhatsApp</option>
             <option value="zabbix">Zabbix</option><option value="dashboard">Dashboard</option><option value="compliance">Compliance</option>
           </select>
-          <select className="form-select" style={{ width: 150 }} value={filter.sla} onChange={e => setFilter(f => ({ ...f, sla: e.target.value }))}>
+          <select className="form-select" value={filter.priority} onChange={e=>setFilter(f=>({...f,priority:e.target.value}))}><option value="">Todas prioridades</option><option value="critical">Crítica</option><option value="high">Alta</option><option value="medium">Média</option><option value="low">Baixa</option></select>
+          <select className="form-select" value={filter.sla} onChange={e => setFilter(f => ({ ...f, sla: e.target.value }))}>
             <option value="">Todos SLA</option><option value="breached">SLA violado</option>
           </select>
+          <button className={`btn ${onlyUnassigned?'btn-primary':'btn-secondary'}`} onClick={()=>setOnlyUnassigned(value=>!value)}><UserX size={14}/> Sem responsável</button>
+          <button className="btn btn-ghost" onClick={clearFilters}><X size={14}/> Limpar filtros</button>
         </div>
+        <div className="tasks-filter-result"><strong>{visibleTasks.length}</strong> de {tasks.length} tarefa(s) exibida(s)</div>
       </div>
       {loading ? <div className="loading-screen" style={{ minHeight: 200 }}><div className="spinner" /></div> :
-      tasks.length === 0 ? <div className="card"><div className="empty-state"><ListTodo size={48} /><p>Nenhuma task encontrada.</p></div></div> :
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {tasks.map(t => (
-          <div key={t.id} className="card" style={{ cursor: 'pointer', padding: 0 }} onClick={() => loadTaskDetail(t.id)}>
-            <div style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      visibleTasks.length === 0 ? <div className="card"><div className="empty-state"><ListTodo size={48} /><p>Nenhuma tarefa encontrada.</p><button className="btn btn-secondary" onClick={clearFilters}>Limpar filtros</button></div></div> : <>
+      {view==='board'&&<div className="tasks-kanban">{kanbanColumns.map(column=>{const rows=visibleTasks.filter(task=>column.statuses.includes(task.status));return <section className={`tasks-kanban-column tone-${column.tone}`} key={column.id}><header><div><span/><strong>{column.label}</strong></div><b>{rows.length}</b></header><div className="tasks-kanban-cards">{rows.map(task=>{const sla=slaState(task);return <button className={`task-kanban-card ${task.priority==='critical'?'critical':''}`} key={task.id} onClick={()=>loadTaskDetail(task.id)}><div className="task-kanban-card-head"><strong>#{task.taskNumber}</strong><PriorityBadge priority={task.priority}/></div><h3>{taskTitle(task)}</h3><p>{task.originalMessage||'Sem descrição'}</p><div className="task-kanban-tags"><span>{workTypeLabel(task.workType)}</span><span>{sourceLabel(task.source)}</span>{sla&&<span className={sla.className}>{sla.label}</span>}</div><footer><span>{task.assignedTo||'Não atribuído'}</span><time>{new Date(task.createdAt).toLocaleDateString('pt-BR')}</time></footer></button>})}{!rows.length&&<div className="task-kanban-empty">Nenhuma tarefa</div>}</div></section>})}</div>}
+      {view==='board'&&expanded&&<div className="task-drawer-backdrop" onClick={()=>setExpanded(null)}/>}
+      <div className="tasks-list">
+        {listTasks.map(t => (
+          <div key={t.id} className={`card task-list-card ${expanded===t.id?'task-detail-expanded':''}`} onClick={() => loadTaskDetail(t.id)}>
+            <div className="task-list-summary">
               <span style={{ color: 'var(--primary)', fontWeight: 700, minWidth: 60 }}>#{t.taskNumber}</span>
               <StatusBadge status={t.status} /><PriorityBadge priority={t.priority} />
               {slaState(t) && <span className={`badge ${slaState(t).className}`}>{slaState(t).label}</span>}
@@ -179,10 +241,10 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
               <span style={{ color: 'var(--text-secondary)', flex: 1, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {t.device?.name || t.originalMessage?.substring(0, 50)}</span>
               <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{new Date(t.createdAt).toLocaleString('pt-BR')}</span>
-              {expanded === t.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              {view==='board'&&expanded===t.id?<button className="btn-ghost task-drawer-close" aria-label="Fechar detalhes" onClick={e=>{e.stopPropagation();setExpanded(null)}}><X size={18}/></button>:expanded === t.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </div>
             {expanded === t.id && (
-              <div onClick={e => e.stopPropagation()} style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border-primary)' }}>
+              <div className="task-detail-body" onClick={e => e.stopPropagation()} style={{ padding: '0 20px 20px', borderTop: '1px solid var(--border-primary)' }}>
                 <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8 }}>
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>RESPONSÁVEL</div><strong>{t.assignedTo || 'Não atribuído'}</strong></div>
                   <div><div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>PRAZO</div><strong>{t.dueAt ? new Date(t.dueAt).toLocaleString('pt-BR') : 'Sem prazo'}</strong></div>
@@ -272,7 +334,7 @@ export default function Tasks({ canOperate = false, isAdmin = false }) {
             )}
           </div>
         ))}
-      </div>}
+      </div></>}
     </div>
   );
 }
